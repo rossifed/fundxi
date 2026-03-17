@@ -1,26 +1,96 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0b0f1a;
+  --foreground: #e8eaed;
+  --card: #141925;
+  --card-hover: #1a2030;
+  --border: #1e2738;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --green: #10b981;
+  --red: #ef4444;
+  --pitch: #1a6b3c;
+  --pitch-line: rgba(255, 255, 255, 0.3);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-card: var(--card);
+  --color-card-hover: var(--card-hover);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-green: var(--green);
+  --color-red: var(--red);
+  --color-pitch: var(--pitch);
+  --color-pitch-line: var(--pitch-line);
+  --font-sans: Arial, Helvetica, sans-serif;
+  --font-mono: monospace;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Sparkline mini chart */
+.sparkline {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 32px;
+}
+.sparkline-bar {
+  width: 4px;
+  border-radius: 1px;
+  transition: height 0.3s;
+}
+
+/* Pitch */
+.pitch {
+  background: var(--pitch);
+  border: 2px solid var(--pitch-line);
+  border-radius: 8px;
+  position: relative;
+  aspect-ratio: 68 / 105;
+  max-height: 600px;
+}
+.pitch-center-circle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 30%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1px solid var(--pitch-line);
+}
+.pitch-center-line {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--pitch-line);
+}
+.pitch-box-top {
+  position: absolute;
+  top: 0;
+  left: 20%;
+  width: 60%;
+  height: 16%;
+  border: 1px solid var(--pitch-line);
+  border-top: none;
+}
+.pitch-box-bottom {
+  position: absolute;
+  bottom: 0;
+  left: 20%;
+  width: 60%;
+  height: 16%;
+  border: 1px solid var(--pitch-line);
+  border-bottom: none;
 }
