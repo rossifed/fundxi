@@ -83,10 +83,10 @@ export default function ScreenerPage() {
         </select>
       </div>
 
-      <div className="text-sm text-foreground/40 mb-3">{filtered.length} players</div>
+      <div className="text-sm text-foreground/40 mb-4">{filtered.length} players</div>
 
-      {/* Player list */}
-      <div className="flex flex-col gap-3">
+      {/* Player grid */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {filtered.map((p) => (
           <PlayerCard key={p.id} player={p} />
         ))}

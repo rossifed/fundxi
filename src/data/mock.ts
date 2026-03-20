@@ -22,7 +22,19 @@ export interface Player {
     matches: number;
     rating: number; // 0-10
   };
+  foot: "Left" | "Right" | "Both";
+  height: number;   // cm
+  weight: number;   // kg
+  skills: string[];  // short skill tags
   image?: string;
+}
+
+export interface PriceEvent {
+  playerId: string;
+  date: string;
+  dataIndex: number; // maps to valueHistory index
+  text: string;
+  impact: "positive" | "negative" | "neutral";
 }
 
 export interface Team {
@@ -98,56 +110,56 @@ function makeHistory(base: number): number[] {
 
 export const players: Player[] = [
   // PSG
-  { id: "p1", name: "Ousmane Dembélé", number: 10, team: "Paris Saint-Germain", teamId: "psg", position: "RW", nationality: "🇫🇷", age: 28, value: 72.0, previousValue: 70.5, valueHistory: makeHistory(72), stats: { goals: 12, assists: 9, matches: 28, rating: 7.8 } },
-  { id: "p2", name: "Achraf Hakimi", number: 2, team: "Paris Saint-Germain", teamId: "psg", position: "RB", nationality: "🇲🇦", age: 27, value: 58.0, previousValue: 57.0, valueHistory: makeHistory(58), stats: { goals: 3, assists: 7, matches: 30, rating: 7.4 } },
-  { id: "p3", name: "Marquinhos", number: 5, team: "Paris Saint-Germain", teamId: "psg", position: "CB", nationality: "🇧🇷", age: 31, value: 35.0, previousValue: 36.0, valueHistory: makeHistory(35), stats: { goals: 2, assists: 1, matches: 26, rating: 7.2 } },
-  { id: "p4", name: "Gianluigi Donnarumma", number: 99, team: "Paris Saint-Germain", teamId: "psg", position: "GK", nationality: "🇮🇹", age: 27, value: 42.0, previousValue: 41.5, valueHistory: makeHistory(42), stats: { goals: 0, assists: 0, matches: 30, rating: 7.0 } },
-  { id: "p5", name: "Vitinha", number: 17, team: "Paris Saint-Germain", teamId: "psg", position: "CM", nationality: "🇵🇹", age: 25, value: 65.0, previousValue: 63.0, valueHistory: makeHistory(65), stats: { goals: 6, assists: 8, matches: 29, rating: 7.6 } },
-  { id: "p6", name: "Willian Pacho", number: 22, team: "Paris Saint-Germain", teamId: "psg", position: "CB", nationality: "🇪🇨", age: 23, value: 40.0, previousValue: 38.5, valueHistory: makeHistory(40), stats: { goals: 1, assists: 0, matches: 27, rating: 7.1 } },
-  { id: "p7", name: "Bradley Barcola", number: 29, team: "Paris Saint-Germain", teamId: "psg", position: "LW", nationality: "🇫🇷", age: 22, value: 55.0, previousValue: 52.0, valueHistory: makeHistory(55), stats: { goals: 10, assists: 5, matches: 28, rating: 7.5 } },
-  { id: "p8", name: "Warren Zaïre-Emery", number: 33, team: "Paris Saint-Germain", teamId: "psg", position: "CDM", nationality: "🇫🇷", age: 19, value: 48.0, previousValue: 46.0, valueHistory: makeHistory(48), stats: { goals: 3, assists: 4, matches: 25, rating: 7.3 } },
-  { id: "p9", name: "Nuno Mendes", number: 25, team: "Paris Saint-Germain", teamId: "psg", position: "LB", nationality: "🇵🇹", age: 23, value: 45.0, previousValue: 44.0, valueHistory: makeHistory(45), stats: { goals: 1, assists: 6, matches: 24, rating: 7.2 } },
-  { id: "p10", name: "Gonçalo Ramos", number: 9, team: "Paris Saint-Germain", teamId: "psg", position: "ST", nationality: "🇵🇹", age: 23, value: 50.0, previousValue: 48.0, valueHistory: makeHistory(50), stats: { goals: 8, assists: 3, matches: 20, rating: 7.1 } },
-  { id: "p11", name: "Fabian Ruiz", number: 8, team: "Paris Saint-Germain", teamId: "psg", position: "CM", nationality: "🇪🇸", age: 29, value: 32.0, previousValue: 32.5, valueHistory: makeHistory(32), stats: { goals: 4, assists: 5, matches: 27, rating: 7.0 } },
+  { id: "p1", name: "Ousmane Dembélé", number: 10, team: "Paris Saint-Germain", teamId: "psg", position: "RW", nationality: "🇫🇷", age: 28, value: 72.0, previousValue: 70.5, valueHistory: makeHistory(72), stats: { goals: 12, assists: 9, matches: 28, rating: 7.8 }, foot: "Both", height: 178, weight: 73, skills: ["Pace", "Dribbling", "Crossing", "Flair"] },
+  { id: "p2", name: "Achraf Hakimi", number: 2, team: "Paris Saint-Germain", teamId: "psg", position: "RB", nationality: "🇲🇦", age: 27, value: 58.0, previousValue: 57.0, valueHistory: makeHistory(58), stats: { goals: 3, assists: 7, matches: 30, rating: 7.4 }, foot: "Right", height: 181, weight: 73, skills: ["Pace", "Overlapping", "Stamina", "Crossing"] },
+  { id: "p3", name: "Marquinhos", number: 5, team: "Paris Saint-Germain", teamId: "psg", position: "CB", nationality: "🇧🇷", age: 31, value: 35.0, previousValue: 36.0, valueHistory: makeHistory(35), stats: { goals: 2, assists: 1, matches: 26, rating: 7.2 }, foot: "Right", height: 183, weight: 75, skills: ["Leadership", "Tackling", "Positioning", "Aerial"] },
+  { id: "p4", name: "Gianluigi Donnarumma", number: 99, team: "Paris Saint-Germain", teamId: "psg", position: "GK", nationality: "🇮🇹", age: 27, value: 42.0, previousValue: 41.5, valueHistory: makeHistory(42), stats: { goals: 0, assists: 0, matches: 30, rating: 7.0 }, foot: "Right", height: 196, weight: 90, skills: ["Reflexes", "Shot Stopping", "Distribution", "Commanding"] },
+  { id: "p5", name: "Vitinha", number: 17, team: "Paris Saint-Germain", teamId: "psg", position: "CM", nationality: "🇵🇹", age: 25, value: 65.0, previousValue: 63.0, valueHistory: makeHistory(65), stats: { goals: 6, assists: 8, matches: 29, rating: 7.6 }, foot: "Right", height: 172, weight: 63, skills: ["Vision", "Passing", "Pressing", "Ball Control"] },
+  { id: "p6", name: "Willian Pacho", number: 22, team: "Paris Saint-Germain", teamId: "psg", position: "CB", nationality: "🇪🇨", age: 23, value: 40.0, previousValue: 38.5, valueHistory: makeHistory(40), stats: { goals: 1, assists: 0, matches: 27, rating: 7.1 }, foot: "Left", height: 189, weight: 84, skills: ["Tackling", "Pace", "Aerial", "Composure"] },
+  { id: "p7", name: "Bradley Barcola", number: 29, team: "Paris Saint-Germain", teamId: "psg", position: "LW", nationality: "🇫🇷", age: 22, value: 55.0, previousValue: 52.0, valueHistory: makeHistory(55), stats: { goals: 10, assists: 5, matches: 28, rating: 7.5 }, foot: "Right", height: 186, weight: 73, skills: ["Pace", "Dribbling", "Finishing", "Acceleration"] },
+  { id: "p8", name: "Warren Zaïre-Emery", number: 33, team: "Paris Saint-Germain", teamId: "psg", position: "CDM", nationality: "🇫🇷", age: 19, value: 48.0, previousValue: 46.0, valueHistory: makeHistory(48), stats: { goals: 3, assists: 4, matches: 25, rating: 7.3 }, foot: "Right", height: 178, weight: 70, skills: ["Ball Recovery", "Passing", "Composure", "Work Rate"] },
+  { id: "p9", name: "Nuno Mendes", number: 25, team: "Paris Saint-Germain", teamId: "psg", position: "LB", nationality: "🇵🇹", age: 23, value: 45.0, previousValue: 44.0, valueHistory: makeHistory(45), stats: { goals: 1, assists: 6, matches: 24, rating: 7.2 }, foot: "Left", height: 176, weight: 70, skills: ["Pace", "Overlapping", "Dribbling", "Defensive"] },
+  { id: "p10", name: "Gonçalo Ramos", number: 9, team: "Paris Saint-Germain", teamId: "psg", position: "ST", nationality: "🇵🇹", age: 23, value: 50.0, previousValue: 48.0, valueHistory: makeHistory(50), stats: { goals: 8, assists: 3, matches: 20, rating: 7.1 }, foot: "Right", height: 185, weight: 80, skills: ["Finishing", "Heading", "Hold-up Play", "Positioning"] },
+  { id: "p11", name: "Fabian Ruiz", number: 8, team: "Paris Saint-Germain", teamId: "psg", position: "CM", nationality: "🇪🇸", age: 29, value: 32.0, previousValue: 32.5, valueHistory: makeHistory(32), stats: { goals: 4, assists: 5, matches: 27, rating: 7.0 }, foot: "Left", height: 189, weight: 78, skills: ["Long Passing", "Vision", "Ball Control", "Shooting"] },
 
   // Real Madrid
-  { id: "p12", name: "Vinícius Júnior", number: 7, team: "Real Madrid", teamId: "rma", position: "LW", nationality: "🇧🇷", age: 25, value: 150.0, previousValue: 148.0, valueHistory: makeHistory(150), stats: { goals: 18, assists: 10, matches: 30, rating: 8.5 } },
-  { id: "p13", name: "Jude Bellingham", number: 5, team: "Real Madrid", teamId: "rma", position: "CAM", nationality: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", age: 22, value: 130.0, previousValue: 128.0, valueHistory: makeHistory(130), stats: { goals: 15, assists: 8, matches: 29, rating: 8.3 } },
-  { id: "p14", name: "Kylian Mbappé", number: 9, team: "Real Madrid", teamId: "rma", position: "ST", nationality: "🇫🇷", age: 27, value: 160.0, previousValue: 158.0, valueHistory: makeHistory(160), stats: { goals: 20, assists: 5, matches: 28, rating: 8.4 } },
-  { id: "p15", name: "Thibaut Courtois", number: 1, team: "Real Madrid", teamId: "rma", position: "GK", nationality: "🇧🇪", age: 33, value: 30.0, previousValue: 30.5, valueHistory: makeHistory(30), stats: { goals: 0, assists: 0, matches: 25, rating: 7.5 } },
-  { id: "p16", name: "Antonio Rüdiger", number: 22, team: "Real Madrid", teamId: "rma", position: "CB", nationality: "🇩🇪", age: 32, value: 28.0, previousValue: 28.5, valueHistory: makeHistory(28), stats: { goals: 2, assists: 0, matches: 27, rating: 7.3 } },
-  { id: "p17", name: "Federico Valverde", number: 8, team: "Real Madrid", teamId: "rma", position: "CM", nationality: "🇺🇾", age: 27, value: 95.0, previousValue: 93.0, valueHistory: makeHistory(95), stats: { goals: 7, assists: 9, matches: 30, rating: 7.9 } },
-  { id: "p18", name: "Éder Militão", number: 3, team: "Real Madrid", teamId: "rma", position: "CB", nationality: "🇧🇷", age: 27, value: 55.0, previousValue: 54.0, valueHistory: makeHistory(55), stats: { goals: 1, assists: 1, matches: 22, rating: 7.2 } },
-  { id: "p19", name: "Rodrygo", number: 11, team: "Real Madrid", teamId: "rma", position: "RW", nationality: "🇧🇷", age: 25, value: 85.0, previousValue: 84.0, valueHistory: makeHistory(85), stats: { goals: 10, assists: 7, matches: 28, rating: 7.7 } },
-  { id: "p20", name: "Eduardo Camavinga", number: 12, team: "Real Madrid", teamId: "rma", position: "CDM", nationality: "🇫🇷", age: 23, value: 70.0, previousValue: 68.0, valueHistory: makeHistory(70), stats: { goals: 2, assists: 5, matches: 26, rating: 7.4 } },
-  { id: "p21", name: "Ferland Mendy", number: 23, team: "Real Madrid", teamId: "rma", position: "LB", nationality: "🇫🇷", age: 30, value: 25.0, previousValue: 25.5, valueHistory: makeHistory(25), stats: { goals: 0, assists: 3, matches: 24, rating: 7.0 } },
-  { id: "p22", name: "Dani Carvajal", number: 2, team: "Real Madrid", teamId: "rma", position: "RB", nationality: "🇪🇸", age: 33, value: 18.0, previousValue: 19.0, valueHistory: makeHistory(18), stats: { goals: 1, assists: 4, matches: 15, rating: 7.1 } },
+  { id: "p12", name: "Vinícius Júnior", number: 7, team: "Real Madrid", teamId: "rma", position: "LW", nationality: "🇧🇷", age: 25, value: 150.0, previousValue: 148.0, valueHistory: makeHistory(150), stats: { goals: 18, assists: 10, matches: 30, rating: 8.5 }, foot: "Right", height: 176, weight: 73, skills: ["Pace", "Dribbling", "Flair", "Acceleration"] },
+  { id: "p13", name: "Jude Bellingham", number: 5, team: "Real Madrid", teamId: "rma", position: "CAM", nationality: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", age: 22, value: 130.0, previousValue: 128.0, valueHistory: makeHistory(130), stats: { goals: 15, assists: 8, matches: 29, rating: 8.3 }, foot: "Right", height: 186, weight: 78, skills: ["Box-to-Box", "Finishing", "Leadership", "Aerial"] },
+  { id: "p14", name: "Kylian Mbappé", number: 9, team: "Real Madrid", teamId: "rma", position: "ST", nationality: "🇫🇷", age: 27, value: 160.0, previousValue: 158.0, valueHistory: makeHistory(160), stats: { goals: 20, assists: 5, matches: 28, rating: 8.4 }, foot: "Right", height: 178, weight: 73, skills: ["Pace", "Finishing", "Dribbling", "Off the Ball"] },
+  { id: "p15", name: "Thibaut Courtois", number: 1, team: "Real Madrid", teamId: "rma", position: "GK", nationality: "🇧🇪", age: 33, value: 30.0, previousValue: 30.5, valueHistory: makeHistory(30), stats: { goals: 0, assists: 0, matches: 25, rating: 7.5 }, foot: "Left", height: 199, weight: 96, skills: ["Shot Stopping", "Reflexes", "One-on-One", "Commanding"] },
+  { id: "p16", name: "Antonio Rüdiger", number: 22, team: "Real Madrid", teamId: "rma", position: "CB", nationality: "🇩🇪", age: 32, value: 28.0, previousValue: 28.5, valueHistory: makeHistory(28), stats: { goals: 2, assists: 0, matches: 27, rating: 7.3 }, foot: "Right", height: 190, weight: 85, skills: ["Tackling", "Pace", "Aerial", "Aggression"] },
+  { id: "p17", name: "Federico Valverde", number: 8, team: "Real Madrid", teamId: "rma", position: "CM", nationality: "🇺🇾", age: 27, value: 95.0, previousValue: 93.0, valueHistory: makeHistory(95), stats: { goals: 7, assists: 9, matches: 30, rating: 7.9 }, foot: "Right", height: 182, weight: 78, skills: ["Long Shots", "Stamina", "Box-to-Box", "Versatility"] },
+  { id: "p18", name: "Éder Militão", number: 3, team: "Real Madrid", teamId: "rma", position: "CB", nationality: "🇧🇷", age: 27, value: 55.0, previousValue: 54.0, valueHistory: makeHistory(55), stats: { goals: 1, assists: 1, matches: 22, rating: 7.2 }, foot: "Right", height: 186, weight: 78, skills: ["Tackling", "Pace", "Composure", "Marking"] },
+  { id: "p19", name: "Rodrygo", number: 11, team: "Real Madrid", teamId: "rma", position: "RW", nationality: "🇧🇷", age: 25, value: 85.0, previousValue: 84.0, valueHistory: makeHistory(85), stats: { goals: 10, assists: 7, matches: 28, rating: 7.7 }, foot: "Right", height: 174, weight: 64, skills: ["Dribbling", "Finishing", "Flair", "Off the Ball"] },
+  { id: "p20", name: "Eduardo Camavinga", number: 12, team: "Real Madrid", teamId: "rma", position: "CDM", nationality: "🇫🇷", age: 23, value: 70.0, previousValue: 68.0, valueHistory: makeHistory(70), stats: { goals: 2, assists: 5, matches: 26, rating: 7.4 }, foot: "Left", height: 182, weight: 72, skills: ["Ball Recovery", "Dribbling", "Pressing", "Versatility"] },
+  { id: "p21", name: "Ferland Mendy", number: 23, team: "Real Madrid", teamId: "rma", position: "LB", nationality: "🇫🇷", age: 30, value: 25.0, previousValue: 25.5, valueHistory: makeHistory(25), stats: { goals: 0, assists: 3, matches: 24, rating: 7.0 }, foot: "Left", height: 180, weight: 73, skills: ["Defensive", "Pace", "Tackling", "Stamina"] },
+  { id: "p22", name: "Dani Carvajal", number: 2, team: "Real Madrid", teamId: "rma", position: "RB", nationality: "🇪🇸", age: 33, value: 18.0, previousValue: 19.0, valueHistory: makeHistory(18), stats: { goals: 1, assists: 4, matches: 15, rating: 7.1 }, foot: "Right", height: 173, weight: 73, skills: ["Crossing", "Leadership", "Positioning", "Work Rate"] },
 
   // Barcelona
-  { id: "p23", name: "Lamine Yamal", number: 19, team: "FC Barcelona", teamId: "bar", position: "RW", nationality: "🇪🇸", age: 18, value: 120.0, previousValue: 115.0, valueHistory: makeHistory(120), stats: { goals: 11, assists: 12, matches: 30, rating: 8.2 } },
-  { id: "p24", name: "Raphinha", number: 11, team: "FC Barcelona", teamId: "bar", position: "LW", nationality: "🇧🇷", age: 29, value: 65.0, previousValue: 63.0, valueHistory: makeHistory(65), stats: { goals: 14, assists: 8, matches: 30, rating: 7.9 } },
-  { id: "p25", name: "Robert Lewandowski", number: 9, team: "FC Barcelona", teamId: "bar", position: "ST", nationality: "🇵🇱", age: 37, value: 15.0, previousValue: 15.5, valueHistory: makeHistory(15), stats: { goals: 22, assists: 4, matches: 30, rating: 8.0 } },
-  { id: "p26", name: "Pedri", number: 8, team: "FC Barcelona", teamId: "bar", position: "CM", nationality: "🇪🇸", age: 23, value: 90.0, previousValue: 88.0, valueHistory: makeHistory(90), stats: { goals: 5, assists: 10, matches: 24, rating: 7.8 } },
-  { id: "p27", name: "Gavi", number: 6, team: "FC Barcelona", teamId: "bar", position: "CM", nationality: "🇪🇸", age: 21, value: 60.0, previousValue: 58.0, valueHistory: makeHistory(60), stats: { goals: 3, assists: 6, matches: 20, rating: 7.5 } },
-  { id: "p28", name: "Marc-André ter Stegen", number: 1, team: "FC Barcelona", teamId: "bar", position: "GK", nationality: "🇩🇪", age: 34, value: 20.0, previousValue: 21.0, valueHistory: makeHistory(20), stats: { goals: 0, assists: 0, matches: 15, rating: 7.3 } },
-  { id: "p29", name: "Jules Koundé", number: 23, team: "FC Barcelona", teamId: "bar", position: "RB", nationality: "🇫🇷", age: 27, value: 55.0, previousValue: 54.0, valueHistory: makeHistory(55), stats: { goals: 2, assists: 5, matches: 28, rating: 7.4 } },
-  { id: "p30", name: "Ronald Araújo", number: 4, team: "FC Barcelona", teamId: "bar", position: "CB", nationality: "🇺🇾", age: 26, value: 50.0, previousValue: 49.0, valueHistory: makeHistory(50), stats: { goals: 1, assists: 0, matches: 18, rating: 7.2 } },
-  { id: "p31", name: "Pau Cubarsí", number: 2, team: "FC Barcelona", teamId: "bar", position: "CB", nationality: "🇪🇸", age: 18, value: 45.0, previousValue: 42.0, valueHistory: makeHistory(45), stats: { goals: 0, assists: 1, matches: 26, rating: 7.3 } },
-  { id: "p32", name: "Alejandro Balde", number: 3, team: "FC Barcelona", teamId: "bar", position: "LB", nationality: "🇪🇸", age: 22, value: 35.0, previousValue: 34.0, valueHistory: makeHistory(35), stats: { goals: 1, assists: 4, matches: 25, rating: 7.1 } },
-  { id: "p33", name: "Frenkie de Jong", number: 21, team: "FC Barcelona", teamId: "bar", position: "CDM", nationality: "🇳🇱", age: 28, value: 45.0, previousValue: 46.0, valueHistory: makeHistory(45), stats: { goals: 2, assists: 5, matches: 22, rating: 7.2 } },
+  { id: "p23", name: "Lamine Yamal", number: 19, team: "FC Barcelona", teamId: "bar", position: "RW", nationality: "🇪🇸", age: 18, value: 120.0, previousValue: 115.0, valueHistory: makeHistory(120), stats: { goals: 11, assists: 12, matches: 30, rating: 8.2 }, foot: "Left", height: 180, weight: 72, skills: ["Dribbling", "Vision", "Pace", "Creativity"] },
+  { id: "p24", name: "Raphinha", number: 11, team: "FC Barcelona", teamId: "bar", position: "LW", nationality: "🇧🇷", age: 29, value: 65.0, previousValue: 63.0, valueHistory: makeHistory(65), stats: { goals: 14, assists: 8, matches: 30, rating: 7.9 }, foot: "Left", height: 176, weight: 68, skills: ["Finishing", "Free Kicks", "Dribbling", "Work Rate"] },
+  { id: "p25", name: "Robert Lewandowski", number: 9, team: "FC Barcelona", teamId: "bar", position: "ST", nationality: "🇵🇱", age: 37, value: 15.0, previousValue: 15.5, valueHistory: makeHistory(15), stats: { goals: 22, assists: 4, matches: 30, rating: 8.0 }, foot: "Right", height: 185, weight: 81, skills: ["Finishing", "Positioning", "Heading", "Composure"] },
+  { id: "p26", name: "Pedri", number: 8, team: "FC Barcelona", teamId: "bar", position: "CM", nationality: "🇪🇸", age: 23, value: 90.0, previousValue: 88.0, valueHistory: makeHistory(90), stats: { goals: 5, assists: 10, matches: 24, rating: 7.8 }, foot: "Right", height: 174, weight: 63, skills: ["Vision", "Ball Control", "Passing", "Pressing"] },
+  { id: "p27", name: "Gavi", number: 6, team: "FC Barcelona", teamId: "bar", position: "CM", nationality: "🇪🇸", age: 21, value: 60.0, previousValue: 58.0, valueHistory: makeHistory(60), stats: { goals: 3, assists: 6, matches: 20, rating: 7.5 }, foot: "Right", height: 173, weight: 68, skills: ["Pressing", "Aggression", "Ball Recovery", "Passing"] },
+  { id: "p28", name: "Marc-André ter Stegen", number: 1, team: "FC Barcelona", teamId: "bar", position: "GK", nationality: "🇩🇪", age: 34, value: 20.0, previousValue: 21.0, valueHistory: makeHistory(20), stats: { goals: 0, assists: 0, matches: 15, rating: 7.3 }, foot: "Right", height: 187, weight: 85, skills: ["Distribution", "Shot Stopping", "Sweeping", "Composure"] },
+  { id: "p29", name: "Jules Koundé", number: 23, team: "FC Barcelona", teamId: "bar", position: "RB", nationality: "🇫🇷", age: 27, value: 55.0, previousValue: 54.0, valueHistory: makeHistory(55), stats: { goals: 2, assists: 5, matches: 28, rating: 7.4 }, foot: "Right", height: 180, weight: 75, skills: ["Pace", "Ball Playing", "Tackling", "Overlapping"] },
+  { id: "p30", name: "Ronald Araújo", number: 4, team: "FC Barcelona", teamId: "bar", position: "CB", nationality: "🇺🇾", age: 26, value: 50.0, previousValue: 49.0, valueHistory: makeHistory(50), stats: { goals: 1, assists: 0, matches: 18, rating: 7.2 }, foot: "Right", height: 188, weight: 81, skills: ["Aerial", "Tackling", "Pace", "Marking"] },
+  { id: "p31", name: "Pau Cubarsí", number: 2, team: "FC Barcelona", teamId: "bar", position: "CB", nationality: "🇪🇸", age: 18, value: 45.0, previousValue: 42.0, valueHistory: makeHistory(45), stats: { goals: 0, assists: 1, matches: 26, rating: 7.3 }, foot: "Left", height: 184, weight: 77, skills: ["Composure", "Ball Playing", "Positioning", "Tackling"] },
+  { id: "p32", name: "Alejandro Balde", number: 3, team: "FC Barcelona", teamId: "bar", position: "LB", nationality: "🇪🇸", age: 22, value: 35.0, previousValue: 34.0, valueHistory: makeHistory(35), stats: { goals: 1, assists: 4, matches: 25, rating: 7.1 }, foot: "Left", height: 175, weight: 69, skills: ["Pace", "Dribbling", "Overlapping", "Stamina"] },
+  { id: "p33", name: "Frenkie de Jong", number: 21, team: "FC Barcelona", teamId: "bar", position: "CDM", nationality: "🇳🇱", age: 28, value: 45.0, previousValue: 46.0, valueHistory: makeHistory(45), stats: { goals: 2, assists: 5, matches: 22, rating: 7.2 }, foot: "Right", height: 180, weight: 74, skills: ["Ball Carrying", "Passing", "Vision", "Press Resistance"] },
 
   // Liverpool
-  { id: "p34", name: "Mohamed Salah", number: 11, team: "Liverpool FC", teamId: "liv", position: "RW", nationality: "🇪🇬", age: 33, value: 55.0, previousValue: 54.0, valueHistory: makeHistory(55), stats: { goals: 19, assists: 11, matches: 30, rating: 8.3 } },
-  { id: "p35", name: "Virgil van Dijk", number: 4, team: "Liverpool FC", teamId: "liv", position: "CB", nationality: "🇳🇱", age: 34, value: 22.0, previousValue: 23.0, valueHistory: makeHistory(22), stats: { goals: 3, assists: 1, matches: 28, rating: 7.5 } },
-  { id: "p36", name: "Alisson", number: 1, team: "Liverpool FC", teamId: "liv", position: "GK", nationality: "🇧🇷", age: 33, value: 28.0, previousValue: 28.5, valueHistory: makeHistory(28), stats: { goals: 0, assists: 0, matches: 24, rating: 7.4 } },
-  { id: "p37", name: "Trent Alexander-Arnold", number: 66, team: "Liverpool FC", teamId: "liv", position: "RB", nationality: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", age: 27, value: 60.0, previousValue: 58.0, valueHistory: makeHistory(60), stats: { goals: 2, assists: 10, matches: 26, rating: 7.7 } },
-  { id: "p38", name: "Luis Díaz", number: 7, team: "Liverpool FC", teamId: "liv", position: "LW", nationality: "🇨🇴", age: 29, value: 52.0, previousValue: 50.0, valueHistory: makeHistory(52), stats: { goals: 11, assists: 5, matches: 29, rating: 7.6 } },
-  { id: "p39", name: "Alexis Mac Allister", number: 10, team: "Liverpool FC", teamId: "liv", position: "CM", nationality: "🇦🇷", age: 27, value: 68.0, previousValue: 66.0, valueHistory: makeHistory(68), stats: { goals: 5, assists: 7, matches: 28, rating: 7.5 } },
-  { id: "p40", name: "Ryan Gravenberch", number: 38, team: "Liverpool FC", teamId: "liv", position: "CDM", nationality: "🇳🇱", age: 23, value: 50.0, previousValue: 47.0, valueHistory: makeHistory(50), stats: { goals: 3, assists: 4, matches: 30, rating: 7.4 } },
-  { id: "p41", name: "Ibrahima Konaté", number: 5, team: "Liverpool FC", teamId: "liv", position: "CB", nationality: "🇫🇷", age: 26, value: 45.0, previousValue: 44.0, valueHistory: makeHistory(45), stats: { goals: 2, assists: 0, matches: 25, rating: 7.3 } },
-  { id: "p42", name: "Andrew Robertson", number: 26, team: "Liverpool FC", teamId: "liv", position: "LB", nationality: "🏴󠁧󠁢󠁳󠁣󠁴󠁿", age: 32, value: 18.0, previousValue: 18.5, valueHistory: makeHistory(18), stats: { goals: 1, assists: 6, matches: 24, rating: 7.1 } },
-  { id: "p43", name: "Darwin Núñez", number: 9, team: "Liverpool FC", teamId: "liv", position: "ST", nationality: "🇺🇾", age: 27, value: 62.0, previousValue: 60.0, valueHistory: makeHistory(62), stats: { goals: 14, assists: 4, matches: 28, rating: 7.4 } },
-  { id: "p44", name: "Dominik Szoboszlai", number: 8, team: "Liverpool FC", teamId: "liv", position: "CAM", nationality: "🇭🇺", age: 25, value: 55.0, previousValue: 53.0, valueHistory: makeHistory(55), stats: { goals: 6, assists: 8, matches: 27, rating: 7.3 } },
+  { id: "p34", name: "Mohamed Salah", number: 11, team: "Liverpool FC", teamId: "liv", position: "RW", nationality: "🇪🇬", age: 33, value: 55.0, previousValue: 54.0, valueHistory: makeHistory(55), stats: { goals: 19, assists: 11, matches: 30, rating: 8.3 }, foot: "Left", height: 175, weight: 71, skills: ["Finishing", "Dribbling", "Pace", "Cutting Inside"] },
+  { id: "p35", name: "Virgil van Dijk", number: 4, team: "Liverpool FC", teamId: "liv", position: "CB", nationality: "🇳🇱", age: 34, value: 22.0, previousValue: 23.0, valueHistory: makeHistory(22), stats: { goals: 3, assists: 1, matches: 28, rating: 7.5 }, foot: "Right", height: 193, weight: 92, skills: ["Aerial", "Leadership", "Passing", "Composure"] },
+  { id: "p36", name: "Alisson", number: 1, team: "Liverpool FC", teamId: "liv", position: "GK", nationality: "🇧🇷", age: 33, value: 28.0, previousValue: 28.5, valueHistory: makeHistory(28), stats: { goals: 0, assists: 0, matches: 24, rating: 7.4 }, foot: "Right", height: 191, weight: 91, skills: ["Shot Stopping", "Distribution", "Reflexes", "Sweeping"] },
+  { id: "p37", name: "Trent Alexander-Arnold", number: 66, team: "Liverpool FC", teamId: "liv", position: "RB", nationality: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", age: 27, value: 60.0, previousValue: 58.0, valueHistory: makeHistory(60), stats: { goals: 2, assists: 10, matches: 26, rating: 7.7 }, foot: "Right", height: 175, weight: 69, skills: ["Crossing", "Long Passing", "Vision", "Free Kicks"] },
+  { id: "p38", name: "Luis Díaz", number: 7, team: "Liverpool FC", teamId: "liv", position: "LW", nationality: "🇨🇴", age: 29, value: 52.0, previousValue: 50.0, valueHistory: makeHistory(52), stats: { goals: 11, assists: 5, matches: 29, rating: 7.6 }, foot: "Right", height: 178, weight: 67, skills: ["Dribbling", "Pace", "Pressing", "Acceleration"] },
+  { id: "p39", name: "Alexis Mac Allister", number: 10, team: "Liverpool FC", teamId: "liv", position: "CM", nationality: "🇦🇷", age: 27, value: 68.0, previousValue: 66.0, valueHistory: makeHistory(68), stats: { goals: 5, assists: 7, matches: 28, rating: 7.5 }, foot: "Right", height: 174, weight: 72, skills: ["Passing", "Vision", "Ball Control", "Work Rate"] },
+  { id: "p40", name: "Ryan Gravenberch", number: 38, team: "Liverpool FC", teamId: "liv", position: "CDM", nationality: "🇳🇱", age: 23, value: 50.0, previousValue: 47.0, valueHistory: makeHistory(50), stats: { goals: 3, assists: 4, matches: 30, rating: 7.4 }, foot: "Right", height: 190, weight: 80, skills: ["Ball Carrying", "Pressing", "Passing", "Versatility"] },
+  { id: "p41", name: "Ibrahima Konaté", number: 5, team: "Liverpool FC", teamId: "liv", position: "CB", nationality: "🇫🇷", age: 26, value: 45.0, previousValue: 44.0, valueHistory: makeHistory(45), stats: { goals: 2, assists: 0, matches: 25, rating: 7.3 }, foot: "Right", height: 194, weight: 89, skills: ["Pace", "Aerial", "Tackling", "Strength"] },
+  { id: "p42", name: "Andrew Robertson", number: 26, team: "Liverpool FC", teamId: "liv", position: "LB", nationality: "🏴󠁧󠁢󠁳󠁣󠁴󠁿", age: 32, value: 18.0, previousValue: 18.5, valueHistory: makeHistory(18), stats: { goals: 1, assists: 6, matches: 24, rating: 7.1 }, foot: "Left", height: 178, weight: 64, skills: ["Crossing", "Stamina", "Work Rate", "Overlapping"] },
+  { id: "p43", name: "Darwin Núñez", number: 9, team: "Liverpool FC", teamId: "liv", position: "ST", nationality: "🇺🇾", age: 27, value: 62.0, previousValue: 60.0, valueHistory: makeHistory(62), stats: { goals: 14, assists: 4, matches: 28, rating: 7.4 }, foot: "Right", height: 187, weight: 81, skills: ["Pace", "Heading", "Finishing", "Off the Ball"] },
+  { id: "p44", name: "Dominik Szoboszlai", number: 8, team: "Liverpool FC", teamId: "liv", position: "CAM", nationality: "🇭🇺", age: 25, value: 55.0, previousValue: 53.0, valueHistory: makeHistory(55), stats: { goals: 6, assists: 8, matches: 27, rating: 7.3 }, foot: "Right", height: 186, weight: 79, skills: ["Long Shots", "Passing", "Pressing", "Creativity"] },
 ];
 
 // ============================================================
@@ -303,4 +315,50 @@ export const positionCoords: Record<Position, { x: number; y: number }> = {
 export function awayCoords(pos: Position): { x: number; y: number } {
   const c = positionCoords[pos];
   return { x: 100 - c.x, y: 100 - c.y };
+}
+
+// Get player fixtures (past, live, upcoming)
+export function getPlayerFixtures(playerId: string) {
+  const player = getPlayer(playerId);
+  if (!player) return { past: [], live: [], upcoming: [] };
+  return {
+    past: fixtures.filter(f => f.status === "finished" && (f.homePlayers.includes(playerId) || f.awayPlayers.includes(playerId) || f.homeTeam.id === player.teamId || f.awayTeam.id === player.teamId)),
+    live: fixtures.filter(f => f.status === "live" && (f.homePlayers.includes(playerId) || f.awayPlayers.includes(playerId) || f.homeTeam.id === player.teamId || f.awayTeam.id === player.teamId)),
+    upcoming: fixtures.filter(f => f.status === "upcoming" && (f.homeTeam.id === player.teamId || f.awayTeam.id === player.teamId)),
+  };
+}
+
+// ============================================================
+// Price Events (news/events that moved the price)
+// ============================================================
+
+export const priceEvents: PriceEvent[] = [
+  { playerId: "p14", date: "2026-03-12", dataIndex: 3, text: "Hat-trick in Champions League quarter-final", impact: "positive" },
+  { playerId: "p14", date: "2026-03-15", dataIndex: 6, text: "Minor knee strain reported in training", impact: "negative" },
+  { playerId: "p14", date: "2026-03-17", dataIndex: 8, text: "Goal vs PSG — clinical finish from tight angle", impact: "positive" },
+  { playerId: "p23", date: "2026-03-11", dataIndex: 2, text: "Named La Liga Young Player of the Month", impact: "positive" },
+  { playerId: "p23", date: "2026-03-16", dataIndex: 7, text: "Two assists in El Clásico warm-up friendly", impact: "positive" },
+  { playerId: "p12", date: "2026-03-10", dataIndex: 1, text: "Ballon d'Or shortlist announced — strong favorite", impact: "positive" },
+  { playerId: "p12", date: "2026-03-14", dataIndex: 5, text: "Red card in league match, 2-game suspension", impact: "negative" },
+  { playerId: "p34", date: "2026-03-09", dataIndex: 1, text: "Contract extension rumors — staying at Liverpool", impact: "positive" },
+  { playerId: "p34", date: "2026-03-16", dataIndex: 7, text: "Brace in Premier League, top scorer race heats up", impact: "positive" },
+  { playerId: "p7", date: "2026-03-13", dataIndex: 4, text: "France call-up confirmed for international break", impact: "positive" },
+  { playerId: "p7", date: "2026-03-17", dataIndex: 8, text: "Equalizer vs Real Madrid — stunning left-foot strike", impact: "positive" },
+  { playerId: "p13", date: "2026-03-12", dataIndex: 3, text: "Man of the Match vs Atletico Madrid", impact: "positive" },
+  { playerId: "p13", date: "2026-03-17", dataIndex: 8, text: "Header goal vs PSG — Champions League classic", impact: "positive" },
+  { playerId: "p5", date: "2026-03-11", dataIndex: 2, text: "Midfield masterclass — 94% pass accuracy", impact: "positive" },
+  { playerId: "p5", date: "2026-03-15", dataIndex: 6, text: "Key assists in back-to-back Ligue 1 wins", impact: "positive" },
+  { playerId: "p40", date: "2026-03-10", dataIndex: 1, text: "Breakout performance as single pivot in midfield", impact: "positive" },
+  { playerId: "p40", date: "2026-03-14", dataIndex: 5, text: "Named in UEFA Team of the Week", impact: "positive" },
+  { playerId: "p26", date: "2026-03-13", dataIndex: 4, text: "Returns from injury — 30 mins as substitute", impact: "positive" },
+  { playerId: "p1", date: "2026-03-12", dataIndex: 3, text: "Two assists in Ligue 1 — electric on the right flank", impact: "positive" },
+  { playerId: "p1", date: "2026-03-16", dataIndex: 7, text: "Hamstring tightness, doubtful for next match", impact: "negative" },
+  { playerId: "p43", date: "2026-03-11", dataIndex: 2, text: "Two goals in FA Cup — clinical finishing", impact: "positive" },
+  { playerId: "p43", date: "2026-03-15", dataIndex: 6, text: "Missed two clear chances in league draw", impact: "negative" },
+  { playerId: "p17", date: "2026-03-10", dataIndex: 1, text: "Long-range screamer named Goal of the Week", impact: "positive" },
+  { playerId: "p17", date: "2026-03-16", dataIndex: 7, text: "Assists and goal in 3-0 league victory", impact: "positive" },
+];
+
+export function getPlayerPriceEvents(playerId: string): PriceEvent[] {
+  return priceEvents.filter(e => e.playerId === playerId);
 }
