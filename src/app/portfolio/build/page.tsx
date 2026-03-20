@@ -1,6 +1,7 @@
 "use client";
 import { useState, useMemo } from "react";
 import { players, formatValue, Player } from "@/data/mock";
+import { Jersey, getTeamColor } from "@/components/PlayerCard";
 
 const BUDGET = 500; // 500M€ starting budget
 
@@ -82,9 +83,7 @@ export default function BuildPortfolioPage() {
                 disabled={p.value > remaining}
                 className="flex items-center gap-3 rounded-lg border border-border bg-card p-3 text-left transition-colors hover:bg-card-hover disabled:cursor-not-allowed disabled:opacity-30"
               >
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10 text-sm font-bold text-accent">
-                  {p.number}
-                </div>
+                <Jersey number={p.number} name={p.name} teamColor={getTeamColor(p.teamId)} size="sm" />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-semibold truncate">{p.name}</div>
                   <div className="text-xs text-foreground/40">
@@ -113,9 +112,7 @@ export default function BuildPortfolioPage() {
                   key={h.player.id}
                   className="flex items-center gap-3 rounded-lg border border-border bg-card p-3"
                 >
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10 text-sm font-bold text-accent">
-                    {h.player.number}
-                  </div>
+                  <Jersey number={h.player.number} name={h.player.name} teamColor={getTeamColor(h.player.teamId)} size="sm" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-semibold truncate">{h.player.name}</div>
                     <div className="text-xs text-foreground/40">

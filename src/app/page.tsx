@@ -70,31 +70,31 @@ export default function Home() {
           the leaderboard.
         </p>
 
-        {/* CTA buttons */}
-        <div className="flex flex-wrap justify-center gap-4">
+        {/* CTA buttons — consistent sizing */}
+        <div className="flex flex-wrap justify-center gap-3">
           <Link
             href="/fixtures"
-            className="rounded-xl bg-accent px-8 py-3 text-lg font-semibold text-white transition-colors hover:bg-accent-hover"
+            className="rounded-xl bg-accent px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
           >
             View Fixtures
           </Link>
           <Link
             href="/screener"
-            className="rounded-xl border border-border bg-card px-8 py-3 text-lg font-semibold text-foreground transition-colors hover:bg-card-hover"
+            className="rounded-xl border border-border bg-card px-6 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-card-hover"
           >
             Explore Players
           </Link>
           <Link
             href="/leaderboard"
-            className="rounded-xl border border-border bg-card px-8 py-3 text-lg font-semibold text-foreground transition-colors hover:bg-card-hover"
+            className="rounded-xl border border-border bg-card px-6 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-card-hover"
           >
             Leaderboard
           </Link>
           <Link
             href="/portfolio"
-            className="rounded-xl border border-border bg-card px-8 py-3 text-lg font-semibold text-foreground transition-colors hover:bg-card-hover"
+            className="rounded-xl border border-border bg-card px-6 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-card-hover"
           >
-            Mon Portefeuille
+            Portfolio
           </Link>
         </div>
       </div>

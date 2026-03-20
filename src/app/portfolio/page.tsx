@@ -3,6 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { myPortfolio, getPlayer, formatValue, pnlColor, pnlSign, players } from "@/data/mock";
 import AreaChart from "@/components/AreaChart";
+import { Jersey, getTeamColor } from "@/components/PlayerCard";
 
 function DonutChart({ data, size = 140 }: { data: { label: string; value: number; color: string }[]; size?: number }) {
   const total = data.reduce((s, d) => s + d.value, 0);
@@ -110,18 +111,22 @@ export default function PortfolioPage() {
   // Day performance = last 3 data points, All = full history
   const chartData = period === "day" ? portfolioHistory.slice(-3) : portfolioHistory;
 
-  // Team breakdown
-  const teamMap = new Map<string, number>();
+  // Country breakdown
+  const countryMap = new Map<string, number>();
   holdings.forEach(h => {
-    const team = h.player.team;
-    teamMap.set(team, (teamMap.get(team) || 0) + h.currentValue);
+    const country = h.player.country;
+    countryMap.set(country, (countryMap.get(country) || 0) + h.currentValue);
   });
-  const teamColors: Record<string, string> = {
-    "Paris Saint-Germain": "#004170", "Real Madrid": "#FEBE10", "FC Barcelona": "#A50044",
-    "Liverpool FC": "#C8102E", "Manchester City": "#6CABDD", "Bayern Munich": "#DC052D",
+  const countryColors: Record<string, string> = {
+    "France": "#004170", "Spain": "#FEBE10", "Brazil": "#009c3b",
+    "Egypt": "#C8102E", "Netherlands": "#FF6600", "Uruguay": "#6CABDD",
+    "Poland": "#DC052D", "England": "#FFFFFF", "Germany": "#000000",
+    "Italy": "#006847", "Morocco": "#006233", "Portugal": "#006600",
+    "Ecuador": "#FFD100", "Colombia": "#FCD116", "Argentina": "#75AADB",
+    "Belgium": "#ED2939", "Hungary": "#477050", "Scotland": "#005EB8",
   };
-  const teamBreakdown = Array.from(teamMap.entries()).map(([label, value]) => ({
-    label, value, color: teamColors[label] || "#3b82f6",
+  const teamBreakdown = Array.from(countryMap.entries()).map(([label, value]) => ({
+    label, value, color: countryColors[label] || "#3b82f6",
   }));
 
   // Position breakdown
@@ -198,7 +203,7 @@ export default function PortfolioPage() {
       {/* Breakdowns */}
       <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2">
         <div className="rounded-2xl border border-border bg-card p-6">
-          <h2 className="mb-4 text-sm font-semibold text-foreground/50">By Team</h2>
+          <h2 className="mb-4 text-sm font-semibold text-foreground/50">By Country</h2>
           <DonutChart data={teamBreakdown} />
         </div>
         <div className="rounded-2xl border border-border bg-card p-6">
@@ -224,9 +229,7 @@ export default function PortfolioPage() {
               href={`/player/${h.playerId}`}
               className="flex items-center gap-4 rounded-xl border border-border bg-card p-4 transition-colors hover:bg-card-hover"
             >
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent/10 text-lg font-bold text-accent">
-                {h.player.number}
-              </div>
+              <Jersey number={h.player.number} name={h.player.name} teamColor={getTeamColor(h.player.teamId)} size="sm" />
               <div className="flex-1 min-w-0">
                 <div className="font-semibold truncate">{h.player.name}</div>
                 <div className="text-sm text-foreground/50">
