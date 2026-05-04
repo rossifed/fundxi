@@ -1,0 +1,12 @@
+node_modules
+dist
+.DS_Store
+*.local
+*.local.json
+.vite
+*.tsbuildinfo
+SESSION.md
+.env
+.env.*
+.envrc
+.envrc.*
