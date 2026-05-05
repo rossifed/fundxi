@@ -1,12 +1,29 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { comments_api } from "@/api/comments_api";
 import { portfolio_api } from "@/api/portfolio_api";
 import { teams_api } from "@/api/teams_api";
 import { valuations_api } from "@/api/valuations_api";
+import type { MatchComment } from "@/domain/match/match_comment";
 import { POSITION_LABEL, type Player } from "@/domain/player/player";
 import { Sheet } from "@/ui/components/Sheet";
 import { PlayerChip } from "@/ui/components/PlayerChip";
 import { PositionBadge } from "@/ui/components/PositionBadge";
 import { TradeDialog } from "@/ui/components/TradeDialog";
+
+function comment_icon(c: MatchComment): string {
+  if (c.is_goal) return "⚽";
+  const t = c.comment.toLowerCase();
+  if (/yellow card/.test(t)) return "🟨";
+  if (/red card/.test(t)) return "🟥";
+  if (/substitution|replaces/.test(t)) return "🔄";
+  if (/penalty/.test(t)) return "🎯";
+  if (/assist/.test(t)) return "🅰️";
+  if (/save|goalkeeper/.test(t)) return "🧤";
+  if (/corner/.test(t)) return "📐";
+  if (/free kick/.test(t)) return "🎯";
+  if (/foul/.test(t)) return "⚠️";
+  return "▫️";
+}
 
 type Period = "inception" | "30d" | "7d" | "24h" | "live";
 
@@ -45,6 +62,25 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
   const [selected_event, set_selected_event] = useState<PriceEvent | null>(null);
   const [trade_dialog_kind, set_trade_dialog_kind] = useState<"buy" | "sell" | null>(null);
   const is_watched = watchlist?.has(player.id) ?? false;
+
+  // Real Sportmonks commentary feed for this player. Loaded lazily on open;
+  // cached in the repo so re-opening is instant.
+  const [comments, set_comments] = useState<MatchComment[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    set_comments(null);
+    comments_api
+      .for_player(player.id, 100)
+      .then(items => {
+        if (!cancelled) set_comments(items);
+      })
+      .catch(() => {
+        if (!cancelled) set_comments([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [player.id]);
 
   const all_events = useMemo<PriceEvent[]>(() => {
     const base = current_price * 0.82;
@@ -250,54 +286,73 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
             )}
           </div>
 
-          {/* Activity log — narrative match & news events. Decoupled from pricing. */}
+          {/* Activity feed — real Sportmonks commentary for every action that
+              mentions this player, across all his matches in the active season. */}
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,.55)", letterSpacing: 0.5, textTransform: "uppercase" }}>
                 Activity
               </span>
-              <span style={{ fontSize: 11, color: "rgba(255,255,255,.25)" }}>{visible_events.length} entries</span>
+              <span style={{ fontSize: 11, color: "rgba(255,255,255,.25)" }}>
+                {comments === null ? "loading…" : `${comments.length} entries`}
+              </span>
             </div>
             <div style={{ display: "flex", flexDirection: "column" }}>
-              {visible_events.slice().reverse().map(e => {
-                const is_sel = selected_event?.i === e.i;
+              {comments === null && (
+                <div style={{ padding: "12px 8px", fontSize: 12, color: "rgba(255,255,255,.4)" }}>
+                  loading commentary feed…
+                </div>
+              )}
+              {comments !== null && comments.length === 0 && (
+                <div style={{ padding: "12px 8px", fontSize: 12, color: "rgba(255,255,255,.4)" }}>
+                  No commentary entries for this player in the active season.
+                </div>
+              )}
+              {comments?.map(c => {
+                const minute_label = c.extra_minute
+                  ? `${c.minute}+${c.extra_minute}'`
+                  : `${c.minute}'`;
                 return (
                   <div
-                    key={e.i}
-                    onClick={() => set_selected_event(is_sel ? null : e)}
+                    key={c.id}
                     style={{
                       display: "flex",
-                      alignItems: "center",
+                      alignItems: "flex-start",
                       gap: 10,
                       padding: "10px 8px",
                       borderRadius: 8,
-                      cursor: "pointer",
-                      background: is_sel ? "rgba(255,255,255,.04)" : "transparent",
                       borderBottom: "1px solid rgba(255,255,255,.03)",
+                      background: c.is_goal ? "rgba(72,255,67,.06)" : "transparent",
                     }}
                   >
-                    <span className="mono" style={{ fontSize: 11, color: "rgba(255,255,255,.25)", fontWeight: 700, minWidth: 28 }}>
-                      D{e.day}
-                    </span>
-                    <span style={{ fontSize: 16, minWidth: 22 }}>{e.icon}</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.4 }}>{e.label}</div>
-                    </div>
                     <span
-                      style={{
-                        fontSize: 9,
-                        fontWeight: 700,
-                        color: "rgba(255,255,255,.4)",
-                        background: "rgba(255,255,255,.04)",
-                        padding: "3px 8px",
-                        borderRadius: 4,
-                        letterSpacing: 0.4,
-                        textTransform: "uppercase",
-                        flexShrink: 0,
-                      }}
+                      className="mono"
+                      style={{ fontSize: 11, color: "rgba(255,255,255,.35)", fontWeight: 700, minWidth: 36 }}
                     >
-                      {e.type === "game" ? "Match" : "News"}
+                      {minute_label}
                     </span>
+                    <span style={{ fontSize: 16, minWidth: 22, marginTop: 1 }}>{comment_icon(c)}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 500, lineHeight: 1.45, color: "rgba(255,255,255,.85)" }}>
+                        {c.comment}
+                      </div>
+                    </div>
+                    {c.is_goal && (
+                      <span
+                        style={{
+                          fontSize: 9,
+                          fontWeight: 800,
+                          color: "#48ff43",
+                          background: "rgba(72,255,67,.12)",
+                          padding: "3px 8px",
+                          borderRadius: 4,
+                          letterSpacing: 0.6,
+                          flexShrink: 0,
+                        }}
+                      >
+                        GOAL
+                      </span>
+                    )}
                   </div>
                 );
               })}

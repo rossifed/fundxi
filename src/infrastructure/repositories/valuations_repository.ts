@@ -1,130 +1,44 @@
-import type { PlayerValuation } from "@/domain/market/player_valuation";
+import type { PlayerValuation, ValuationSource } from "@/domain/market/player_valuation";
+import { api_get } from "@/infrastructure/api_client";
 
-// Mock valuations seeded from the original Player mock. Same numbers as before
-// so visuals stay identical post-refactor. base_value is set equal to
-// current_price for now; the Sportmonks-driven multiplier model will diverge
-// the two later.
-const AS_OF = "2026-05-04T00:00:00Z";
+// Backend returns one valuation per player via the `valuation` field on
+// /api/players/search. Calling that route with a high `limit` gives us all
+// players + valuations in a single request — much cheaper than 1 call per
+// player.
 
-type Seed = [player_id: number, value: number, change_24h: number, rating: number];
+interface PlayerWithValuationDTO {
+  id: number;
+  valuation: {
+    player_id: number;
+    base_value: number;
+    current_price: number;
+    change_24h: number;
+    performance_rating: number;
+    as_of: string;
+    source: string;
+  };
+}
 
-const SEEDS: Seed[] = [
-  [1, 180, 1.2, 95],
-  [2, 120, 3.4, 88],
-  [3, 95, 2.8, 87],
-  [4, 175, 2.1, 93],
-  [5, 98, 1.5, 87],
-  [6, 72, 8.2, 82],
-  [7, 195, 3.2, 95],
-  [8, 82, 2.4, 86],
-  [9, 62, 6.1, 83],
-  [10, 78, 1.5, 85],
-  [11, 88, 1.8, 87],
-  [51, 85, 3.0, 88],
-  [60, 55, 1.2, 83],
-  [61, 62, 0.8, 84],
-  [62, 60, 1.5, 85],
-  [63, 48, 0.5, 87],
-  [12, 165, 2.0, 93],
-  [13, 140, 1.9, 91],
-  [14, 110, 1.3, 89],
-  [15, 120, 0.8, 90],
-  [16, 155, 5.2, 90],
-  [17, 105, 2.5, 89],
-  [18, 130, 1.1, 92],
-  [20, 145, 3.1, 90],
-  [21, 140, 4.5, 89],
-  [26, 185, 1.6, 94],
-  [27, 115, 2.2, 90],
-  [32, 75, 2.1, 87],
-  [36, 72, 0.5, 87],
-  [37, 65, 2.0, 86],
-  [38, 88, 1.2, 89],
-  [39, 72, 9.5, 84],
-  [40, 68, 2.5, 84],
-  [42, 110, 2.4, 89],
-  [43, 78, 3.6, 85],
-  [44, 65, 1.9, 85],
-  [45, 82, -0.8, 90],
-  [47, 75, -1.8, 85],
-  [48, 72, 3.5, 83],
-  [49, 80, 2.0, 86],
-  [50, 65, 5.2, 83],
-  [31, 80, 3.8, 86],
-  [53, 45, 0.5, 88],
-  [25, 95, 3.0, 87],
-  [23, 60, -1.5, 84],
-  [24, 90, 1.8, 88],
-  [28, 85, 3.5, 85],
-  [52, 35, -2.2, 85],
-  [54, 42, -1.0, 88],
-  [100, 52, 1.4, 85],
-  [101, 55, 0.8, 84],
-  [102, 38, 1.5, 82],
-  [103, 35, 0.9, 80],
-  [104, 48, 2.8, 82],
-  [105, 32, 0.5, 81],
-  [106, 48, 0.3, 86],
-  [107, 78, 2.2, 87],
-  [108, 95, 3.5, 87],
-  [109, 68, 2.0, 84],
-  [110, 62, 1.5, 85],
-  [111, 55, 6.8, 82],
-  [112, 28, -0.5, 82],
-  [113, 62, 3.2, 83],
-  [114, 28, 0.5, 79],
-  [115, 42, 1.2, 82],
-  [116, 12, 2.5, 73],
-  [117, 10, 1.0, 72],
-  [118, 6, 3.5, 70],
-  [119, 5, 2.0, 68],
-  [120, 5, 4.5, 71],
-  [121, 3, 0.5, 68],
-  [122, 58, 2.8, 84],
-  [123, 42, 1.5, 82],
-  [124, 32, 0.8, 80],
-  [125, 25, -0.5, 79],
-  [126, 15, 3.0, 75],
-  [127, 22, 1.2, 77],
-  [128, 15, 1.0, 76],
-  [129, 12, 0.5, 74],
-  [130, 18, 1.2, 77],
-  [131, 8, -0.3, 73],
-  [132, 18, 2.5, 76],
-  [133, 25, 4.0, 78],
-  [134, 10, 2.0, 74],
-  [135, 6, 1.5, 71],
-  [136, 28, -0.5, 82],
-  [137, 35, 3.2, 80],
-  [138, 22, -1.0, 80],
-  [139, 38, 0.8, 82],
-  [140, 10, 0.5, 74],
-  [141, 28, 1.2, 79],
-  [142, 10, 1.5, 74],
-  [143, 12, 2.0, 75],
-  [144, 25, 0.5, 79],
-  [145, 22, 1.8, 78],
-  [146, 8, 2.5, 72],
-  [147, 5, 0.5, 70],
-  [148, 85, 2.0, 86],
-  [149, 22, 1.5, 76],
-  [150, 22, -0.5, 78],
-  [151, 25, 4.2, 78],
-  [152, 18, 0.5, 77],
-  [153, 8, 1.0, 73],
-];
+let VALUATIONS: PlayerValuation[] = [];
+let VALUATIONS_BY_PLAYER_ID = new Map<number, PlayerValuation>();
 
-const VALUATIONS: PlayerValuation[] = SEEDS.map(([player_id, value, change_24h, performance_rating]) => ({
-  player_id,
-  base_value: value,
-  current_price: value,
-  change_24h,
-  performance_rating,
-  as_of: AS_OF,
-  source: "mock",
-}));
+function dto_to_domain(dto: PlayerWithValuationDTO["valuation"]): PlayerValuation {
+  return {
+    player_id: dto.player_id,
+    base_value: dto.base_value,
+    current_price: dto.current_price,
+    change_24h: dto.change_24h,
+    performance_rating: dto.performance_rating,
+    as_of: dto.as_of,
+    source: dto.source as ValuationSource,
+  };
+}
 
-const VALUATIONS_BY_PLAYER_ID = new Map(VALUATIONS.map(v => [v.player_id, v]));
+export async function init_valuations_repository(): Promise<void> {
+  const dtos = await api_get<PlayerWithValuationDTO[]>("/api/players/search", { limit: 2000 });
+  VALUATIONS = dtos.map(d => dto_to_domain(d.valuation));
+  VALUATIONS_BY_PLAYER_ID = new Map(VALUATIONS.map(v => [v.player_id, v]));
+}
 
 export const valuations_repository = {
   find_all(): PlayerValuation[] {

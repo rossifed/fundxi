@@ -13,23 +13,11 @@ import { PlayerChip } from "@/ui/components/PlayerChip";
 import { SectionHeader } from "@/ui/components/SectionHeader";
 import { Spark } from "@/ui/components/Spark";
 import { gen_spark } from "@/ui/helpers/chart_utils";
+import { news_api } from "@/api/news_api";
 
-interface MarketNewsItem {
-  icon: string;
-  text: string;
-  player_name: string;
-  impact: string;
-  color: string;
-  player_id: number;
-  time_ago: string;
+function news_icon(type: "prematch" | "postmatch"): string {
+  return type === "postmatch" ? "🏁" : "📰";
 }
-
-const MARKET_NEWS: MarketNewsItem[] = [
-  { icon: "🏥", text: "Salah limping in training — Egypt camp concerned", player_name: "Salah", impact: "-3.2%", color: "#ff285d", player_id: 38, time_ago: "12m ago" },
-  { icon: "⚡", text: "Yamal named in ESPN Best XI — social media surge", player_name: "Yamal", impact: "+2.1%", color: "#37ff63", player_id: 16, time_ago: "1h ago" },
-  { icon: "💬", text: "Mbappé confirmed as captain for Colombia clash", player_name: "Mbappé", impact: "+0.8%", color: "#37ff63", player_id: 7, time_ago: "3h ago" },
-  { icon: "📊", text: "Haaland tops expected goals chart after Norway win", player_name: "Haaland", impact: "+1.4%", color: "#37ff63", player_id: 26, time_ago: "5h ago" },
-];
 
 const HERO_CHART_DATA = Array.from({ length: 60 }, (_, i) => ({
   v: Math.round(10000 + Math.sin(i / 8) * 600 + i * 80 + Math.sin(i * 1.3) * 150),
@@ -266,35 +254,33 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match }: Hom
       >
         <SectionHeader title="Market news" meta="Today" />
         <div>
-          {MARKET_NEWS.map((n, i) => (
+          {news_api.list().slice(0, 6).map((n, i) => (
             <div
-              key={i}
-              onClick={() => {
-                const p = players_api.get(n.player_id);
-                if (p) on_open_player(p);
-              }}
+              key={n.id}
               style={{
                 padding: "14px 18px",
                 borderTop: i > 0 ? "1px solid rgba(255,255,255,.04)" : "none",
-                cursor: "pointer",
                 display: "flex",
                 gap: 14,
                 alignItems: "flex-start",
               }}
-              onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.025)")}
-              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
             >
-              <span style={{ fontSize: 22, flexShrink: 0, marginTop: 1 }}>{n.icon}</span>
+              <span style={{ fontSize: 22, flexShrink: 0, marginTop: 1 }}>{news_icon(n.type)}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, lineHeight: 1.5, color: "rgba(255,255,255,.85)", fontWeight: 500 }}>
-                  {n.text}
+                  {n.title}
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
-                  <span style={{ fontSize: 11, color: "rgba(255,255,255,.45)", fontWeight: 600 }}>{n.player_name}</span>
-                  <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: n.color }}>{n.impact}</span>
-                </div>
+                {n.fixture_label && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
+                    <span style={{ fontSize: 11, color: "rgba(255,255,255,.45)", fontWeight: 600 }}>
+                      {n.fixture_label}
+                    </span>
+                  </div>
+                )}
               </div>
-              <span style={{ fontSize: 11, color: "rgba(255,255,255,.3)", flexShrink: 0, marginTop: 2 }}>{n.time_ago}</span>
+              <span style={{ fontSize: 11, color: "rgba(255,255,255,.3)", flexShrink: 0, marginTop: 2 }}>
+                {n.type === "prematch" ? "pre-match" : "post-match"}
+              </span>
             </div>
           ))}
         </div>

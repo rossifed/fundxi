@@ -4,7 +4,7 @@ import type { Player } from "@/domain/player/player";
 // source (mock today, Sportmonks tomorrow) can evolve independently of the
 // player reference data.
 
-export type ValuationSource = "mock" | "sportmonks";
+export type ValuationSource = "mock" | "sportmonks" | "synthetic" | "engine";
 
 export interface PlayerValuation {
   player_id: number;
