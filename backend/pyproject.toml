@@ -1,0 +1,65 @@
+[project]
+name = "fundxi-backend"
+version = "0.1.0"
+description = "fundXI backend — World Cup 2026 player trading simulator"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "sqlalchemy[asyncio]>=2.0",
+    "alembic>=1.14",
+    "asyncpg>=0.30",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.7",
+    "httpx>=0.28",
+    "structlog>=24.4",
+    "tenacity>=9.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "anyio>=4.7",
+    "ruff>=0.8",
+    "pyright>=1.1.390",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 119
+target-version = "py312"
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
+ignore = []
+
+[tool.ruff.lint.per-file-ignores]
+# SQLAlchemy declarative metadata (__table_args__ dict) is not a mutable instance default.
+"src/infrastructure/db/models/*" = ["RUF012"]
+# FastAPI `Depends()` in argument defaults is the canonical DI pattern.
+"src/api/dependencies.py" = ["B008"]
+"src/api/routers/*" = ["B008"]
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
+reportMissingTypeStubs = false
+# JSON parsing layer (projectors) carries Any-typed dicts from external APIs.
+# Strict reporting of Unknown* would force pervasive casts with no safety gain
+# (the real safety comes from runtime isinstance checks + projector unit tests).
+reportUnknownArgumentType = false
+reportUnknownVariableType = false
+reportUnknownMemberType = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "anyio: mark test as anyio (Atonra convention, replaces pytest-asyncio)",
+]
