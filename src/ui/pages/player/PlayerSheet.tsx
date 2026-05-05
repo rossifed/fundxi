@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { portfolio_api } from "@/api/portfolio_api";
 import { teams_api } from "@/api/teams_api";
+import { valuations_api } from "@/api/valuations_api";
 import { POSITION_LABEL, type Player } from "@/domain/player/player";
 import { Sheet } from "@/ui/components/Sheet";
 import { PlayerChip } from "@/ui/components/PlayerChip";
@@ -35,13 +36,18 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
     color: "#888",
     kind: "national" as const,
   };
+  const valuation = valuations_api.get_for_player(player.id);
+  const current_price = valuation?.current_price ?? 0;
+  const change_24h = valuation?.change_24h ?? 0;
+  const performance_rating = valuation?.performance_rating ?? 0;
+
   const [period, set_period] = useState<Period>("30d");
   const [selected_event, set_selected_event] = useState<PriceEvent | null>(null);
   const [trade_dialog_kind, set_trade_dialog_kind] = useState<"buy" | "sell" | null>(null);
   const is_watched = watchlist?.has(player.id) ?? false;
 
   const all_events = useMemo<PriceEvent[]>(() => {
-    const base = player.value * 0.82;
+    const base = current_price * 0.82;
     return [
       { i: 0, day: 1, type: "news", icon: "📰", label: "Transfer rumours intensify", pct: 2.1, price: Math.round(base * 1.02) },
       { i: 1, day: 5, type: "news", icon: "🏥", label: "Passed fitness test — fully fit", pct: 1.5, price: Math.round(base * 1.035) },
@@ -55,9 +61,9 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
       { i: 9, day: 24, type: "news", icon: "💬", label: "Motivated for R16", pct: 0.9, price: Math.round(base * 1.14) },
       { i: 10, day: 26, type: "game", icon: "⚽", label: "Goal vs Colombia (R16, 12')", pct: 3.2, price: Math.round(base * 1.18) },
       { i: 11, day: 27, type: "game", icon: "🌟", label: "MOTM — 9.2 rating", pct: 2.8, price: Math.round(base * 1.21) },
-      { i: 12, day: 29, type: "news", icon: "🔥", label: "Trending — hype surge", pct: 1.4, price: Math.round(player.value) },
+      { i: 12, day: 29, type: "news", icon: "🔥", label: "Trending — hype surge", pct: 1.4, price: Math.round(current_price) },
     ];
-  }, [player.id, player.value]);
+  }, [player.id, current_price]);
 
   const period_ranges: Record<Period, [number, number]> = {
     inception: [0, 30],
@@ -71,14 +77,14 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
 
   const chart_points = useMemo(() => {
     const length = period === "inception" ? 90 : period === "30d" ? 60 : period === "7d" ? 28 : period === "24h" ? 48 : 36;
-    const base = all_events[0]?.price ?? player.value * 0.82;
+    const base = all_events[0]?.price ?? current_price * 0.82;
     return Array.from({ length }, (_, i) => {
       const d = low + (i / (length - 1)) * (high - low);
       let p = base;
       for (const e of all_events) if (e.day <= d) p = e.price;
-      return p + Math.sin(i * (player.id || 1) * 0.4) * player.value * 0.008;
+      return p + Math.sin(i * (player.id || 1) * 0.4) * current_price * 0.008;
     });
-  }, [period, all_events, low, high, player.id, player.value]);
+  }, [period, all_events, low, high, player.id, current_price]);
 
   const period_return =
     chart_points.length > 1 ? ((chart_points[chart_points.length - 1] - chart_points[0]) / chart_points[0]) * 100 : 0;
@@ -331,13 +337,13 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
 
           {/* KPIs grid */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-            <SmallKpi label="Value" value={`€${player.value}M`} />
+            <SmallKpi label="Value" value={`€${current_price}M`} />
             <SmallKpi
               label="24h"
-              value={`${player.change_24h >= 0 ? "+" : ""}${player.change_24h}%`}
-              color={player.change_24h >= 0 ? "#37ff63" : "#ff285d"}
+              value={`${change_24h >= 0 ? "+" : ""}${change_24h}%`}
+              color={change_24h >= 0 ? "#37ff63" : "#ff285d"}
             />
-            <SmallKpi label="Rating" value={String(player.rating)} color="rgba(255,255,255,.7)" />
+            <SmallKpi label="Rating" value={String(performance_rating)} color="rgba(255,255,255,.7)" />
             <SmallKpi label="Position" value={POSITION_LABEL[player.position]} mono={false} />
             <SmallKpi label="Age" value={String(player.age ?? "—")} />
             <SmallKpi label="Foot" value={player.foot ?? "—"} mono={false} />
@@ -406,7 +412,7 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
           </div>
 
           {/* Your position */}
-          <YourPositionCard player={player} />
+          <YourPositionCard player={player} current_price={current_price} />
 
           {/* Trade actions — open dedicated dialog */}
           <div style={{ display: "flex", gap: 8 }}>
@@ -465,7 +471,7 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
   );
 }
 
-function YourPositionCard({ player }: { player: Player }) {
+function YourPositionCard({ player, current_price }: { player: Player; current_price: number }) {
   const holding = portfolio_api.get_holding(player.id);
   const totals = portfolio_api.get_totals();
 
@@ -508,7 +514,7 @@ function YourPositionCard({ player }: { player: Player }) {
     );
   }
 
-  const market_value = holding.shares * player.value;
+  const market_value = holding.shares * current_price;
   const cost_basis = holding.shares * holding.average_buy_price;
   const pnl = market_value - cost_basis;
   const return_pct = cost_basis === 0 ? 0 : (pnl / cost_basis) * 100;

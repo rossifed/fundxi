@@ -6,6 +6,7 @@ import { teams_api } from "@/api/teams_api";
 import { leagues_api } from "@/api/leagues_api";
 import type { Match } from "@/domain/match/match";
 import type { Player } from "@/domain/player/player";
+import type { PlayerWithValuation } from "@/domain/market/player_valuation";
 import { LiveBadge } from "@/ui/components/LiveBadge";
 import { PerformanceChart } from "@/ui/components/PerformanceChart";
 import { PlayerChip } from "@/ui/components/PlayerChip";
@@ -49,9 +50,8 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match }: Hom
   const upcoming = matches_api.list_fixtures().filter(f => f.status === "upcoming").slice(0, 3);
   const my_leagues = leagues_api.list();
 
-  const all_movers = useMemo(() => players_api.list(), []);
-  const top_up = useMemo(() => [...all_movers].sort((a, b) => b.change_24h - a.change_24h).slice(0, 3), [all_movers]);
-  const top_down = useMemo(() => [...all_movers].sort((a, b) => a.change_24h - b.change_24h).slice(0, 3), [all_movers]);
+  const top_up = useMemo(() => players_api.top_movers(3, "up"), []);
+  const top_down = useMemo(() => players_api.top_movers(3, "down"), []);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24, animation: "fu .3s ease" }}>
@@ -380,7 +380,7 @@ function MoversColumn({
   divider,
 }: {
   label: string;
-  players: Player[];
+  players: PlayerWithValuation[];
   on_open_player: (player: Player) => void;
   divider?: boolean;
 }) {
@@ -391,7 +391,7 @@ function MoversColumn({
       </div>
       {players.map((p, i) => {
         const team = teams_api.get(p.team_id);
-        const up = p.change_24h >= 0;
+        const up = p.valuation.change_24h >= 0;
         return (
           <div
             key={p.id}
@@ -418,15 +418,15 @@ function MoversColumn({
               </div>
             </div>
             <Spark
-              data={gen_spark(p.change_24h, p.id, 14)}
+              data={gen_spark(p.valuation.change_24h, p.id, 14)}
               color={up ? "#37ff63" : "#ff285d"}
               width={56}
               height={22}
             />
             <div style={{ textAlign: "right", minWidth: 64 }}>
-              <div className="mono" style={{ fontSize: 12, fontWeight: 700 }}>€{p.value}M</div>
+              <div className="mono" style={{ fontSize: 12, fontWeight: 700 }}>€{p.valuation.current_price}M</div>
               <div className="mono" style={{ fontSize: 11, fontWeight: 800, color: up ? "#37ff63" : "#ff285d" }}>
-                {up ? "+" : ""}{p.change_24h}%
+                {up ? "+" : ""}{p.valuation.change_24h}%
               </div>
             </div>
           </div>

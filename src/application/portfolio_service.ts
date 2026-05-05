@@ -8,16 +8,19 @@ import {
 } from "@/domain/portfolio/portfolio_metrics";
 import { players_repository } from "@/infrastructure/repositories/players_repository";
 import { portfolio_repository } from "@/infrastructure/repositories/portfolio_repository";
+import { valuations_repository } from "@/infrastructure/repositories/valuations_repository";
 
 export interface HoldingDetail extends HoldingMetrics {
   player: Player;
 }
 
+function build_prices_index(): Map<number, number> {
+  return new Map(valuations_repository.find_all().map(v => [v.player_id, v.current_price]));
+}
+
 export const portfolio_service = {
   get_my_totals(): PortfolioTotals {
-    const holdings = portfolio_repository.find_my_holdings();
-    const players_by_id = new Map(players_repository.find_all().map(p => [p.id, p]));
-    return compute_portfolio_totals(holdings, players_by_id);
+    return compute_portfolio_totals(portfolio_repository.find_my_holdings(), build_prices_index());
   },
 
   get_my_holdings_with_metrics(): HoldingDetail[] {
@@ -26,7 +29,8 @@ export const portfolio_service = {
       .map(h => {
         const player = players_repository.find_by_id(h.player_id);
         if (!player) return null;
-        const metrics = compute_holding_metrics(h, player);
+        const price = valuations_repository.find_by_player_id(h.player_id)?.current_price ?? 0;
+        const metrics = compute_holding_metrics(h, price);
         return { ...metrics, player };
       })
       .filter((x): x is HoldingDetail => x !== null);

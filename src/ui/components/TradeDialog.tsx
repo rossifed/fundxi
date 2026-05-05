@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { teams_api } from "@/api/teams_api";
+import { valuations_api } from "@/api/valuations_api";
 import { simulate_trade, type TradeMode } from "@/application/trade_service";
 import type { Player } from "@/domain/player/player";
 import { PlayerChip } from "@/ui/components/PlayerChip";
@@ -20,10 +21,25 @@ interface TradeDialogProps {
   initial_kind: TradeKindLocal;
   on_close: () => void;
   go_portfolio?: () => void;
+  // Optional snapshot overrides — used when caller already holds price data
+  // (e.g. MatchView passing a MatchPlayer's value for an inline-only sub).
+  current_price?: number;
+  change_24h?: number;
 }
 
-export function TradeDialog({ open, player, initial_kind, on_close, go_portfolio }: TradeDialogProps) {
+export function TradeDialog({
+  open,
+  player,
+  initial_kind,
+  on_close,
+  go_portfolio,
+  current_price: current_price_override,
+  change_24h: change_24h_override,
+}: TradeDialogProps) {
   const team = teams_api.get(player.team_id);
+  const valuation = valuations_api.get_for_player(player.id);
+  const current_price = current_price_override ?? valuation?.current_price ?? 0;
+  const change_24h = change_24h_override ?? valuation?.change_24h ?? 0;
 
   const [kind, set_kind] = useState<TradeKindLocal>(initial_kind);
   const [mode, set_mode] = useState<TradeMode>("percentage");
@@ -45,7 +61,7 @@ export function TradeDialog({ open, player, initial_kind, on_close, go_portfolio
   if (!open) return null;
 
   const is_buy = kind === "buy";
-  const is_up = player.change_24h >= 0;
+  const is_up = change_24h >= 0;
 
   // ── Confirmed view ──
   if (confirmed) {
@@ -129,6 +145,7 @@ export function TradeDialog({ open, player, initial_kind, on_close, go_portfolio
     mode,
     percentage,
     shares: custom_shares,
+    current_price,
   });
 
   const final_shares = preview.shares;
@@ -138,9 +155,10 @@ export function TradeDialog({ open, player, initial_kind, on_close, go_portfolio
   const short_qty = preview.short_quantity;
   const held_shares = preview.held_shares;
 
+  const safe_price = current_price > 0 ? current_price : 1;
   const max_shares = is_buy
-    ? Math.floor(preview.cash_before / player.value)
-    : Math.max(held_shares, Math.floor(preview.cash_before / player.value));
+    ? Math.floor(preview.cash_before / safe_price)
+    : Math.max(held_shares, Math.floor(preview.cash_before / safe_price));
   const slider_max = Math.max(max_shares, 1);
 
   const can_confirm = !preview.insufficient_capital && final_shares > 0;
@@ -228,9 +246,9 @@ export function TradeDialog({ open, player, initial_kind, on_close, go_portfolio
             </div>
           </div>
           <div style={{ textAlign: "right" }}>
-            <div className="mono" style={{ fontSize: 14, fontWeight: 800 }}>€{player.value}M</div>
+            <div className="mono" style={{ fontSize: 14, fontWeight: 800 }}>€{current_price}M</div>
             <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: is_up ? "#37ff63" : "#ff285d" }}>
-              {is_up ? "+" : ""}{player.change_24h}%
+              {is_up ? "+" : ""}{change_24h}%
             </div>
           </div>
         </div>
@@ -349,8 +367,8 @@ export function TradeDialog({ open, player, initial_kind, on_close, go_portfolio
               ))
             : (() => {
                 const max = is_buy
-                  ? Math.floor(preview.cash_before / player.value)
-                  : Math.max(held_shares, Math.floor(preview.cash_before / player.value));
+                  ? Math.floor(preview.cash_before / safe_price)
+                  : Math.max(held_shares, Math.floor(preview.cash_before / safe_price));
                 const vals =
                   !is_buy && held_shares > 0
                     ? [
@@ -484,7 +502,7 @@ export function TradeDialog({ open, player, initial_kind, on_close, go_portfolio
             Trade preview
           </div>
           <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: 5 }}>
-            <PreviewRow label="Shares" value={`${final_shares} @ €${player.value}M`} />
+            <PreviewRow label="Shares" value={`${final_shares} @ €${current_price}M`} />
             <PreviewRow
               label="Total"
               value={`€${final_amount.toLocaleString()}`}

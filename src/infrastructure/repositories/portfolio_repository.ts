@@ -15,7 +15,7 @@ const MY_HOLDINGS: Holding[] = [
   { player_id: 53, shares: 80, average_buy_price: 40 },
 ];
 
-// Cash available for new trades (buying power). Same unit as player.value.
+// Cash available for new trades (buying power). Same unit as PlayerValuation.current_price.
 const MY_CASH_AVAILABLE = 15000;
 
 export const portfolio_repository = {

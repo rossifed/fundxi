@@ -2,6 +2,7 @@ import type { Match, MatchEvent, MatchPlayer } from "@/domain/match/match";
 import type { Player } from "@/domain/player/player";
 import { matches_repository } from "@/infrastructure/repositories/matches_repository";
 import { players_repository } from "@/infrastructure/repositories/players_repository";
+import { valuations_repository } from "@/infrastructure/repositories/valuations_repository";
 
 // Resolve a lineup that may contain raw player_ids (looked up from the players repository)
 // or already-inlined MatchPlayer entries (subs unique to the match).
@@ -17,16 +18,17 @@ export function resolve_lineup(lineup: (number | MatchPlayer)[]): MatchPlayer[] 
 }
 
 function to_match_player(player: Player): MatchPlayer {
+  const v = valuations_repository.find_by_player_id(player.id);
   return {
     id: player.id,
     name: player.name,
     full_name: player.full_name,
     jersey_number: player.jersey_number,
     position: player.position,
-    value: player.value,
-    rating: player.rating,
+    value: v?.current_price ?? 0,
+    rating: v?.performance_rating ?? 0,
     team_id: player.team_id,
-    change_24h: player.change_24h,
+    change_24h: v?.change_24h ?? 0,
     tags: player.tags,
   };
 }

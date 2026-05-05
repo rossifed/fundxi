@@ -644,6 +644,8 @@ function PickedPlayerPanel({
         initial_kind={trade_dialog_kind ?? "buy"}
         on_close={() => set_trade_dialog_kind(null)}
         go_portfolio={go_portfolio}
+        current_price={pitch_player.value}
+        change_24h={pitch_player.change_24h}
       />
     </div>
   );
@@ -660,9 +662,6 @@ function as_player(mp: MatchPlayer): Player {
       jersey_number: mp.jersey_number,
       team_id: mp.team_id ?? "",
       position: mp.position,
-      value: mp.value,
-      change_24h: mp.change_24h ?? 0,
-      rating: mp.rating,
       tags: mp.tags,
     }
   );

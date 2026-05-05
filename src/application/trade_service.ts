@@ -1,6 +1,7 @@
 import type { Player } from "@/domain/player/player";
 import type { TradeKind } from "@/domain/portfolio/trade";
 import { portfolio_service } from "./portfolio_service";
+import { valuation_service } from "./valuation_service";
 
 export type TradeMode = "percentage" | "shares";
 
@@ -10,6 +11,10 @@ export interface TradePreviewInput {
   mode: TradeMode;
   percentage?: number; // 0-100, used when mode === "percentage"
   shares?: number; // used when mode === "shares"
+  // Optional override for the reference price (€M). When omitted, the current
+  // valuation is fetched via valuation_service. Used by surfaces that already
+  // hold a price snapshot (e.g. MatchView passing a MatchPlayer's value).
+  current_price?: number;
 }
 
 export interface TradePreview {
@@ -43,6 +48,7 @@ export function simulate_trade(input: TradePreviewInput): TradePreview {
   const holding = portfolio_service.get_holding_for(input.player.id);
   const held_shares = holding?.shares ?? 0;
   const portfolio_value = totals.total_value;
+  const current_price = input.current_price ?? valuation_service.get_current_price(input.player.id);
 
   let shares: number;
   let amount: number;
@@ -50,10 +56,10 @@ export function simulate_trade(input: TradePreviewInput): TradePreview {
   if (input.mode === "percentage") {
     const pct = input.percentage ?? 0;
     amount = Math.round((portfolio_value * pct) / 100);
-    shares = Math.floor((amount / input.player.value) * 10) / 10;
+    shares = current_price === 0 ? 0 : Math.floor((amount / current_price) * 10) / 10;
   } else {
     shares = input.shares ?? 0;
-    amount = Math.round(shares * input.player.value);
+    amount = Math.round(shares * current_price);
   }
 
   const percentage_of_portfolio = portfolio_value === 0 ? 0 : Math.round((amount / portfolio_value) * 100);
@@ -73,7 +79,7 @@ export function simulate_trade(input: TradePreviewInput): TradePreview {
   // Realized P&L on sells (gain/loss vs avg buy price for the shares being sold)
   const avg_buy = holding?.average_buy_price ?? 0;
   const realized_pnl =
-    input.kind === "sell" && holding ? (input.player.value - avg_buy) * Math.min(shares, held_shares) : 0;
+    input.kind === "sell" && holding ? (current_price - avg_buy) * Math.min(shares, held_shares) : 0;
 
   return {
     player_id: input.player.id,

@@ -1,6 +1,7 @@
 import { matches_api } from "@/api/matches_api";
 import { players_api } from "@/api/players_api";
 import { teams_api } from "@/api/teams_api";
+import { valuations_api } from "@/api/valuations_api";
 import type { Match } from "@/domain/match/match";
 import type { Player } from "@/domain/player/player";
 import { PlayerChip } from "@/ui/components/PlayerChip";
@@ -89,7 +90,10 @@ export function RightRail({ watchlist, on_open_player, on_open_match }: RightRai
           <div style={{ display: "flex", flexDirection: "column" }}>
             {watched.map((p, i) => {
               const team = teams_api.get(p.team_id);
-              const up = p.change_24h >= 0;
+              const v = valuations_api.get_for_player(p.id);
+              const current_price = v?.current_price ?? 0;
+              const change_24h = v?.change_24h ?? 0;
+              const up = change_24h >= 0;
               return (
                 <div
                   key={p.id}
@@ -116,9 +120,9 @@ export function RightRail({ watchlist, on_open_player, on_open_match }: RightRai
                     </div>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <div className="mono" style={{ fontSize: 12, fontWeight: 700 }}>€{p.value}M</div>
+                    <div className="mono" style={{ fontSize: 12, fontWeight: 700 }}>€{current_price}M</div>
                     <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: up ? "#37ff63" : "#ff285d" }}>
-                      {up ? "+" : ""}{p.change_24h}%
+                      {up ? "+" : ""}{change_24h}%
                     </div>
                   </div>
                 </div>
