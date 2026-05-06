@@ -1,10 +1,18 @@
 """/api/players router."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.dependencies import get_match_comment_repo, get_player_repo, get_valuation_provider
+from src.api.dependencies import (
+    get_match_comment_repo,
+    get_player_repo,
+    get_session,
+    get_valuation_provider,
+)
 from src.api.dtos.match_comment import MatchCommentResponse
 from src.api.dtos.player import PlayerResponse, PlayerWithValuationResponse
+from src.api.dtos.price_history import PriceHistoryResponse, PricePoint
 from src.application.queries import (
     get_player,
     list_players,
@@ -13,9 +21,10 @@ from src.application.queries import (
 )
 from src.domain.player.player import Position
 from src.domain.player.screener_criteria import ScreenerCriteria, SortDirection, SortKey, SortSpec
+from src.domain.valuation.valuation_provider import ValuationProvider
+from src.infrastructure.db.models.player_price_tick import PlayerPriceTickORM
 from src.infrastructure.db.repositories.match_comment import SqlAlchemyMatchCommentRepository
 from src.infrastructure.db.repositories.player import SqlAlchemyPlayerRepository
-from src.infrastructure.valuation.synthetic_valuation_provider import SyntheticValuationProvider
 
 router = APIRouter(prefix="/api/players", tags=["players"])
 
@@ -31,7 +40,7 @@ async def players_top_movers(
     direction: str = Query(default="up"),
     limit: int = Query(default=5, ge=1, le=50),
     repo: SqlAlchemyPlayerRepository = Depends(get_player_repo),
-    valuation_provider: SyntheticValuationProvider = Depends(get_valuation_provider),
+    valuation_provider: ValuationProvider = Depends(get_valuation_provider),
 ) -> list[PlayerWithValuationResponse]:
     if direction not in {"up", "down"}:
         raise HTTPException(status_code=400, detail=f"direction must be 'up' or 'down', got {direction!r}")
@@ -53,7 +62,7 @@ async def players_search(
     sort_dir: str | None = Query(default="desc"),
     limit: int = Query(default=500, ge=1, le=2000),
     repo: SqlAlchemyPlayerRepository = Depends(get_player_repo),
-    valuation_provider: SyntheticValuationProvider = Depends(get_valuation_provider),
+    valuation_provider: ValuationProvider = Depends(get_valuation_provider),
 ) -> list[PlayerWithValuationResponse]:
     sort_spec = None
     if sort_key:
@@ -107,3 +116,34 @@ async def players_comments(
     core.match_comment_player_mention (populated by the enrichment worker)."""
     items = await comment_repo.list_by_player(player_id, limit=limit)
     return [MatchCommentResponse.from_domain(c) for c in items]
+
+
+@router.get("/{player_id}/price-history", response_model=PriceHistoryResponse)
+async def players_price_history(
+    player_id: int,
+    session: AsyncSession = Depends(get_session),
+) -> PriceHistoryResponse:
+    """Full price-tick history for a player, chronological. Single chart
+    spans tournament start → last tick — no period filtering in v0."""
+    rows = (
+        await session.execute(
+            select(
+                PlayerPriceTickORM.ts,
+                PlayerPriceTickORM.current_price,
+                PlayerPriceTickORM.fixture_id,
+                PlayerPriceTickORM.change_since_open,
+            )
+            .where(PlayerPriceTickORM.player_id == player_id)
+            .order_by(PlayerPriceTickORM.ts)
+        )
+    ).all()
+    points = [
+        PricePoint(
+            ts=row.ts,
+            price=float(row.current_price),
+            fixture_id=row.fixture_id,
+            change_since_open=float(row.change_since_open),
+        )
+        for row in rows
+    ]
+    return PriceHistoryResponse(player_id=player_id, points=points)

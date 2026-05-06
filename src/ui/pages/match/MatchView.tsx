@@ -1,25 +1,15 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Match, MatchPlayer } from "@/domain/match/match";
+import type { MatchComment } from "@/domain/match/match_comment";
 import type { Player } from "@/domain/player/player";
 import { get_match_positions, type Formation, type PositionedPlayer } from "@/domain/match/pitch_layout";
-import { matches_api } from "@/api/matches_api";
+import { comments_api } from "@/api/comments_api";
 import { players_api } from "@/api/players_api";
 import { teams_api } from "@/api/teams_api";
 import { lerp } from "@/ui/helpers/chart_utils";
 import { PlayerChip } from "@/ui/components/PlayerChip";
 import { PositionBadge } from "@/ui/components/PositionBadge";
 import { TradeDialog } from "@/ui/components/TradeDialog";
-import {
-  FRA_PITCH_XI,
-  FRA_PITCH_SUBS,
-  COL_PITCH_XI,
-  COL_PITCH_SUBS,
-  FRA_COLOR,
-  COL_COLOR,
-} from "@/infrastructure/repositories/matches_repository";
-
-const MATCH_FRA_POSITIONS = get_match_positions(FRA_PITCH_XI, "4-4-2");
-const MATCH_COL_POSITIONS = get_match_positions(COL_PITCH_XI, "3-5-2");
 
 type RightTab = "home_lineup" | "away_lineup" | "commentary";
 
@@ -30,21 +20,88 @@ interface MatchViewProps {
   go_portfolio?: () => void;
 }
 
+// Derive a tactical formation string from the count of starting outfield
+// players per position. Falls back to 4-3-3 when nothing fits.
+function infer_formation(xi: MatchPlayer[]): Formation {
+  const df = xi.filter(p => p.position === "DF").length;
+  const mf = xi.filter(p => p.position === "MF").length;
+  const fw = xi.filter(p => p.position === "FW").length;
+  const key = `${df}-${mf}-${fw}`;
+  const known: Record<string, Formation> = {
+    "4-4-2": "4-4-2",
+    "4-3-3": "4-3-3",
+    "3-5-2": "3-5-2",
+  };
+  return known[key] ?? "4-3-3";
+}
+
 export function MatchView({ match, on_back, on_open_player_profile, go_portfolio }: MatchViewProps) {
   const [picked, set_picked] = useState<PositionedPlayer | null>(null);
-  const [right_tab, set_right_tab] = useState<RightTab>("home_lineup");
+  const [right_tab, set_right_tab] = useState<RightTab>("commentary");
   const [team_tab, set_team_tab] = useState<"home" | "away">("home");
 
   const home_team = teams_api.get(match.home_team_id);
   const away_team = teams_api.get(match.away_team_id);
 
-  const players = team_tab === "home" ? MATCH_FRA_POSITIONS : MATCH_COL_POSITIONS;
-  const subs = team_tab === "home" ? FRA_PITCH_SUBS : COL_PITCH_SUBS;
-  const formation: Formation = team_tab === "home" ? "4-4-2" : "3-5-2";
-  const team_color = team_tab === "home" ? FRA_COLOR : COL_COLOR;
+  // Lineups now come from the BFF as full MatchPlayer[]; we resolve any stray
+  // raw IDs (legacy contract) defensively.
+  const home_xi: MatchPlayer[] = useMemo(
+    () => match.home_xi.filter((x): x is MatchPlayer => typeof x !== "number"),
+    [match.home_xi],
+  );
+  const away_xi: MatchPlayer[] = match.away_xi;
 
-  const feed = matches_api.get_match_feed(match.home_team_id, match.away_team_id);
+  const home_formation = useMemo(() => infer_formation(home_xi), [home_xi]);
+  const away_formation = useMemo(() => infer_formation(away_xi), [away_xi]);
+
+  const home_color = home_team?.color ?? "#888";
+  const away_color = away_team?.color ?? "#888";
+
+  const home_positions = useMemo(
+    () => get_match_positions(home_xi.map(p => ({ ...p, team_color: home_color })), home_formation),
+    [home_xi, home_color, home_formation],
+  );
+  const away_positions = useMemo(
+    () => get_match_positions(away_xi.map(p => ({ ...p, team_color: away_color })), away_formation),
+    [away_xi, away_color, away_formation],
+  );
+
+  const players = team_tab === "home" ? home_positions : away_positions;
+  const subs: MatchPlayer[] = [];  // bench not yet plumbed into the front-end Match type
+  const formation: Formation = team_tab === "home" ? home_formation : away_formation;
+  const team_color =
+    (team_tab === "home" ? home_team?.color : away_team?.color) ?? "#888";
+
+  // Events feed (minute markers on the pitch) comes embedded with the Match
+  // payload. The richer Sportmonks per-minute commentary feed is fetched
+  // lazily on open from /api/fixtures/{id}/comments.
+  const feed = match.events;
   const feed_chronological = [...feed].reverse();
+
+  const [commentaries, set_commentaries] = useState<MatchComment[] | null>(null);
+  useEffect(() => {
+    if (!match.fixture_id) {
+      set_commentaries([]);
+      return;
+    }
+    let cancelled = false;
+    set_commentaries(null);
+    comments_api
+      .for_fixture(match.fixture_id)
+      .then(items => {
+        if (!cancelled) set_commentaries(items);
+      })
+      .catch(() => {
+        if (!cancelled) set_commentaries([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [match.fixture_id]);
+  const commentaries_chrono = useMemo(
+    () => (commentaries ? [...commentaries].reverse() : []),
+    [commentaries],
+  );
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", animation: "fu .25s ease" }}>
@@ -196,7 +253,7 @@ export function MatchView({ match, on_back, on_open_player_profile, go_portfolio
               [
                 { k: "home_lineup" as RightTab, label: home_team?.flag + " XI" },
                 { k: "away_lineup" as RightTab, label: away_team?.flag + " XI" },
-                { k: "commentary" as RightTab, label: "Live" },
+                { k: "commentary" as RightTab, label: "Commentary" },
               ]
             ).map(t => (
               <button
@@ -231,8 +288,8 @@ export function MatchView({ match, on_back, on_open_player_profile, go_portfolio
               />
             ) : right_tab === "home_lineup" ? (
               <LineupList
-                xi={MATCH_FRA_POSITIONS}
-                subs={FRA_PITCH_SUBS}
+                xi={home_positions}
+                subs={[]}
                 player_changes={match.player_changes}
                 on_pick={p => {
                   set_team_tab("home");
@@ -241,8 +298,8 @@ export function MatchView({ match, on_back, on_open_player_profile, go_portfolio
               />
             ) : right_tab === "away_lineup" ? (
               <LineupList
-                xi={MATCH_COL_POSITIONS}
-                subs={COL_PITCH_SUBS}
+                xi={away_positions}
+                subs={[]}
                 player_changes={match.player_changes}
                 on_pick={p => {
                   set_team_tab("away");
@@ -250,17 +307,9 @@ export function MatchView({ match, on_back, on_open_player_profile, go_portfolio
                 }}
               />
             ) : (
-              <CommentaryFeed
-                events={feed_chronological}
-                on_pick={pid => {
-                  const p =
-                    MATCH_FRA_POSITIONS.find(x => x.id === pid) ||
-                    MATCH_COL_POSITIONS.find(x => x.id === pid);
-                  if (p) {
-                    set_team_tab(MATCH_FRA_POSITIONS.some(x => x.id === pid) ? "home" : "away");
-                    set_picked(p);
-                  }
-                }}
+              <SportmonksCommentary
+                comments={commentaries_chrono}
+                loading={commentaries === null}
               />
             )}
           </div>
@@ -479,7 +528,70 @@ function LineupList({
   );
 }
 
-function CommentaryFeed({
+function SportmonksCommentary({
+  comments,
+  loading,
+}: {
+  comments: MatchComment[];
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <div style={{ padding: 16, fontSize: 12, color: "rgba(255,255,255,.4)" }}>
+        loading commentary…
+      </div>
+    );
+  }
+  if (comments.length === 0) {
+    return (
+      <div style={{ padding: 16, fontSize: 12, color: "rgba(255,255,255,.4)" }}>
+        No commentary for this match.
+      </div>
+    );
+  }
+  return (
+    <div style={{ padding: "8px" }}>
+      {comments.map(c => {
+        const minute_label = c.extra_minute ? `${c.minute}+${c.extra_minute}'` : `${c.minute}'`;
+        const accent = c.is_goal ? "#37ff63" : c.is_important ? "rgba(255,255,255,.55)" : "rgba(255,255,255,.25)";
+        return (
+          <div
+            key={c.id}
+            style={{
+              display: "flex",
+              gap: 10,
+              padding: "10px 12px",
+              borderRadius: 8,
+              background: c.is_goal ? "rgba(55,255,99,.05)" : "transparent",
+              border: `1px solid ${c.is_goal ? "rgba(55,255,99,.1)" : "rgba(255,255,255,.03)"}`,
+              borderLeft: `3px solid ${accent}`,
+              marginBottom: 4,
+            }}
+          >
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 36, gap: 1 }}>
+              <span className="mono" style={{ fontSize: 11, color: accent, fontWeight: 800 }}>{minute_label}</span>
+              {c.is_goal && <span style={{ fontSize: 14 }}>⚽</span>}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: c.is_goal ? 700 : 500,
+                  color: c.is_goal ? "#fff" : "rgba(255,255,255,.85)",
+                  lineHeight: 1.45,
+                }}
+              >
+                {c.comment}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function _UnusedCommentaryFeed({
   events,
   on_pick,
 }: {

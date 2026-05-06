@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     # The Sportmonks season_id we currently bootstrap. WC2022 during dev,
     # WC2026 once the tournament starts. Same pipeline either way.
     active_season_id: int = Field(default=0)
+    # Cash (in €M) granted to a brand-new user portfolio. No default — must be
+    # set explicitly via INITIAL_CASH env var so we don't ship a magic value.
+    initial_cash: float = Field(default=0.0)
     log_level: str = Field(default="INFO")
 
 

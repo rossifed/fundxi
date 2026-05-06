@@ -1,0 +1,147 @@
+"""/api/me, /api/portfolio, /api/trades router (mono-user v0)."""
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.api.dependencies import get_session
+from src.api.dtos.portfolio import (
+    HoldingResponse,
+    PortfolioResponse,
+    TradeOutcomeResponse,
+    TradeRequestBody,
+    TradeResponse,
+    UserResponse,
+)
+from src.application.trade_execution import (
+    TradeError,
+    TradeRequest,
+    execute_trade,
+)
+from src.domain.portfolio.portfolio import Portfolio, TradeKind
+from src.infrastructure.db.repositories.portfolio import (
+    SqlAlchemyPortfolioRepository,
+    SqlAlchemyTradeRepository,
+)
+from src.infrastructure.db.repositories.user import SqlAlchemyUserRepository
+
+router = APIRouter(tags=["app"])
+
+
+async def _resolve_default_user_and_portfolio(
+    session: AsyncSession,
+) -> tuple[int, str, Portfolio]:
+    user_repo = SqlAlchemyUserRepository(session)
+    portfolio_repo = SqlAlchemyPortfolioRepository(session)
+    user = await user_repo.get_default_human()
+    if user is None:
+        raise HTTPException(
+            status_code=503,
+            detail="default user not bootstrapped — run bootstrap_user worker first",
+        )
+    portfolio = await portfolio_repo.get_by_user_id(user.id)
+    if portfolio is None:
+        raise HTTPException(status_code=503, detail=f"no portfolio for user {user.id}")
+    return user.id, user.name, portfolio
+
+
+def _portfolio_dto(portfolio: Portfolio, holdings: list[HoldingResponse]) -> PortfolioResponse:
+    return PortfolioResponse(
+        id=portfolio.id,
+        user_id=portfolio.user_id,
+        cash=portfolio.cash,
+        holdings=holdings,
+    )
+
+
+@router.get("/api/me", response_model=UserResponse)
+async def me(session: AsyncSession = Depends(get_session)) -> UserResponse:
+    user_repo = SqlAlchemyUserRepository(session)
+    user = await user_repo.get_default_human()
+    if user is None:
+        raise HTTPException(status_code=503, detail="default user not bootstrapped")
+    return UserResponse(id=user.id, name=user.name, kind=user.kind.value)
+
+
+@router.get("/api/portfolio", response_model=PortfolioResponse)
+async def get_portfolio(session: AsyncSession = Depends(get_session)) -> PortfolioResponse:
+    _, _, portfolio = await _resolve_default_user_and_portfolio(session)
+    portfolio_repo = SqlAlchemyPortfolioRepository(session)
+    holdings = await portfolio_repo.list_holdings(portfolio.id)
+    return _portfolio_dto(
+        portfolio,
+        [
+            HoldingResponse(player_id=h.player_id, shares=h.shares, average_buy_price=h.average_buy_price)
+            for h in holdings
+        ],
+    )
+
+
+@router.post("/api/trades", response_model=TradeOutcomeResponse)
+async def post_trade(body: TradeRequestBody, session: AsyncSession = Depends(get_session)) -> TradeOutcomeResponse:
+    _, _, portfolio = await _resolve_default_user_and_portfolio(session)
+    portfolio_repo = SqlAlchemyPortfolioRepository(session)
+    trade_repo = SqlAlchemyTradeRepository(session)
+
+    try:
+        kind = TradeKind(body.kind)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"invalid kind={body.kind!r}") from exc
+
+    try:
+        outcome = await execute_trade(
+            request=TradeRequest(
+                portfolio_id=portfolio.id,
+                player_id=body.player_id,
+                kind=kind,
+                shares=body.shares,
+                price=body.price,
+            ),
+            portfolio=portfolio,
+            portfolio_repo=portfolio_repo,
+            trade_repo=trade_repo,
+        )
+    except TradeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await session.commit()
+
+    holdings = await portfolio_repo.list_holdings(outcome.portfolio.id)
+    return TradeOutcomeResponse(
+        trade=TradeResponse(
+            id=outcome.trade.id,
+            portfolio_id=outcome.trade.portfolio_id,
+            player_id=outcome.trade.player_id,
+            kind=outcome.trade.kind.value,
+            shares=outcome.trade.shares,
+            price=outcome.trade.price,
+            total=outcome.trade.total,
+            executed_at=outcome.trade.executed_at,
+        ),
+        portfolio=_portfolio_dto(
+            outcome.portfolio,
+            [
+                HoldingResponse(player_id=h.player_id, shares=h.shares, average_buy_price=h.average_buy_price)
+                for h in holdings
+            ],
+        ),
+    )
+
+
+@router.get("/api/trades", response_model=list[TradeResponse])
+async def list_trades(session: AsyncSession = Depends(get_session)) -> list[TradeResponse]:
+    _, _, portfolio = await _resolve_default_user_and_portfolio(session)
+    trade_repo = SqlAlchemyTradeRepository(session)
+    trades = await trade_repo.list_by_portfolio(portfolio.id)
+    return [
+        TradeResponse(
+            id=t.id,
+            portfolio_id=t.portfolio_id,
+            player_id=t.player_id,
+            kind=t.kind.value,
+            shares=t.shares,
+            price=t.price,
+            total=t.total,
+            executed_at=t.executed_at,
+        )
+        for t in trades
+    ]

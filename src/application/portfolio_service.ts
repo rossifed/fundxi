@@ -20,7 +20,11 @@ function build_prices_index(): Map<number, number> {
 
 export const portfolio_service = {
   get_my_totals(): PortfolioTotals {
-    return compute_portfolio_totals(portfolio_repository.find_my_holdings(), build_prices_index());
+    return compute_portfolio_totals(
+      portfolio_repository.find_my_holdings(),
+      build_prices_index(),
+      portfolio_repository.find_my_cash(),
+    );
   },
 
   get_my_holdings_with_metrics(): HoldingDetail[] {

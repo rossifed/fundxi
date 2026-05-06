@@ -1,0 +1,205 @@
+"""get_match — Application Service composing fixture + lineups + events
+   + valuation deltas into a single Match aggregate for the frontend.
+
+DDD role: Application Service. Pure orchestration: reads via repositories,
+no I/O of its own. Called by the /api/fixtures/{id}/match route.
+"""
+
+from dataclasses import dataclass
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.domain.match.fixture import Fixture, FixtureStatus
+from src.domain.match.lineup import Lineup, LineupRole
+from src.domain.match.match_event import MatchEvent, MatchEventType
+from src.domain.player.player import Player, Position
+from src.domain.valuation.player_valuation import PlayerValuation
+from src.domain.valuation.valuation_provider import ValuationProvider
+from src.infrastructure.db.models.fixture import FixtureORM
+from src.infrastructure.db.models.lineup import LineupORM
+from src.infrastructure.db.models.match_event import MatchEventORM
+from src.infrastructure.db.models.player import PlayerORM
+from src.infrastructure.db.models.player_price_tick import PlayerPriceTickORM
+
+
+def _fixture_orm_to_domain(orm: FixtureORM) -> Fixture:
+    return Fixture(
+        id=orm.id,
+        home_team_id=orm.home_team_id,
+        away_team_id=orm.away_team_id,
+        status=FixtureStatus(orm.status),
+        group=orm.group,
+        home_score=orm.home_score,
+        away_score=orm.away_score,
+        kickoff_at=orm.kickoff_at,
+        minute=orm.minute,
+        note=orm.note,
+    )
+
+
+def _player_orm_to_domain(orm: PlayerORM) -> Player:
+    return Player(
+        id=orm.id,
+        name=orm.name,
+        jersey_number=orm.jersey_number,
+        team_id=orm.team_id,
+        position=Position(orm.position),
+        full_name=orm.full_name,
+        age=orm.age,
+        foot=orm.foot,
+        height=orm.height,
+        weight=orm.weight,
+        club=orm.club,
+        bio=orm.bio,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class MatchPlayerView:
+    player: Player
+    valuation: PlayerValuation
+    lineup: Lineup
+
+
+@dataclass(frozen=True, slots=True)
+class MatchView:
+    fixture: Fixture
+    home_xi: list[MatchPlayerView]
+    away_xi: list[MatchPlayerView]
+    home_bench: list[MatchPlayerView]
+    away_bench: list[MatchPlayerView]
+    events: list[MatchEvent]
+    player_names: dict[int, str]
+    player_changes: dict[int, float]
+
+
+def _orm_lineup_to_domain(orm: LineupORM) -> Lineup:
+    return Lineup(
+        id=orm.id,
+        fixture_id=orm.fixture_id,
+        player_id=orm.player_id,
+        team_id=orm.team_id,
+        role=LineupRole(orm.role),
+        position=orm.position,
+        jersey_number=orm.jersey_number,
+        formation_position=orm.formation_position,
+    )
+
+
+def _orm_event_to_domain(orm: MatchEventORM) -> MatchEvent:
+    return MatchEvent(
+        id=orm.id,
+        fixture_id=orm.fixture_id,
+        minute=orm.minute,
+        extra_minute=orm.extra_minute,
+        type=MatchEventType(orm.type),
+        player_id=orm.player_id,
+        related_player_id=orm.related_player_id,
+        team_id=orm.team_id,
+        info=orm.info,
+        sequence=orm.sequence,
+    )
+
+
+async def get_match_view(
+    *,
+    session: AsyncSession,
+    valuation_provider: ValuationProvider,
+    fixture_id: int,
+) -> MatchView | None:
+    fx_row = await session.execute(select(FixtureORM).where(FixtureORM.id == fixture_id))
+    fx_orm = fx_row.scalar_one_or_none()
+    if fx_orm is None:
+        return None
+
+    fixture = _fixture_orm_to_domain(fx_orm)
+
+    # Lineups (separate by role + team).
+    lineups_rows = (await session.execute(select(LineupORM).where(LineupORM.fixture_id == fixture_id))).scalars().all()
+    lineups = [_orm_lineup_to_domain(o) for o in lineups_rows]
+
+    # All players appearing in this fixture (lineups + events).
+    player_ids: set[int] = {ln.player_id for ln in lineups}
+    events_rows = (
+        (
+            await session.execute(
+                select(MatchEventORM).where(MatchEventORM.fixture_id == fixture_id).order_by(MatchEventORM.sequence)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    events = [_orm_event_to_domain(o) for o in events_rows]
+    for ev in events:
+        if ev.player_id is not None:
+            player_ids.add(ev.player_id)
+        if ev.related_player_id is not None:
+            player_ids.add(ev.related_player_id)
+
+    # Bulk-load player domain objects.
+    player_orms = (
+        (await session.execute(select(PlayerORM).where(PlayerORM.id.in_(player_ids)))).scalars().all()
+        if player_ids
+        else []
+    )
+    player_by_id: dict[int, Player] = {p.id: _player_orm_to_domain(p) for p in player_orms}
+    player_names: dict[int, str] = {p.id: p.name for p in player_orms}
+
+    # Bulk valuations.
+    valuations: dict[int, PlayerValuation] = (
+        await valuation_provider.get_for_players(list(player_ids)) if player_ids else {}
+    )
+
+    def _make_view(line: Lineup) -> MatchPlayerView | None:
+        p = player_by_id.get(line.player_id)
+        v = valuations.get(line.player_id)
+        if p is None or v is None:
+            return None
+        return MatchPlayerView(player=p, valuation=v, lineup=line)
+
+    home_xi: list[MatchPlayerView] = []
+    away_xi: list[MatchPlayerView] = []
+    home_bench: list[MatchPlayerView] = []
+    away_bench: list[MatchPlayerView] = []
+    for ln in lineups:
+        view = _make_view(ln)
+        if view is None:
+            continue
+        is_home = ln.team_id == fixture.home_team_id
+        is_starter = ln.role is LineupRole.STARTER
+        if is_home and is_starter:
+            home_xi.append(view)
+        elif is_home:
+            home_bench.append(view)
+        elif is_starter:
+            away_xi.append(view)
+        else:
+            away_bench.append(view)
+
+    home_xi.sort(key=lambda v: v.lineup.formation_position or 99)
+    away_xi.sort(key=lambda v: v.lineup.formation_position or 99)
+    home_bench.sort(key=lambda v: v.lineup.jersey_number or 99)
+    away_bench.sort(key=lambda v: v.lineup.jersey_number or 99)
+
+    # player_changes: read change_since_open from valuation.player_price_tick
+    # for ticks anchored at this fixture.
+    tick_rows = (
+        await session.execute(
+            select(PlayerPriceTickORM.player_id, PlayerPriceTickORM.change_since_open).where(
+                PlayerPriceTickORM.fixture_id == fixture_id
+            )
+        )
+    ).all()
+    player_changes: dict[int, float] = {row.player_id: float(row.change_since_open) for row in tick_rows}
+
+    return MatchView(
+        fixture=fixture,
+        home_xi=home_xi,
+        away_xi=away_xi,
+        home_bench=home_bench,
+        away_bench=away_bench,
+        events=events,
+        player_names=player_names,
+        player_changes=player_changes,
+    )

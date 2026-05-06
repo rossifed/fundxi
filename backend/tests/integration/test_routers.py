@@ -91,7 +91,7 @@ async def test_fixtures_list_returns_wc2022_matches(client: httpx.AsyncClient) -
 
 
 @pytest.mark.anyio
-async def test_players_search_with_synthetic_valuation(client: httpx.AsyncClient) -> None:
+async def test_players_search_returns_valuation(client: httpx.AsyncClient) -> None:
     r = await client.get("/api/players/search", params={"team_ids": "ARG", "limit": 30})
     assert r.status_code == 200
     body = r.json()
@@ -99,9 +99,11 @@ async def test_players_search_with_synthetic_valuation(client: httpx.AsyncClient
     sample = body[0]
     assert "valuation" in sample
     val = sample["valuation"]
-    assert val["source"] == "synthetic"
-    assert 5.0 <= val["base_value"] <= 120.0
-    assert -8.0 <= val["change_24h"] <= 8.0
+    # Engine provider after WC2022 replay; falls back to synthetic seed for
+    # players who didn't participate in the tournament.
+    assert val["source"] in {"engine", "synthetic"}
+    assert val["base_value"] > 0
+    assert val["current_price"] > 0
 
 
 @pytest.mark.anyio
@@ -123,7 +125,6 @@ async def test_players_search_text_match(client: httpx.AsyncClient) -> None:
 
 @pytest.mark.anyio
 async def test_valuation_for_player(client: httpx.AsyncClient) -> None:
-    # Pull any player id from /api/players, then ask for its valuation.
     list_resp = await client.get("/api/players", params={})
     assert list_resp.status_code == 200
     players = list_resp.json()
@@ -132,8 +133,21 @@ async def test_valuation_for_player(client: httpx.AsyncClient) -> None:
     assert r.status_code == 200
     val = r.json()
     assert val["player_id"] == pid
-    assert val["source"] == "synthetic"
-    assert 5.0 <= val["base_value"] <= 120.0
+    assert val["source"] in {"engine", "synthetic"}
+    assert val["base_value"] > 0
+
+
+@pytest.mark.anyio
+async def test_messi_has_engine_valuation_after_replay(client: httpx.AsyncClient) -> None:
+    """Messi played 7 WC2022 matches → engine provider must serve a real
+    tick (source='engine') with current_price > base_value (he had a great
+    tournament)."""
+    search = (await client.get("/api/players/search", params={"search": "Messi"})).json()
+    messi_entries = [p for p in search if "Messi" in (p.get("full_name") or "")]
+    assert messi_entries
+    val = messi_entries[0]["valuation"]
+    assert val["source"] == "engine"
+    assert val["current_price"] > val["base_value"], "Messi's WC2022 was net positive"
 
 
 @pytest.mark.anyio

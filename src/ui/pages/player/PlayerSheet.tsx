@@ -5,7 +5,9 @@ import { teams_api } from "@/api/teams_api";
 import { valuations_api } from "@/api/valuations_api";
 import type { MatchComment } from "@/domain/match/match_comment";
 import { POSITION_LABEL, type Player } from "@/domain/player/player";
+import type { PricePoint } from "@/infrastructure/repositories/valuations_repository";
 import { Sheet } from "@/ui/components/Sheet";
+import { fmt_eur_m, fmt_eur_m_signed } from "@/ui/helpers/format";
 import { PlayerChip } from "@/ui/components/PlayerChip";
 import { PositionBadge } from "@/ui/components/PositionBadge";
 import { TradeDialog } from "@/ui/components/TradeDialog";
@@ -23,18 +25,6 @@ function comment_icon(c: MatchComment): string {
   if (/free kick/.test(t)) return "🎯";
   if (/foul/.test(t)) return "⚠️";
   return "▫️";
-}
-
-type Period = "inception" | "30d" | "7d" | "24h" | "live";
-
-interface PriceEvent {
-  i: number;
-  day: number;
-  type: "news" | "game";
-  icon: string;
-  label: string;
-  pct: number;
-  price: number;
 }
 
 interface PlayerSheetProps {
@@ -58,8 +48,6 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
   const change_24h = valuation?.change_24h ?? 0;
   const performance_rating = valuation?.performance_rating ?? 0;
 
-  const [period, set_period] = useState<Period>("30d");
-  const [selected_event, set_selected_event] = useState<PriceEvent | null>(null);
   const [trade_dialog_kind, set_trade_dialog_kind] = useState<"buy" | "sell" | null>(null);
   const is_watched = watchlist?.has(player.id) ?? false;
 
@@ -82,55 +70,38 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
     };
   }, [player.id]);
 
-  const all_events = useMemo<PriceEvent[]>(() => {
-    const base = current_price * 0.82;
-    return [
-      { i: 0, day: 1, type: "news", icon: "📰", label: "Transfer rumours intensify", pct: 2.1, price: Math.round(base * 1.02) },
-      { i: 1, day: 5, type: "news", icon: "🏥", label: "Passed fitness test — fully fit", pct: 1.5, price: Math.round(base * 1.035) },
-      { i: 2, day: 8, type: "game", icon: "⚽", label: "Goal vs Morocco (Group A, 23')", pct: 4.2, price: Math.round(base * 1.08) },
-      { i: 3, day: 10, type: "game", icon: "🅰️", label: "Assist vs Morocco (67')", pct: 1.8, price: Math.round(base * 1.10) },
-      { i: 4, day: 12, type: "news", icon: "📊", label: "Named in Team of the Week", pct: 0.8, price: Math.round(base * 1.11) },
-      { i: 5, day: 15, type: "game", icon: "🟨", label: "Yellow card vs Mexico (55')", pct: -1.2, price: Math.round(base * 1.09) },
-      { i: 6, day: 16, type: "game", icon: "⚽⚽", label: "Brace vs Mexico (71', 84')", pct: 6.5, price: Math.round(base * 1.16) },
-      { i: 7, day: 19, type: "news", icon: "🗞️", label: "Manager praises in presser", pct: 0.5, price: Math.round(base * 1.17) },
-      { i: 8, day: 22, type: "game", icon: "📉", label: "Poor rating vs Iran (5.8)", pct: -3.1, price: Math.round(base * 1.13) },
-      { i: 9, day: 24, type: "news", icon: "💬", label: "Motivated for R16", pct: 0.9, price: Math.round(base * 1.14) },
-      { i: 10, day: 26, type: "game", icon: "⚽", label: "Goal vs Colombia (R16, 12')", pct: 3.2, price: Math.round(base * 1.18) },
-      { i: 11, day: 27, type: "game", icon: "🌟", label: "MOTM — 9.2 rating", pct: 2.8, price: Math.round(base * 1.21) },
-      { i: 12, day: 29, type: "news", icon: "🔥", label: "Trending — hype surge", pct: 1.4, price: Math.round(current_price) },
-    ];
-  }, [player.id, current_price]);
+  // Real engine price-tick history. Single chart from the tournament baseline
+  // through the latest tick. No period filtering in v0 — it would be honest
+  // only once we have intra-match (M4 LiveWorker) ticks.
+  const [price_history, set_price_history] = useState<PricePoint[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    set_price_history(null);
+    valuations_api
+      .get_price_history(player.id)
+      .then(points => {
+        if (!cancelled) set_price_history(points);
+      })
+      .catch(() => {
+        if (!cancelled) set_price_history([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [player.id]);
 
-  const period_ranges: Record<Period, [number, number]> = {
-    inception: [0, 30],
-    "30d": [0, 30],
-    "7d": [23, 30],
-    "24h": [28, 30],
-    live: [25, 30],
-  };
-  const [low, high] = period_ranges[period];
-  const visible_events = all_events.filter(e => e.day >= low && e.day <= high);
-
-  const chart_points = useMemo(() => {
-    const length = period === "inception" ? 90 : period === "30d" ? 60 : period === "7d" ? 28 : period === "24h" ? 48 : 36;
-    const base = all_events[0]?.price ?? current_price * 0.82;
-    return Array.from({ length }, (_, i) => {
-      const d = low + (i / (length - 1)) * (high - low);
-      let p = base;
-      for (const e of all_events) if (e.day <= d) p = e.price;
-      return p + Math.sin(i * (player.id || 1) * 0.4) * current_price * 0.008;
-    });
-  }, [period, all_events, low, high, player.id, current_price]);
-
+  const chart_points = useMemo(() => (price_history ?? []).map(p => p.price), [price_history]);
   const period_return =
-    chart_points.length > 1 ? ((chart_points[chart_points.length - 1] - chart_points[0]) / chart_points[0]) * 100 : 0;
+    chart_points.length > 1
+      ? ((chart_points[chart_points.length - 1] - chart_points[0]) / chart_points[0]) * 100
+      : 0;
   const period_is_up = chart_points.length > 1 && chart_points[chart_points.length - 1] >= chart_points[0];
   const period_color = period_is_up ? "#48ff43" : "#ff285d";
 
   return (
     <Sheet open={true} on_close={on_close} max_width={1080}>
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.4fr) minmax(380px, 1fr)", minHeight: 600 }}>
-        {/* LEFT: hero + chart + price events */}
+        {/* LEFT: hero + chart + activity feed */}
         <div
           style={{
             padding: "20px 24px",
@@ -164,38 +135,16 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
             <div>
               <div style={{ fontSize: 14, fontWeight: 800 }}>Valuation</div>
               <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", marginTop: 2 }}>
-                {period === "inception" ? "Since inception" : period === "live" ? "Live game" : period === "30d" ? "Last 30 days" : period === "7d" ? "Last 7 days" : "Last 24h"}
+                {price_history === null
+                  ? "loading…"
+                  : price_history.length === 0
+                    ? "No price ticks yet"
+                    : `Tournament — ${price_history.length} ticks`}
               </div>
             </div>
             <span className="mono" style={{ fontSize: 18, fontWeight: 800, color: period_color }}>
               {period_return >= 0 ? "+" : ""}{period_return.toFixed(1)}%
             </span>
-          </div>
-
-          {/* Period selector */}
-          <div style={{ display: "flex", gap: 4 }}>
-            {(["inception", "30d", "7d", "24h", "live"] as Period[]).map(p => (
-              <button
-                key={p}
-                onClick={() => {
-                  set_period(p);
-                  set_selected_event(null);
-                }}
-                style={{
-                  padding: "6px 12px",
-                  borderRadius: 6,
-                  fontSize: 11,
-                  fontWeight: period === p ? 700 : 500,
-                  border: "none",
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  background: period === p ? "rgba(255,255,255,.07)" : "transparent",
-                  color: period === p ? "#fff" : "rgba(255,255,255,.35)",
-                }}
-              >
-                {p === "inception" ? "All" : p === "live" ? "Game" : p.toUpperCase()}
-              </button>
-            ))}
           </div>
 
           {/* Chart */}
@@ -214,12 +163,6 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
               }));
               const polyline = points.map(p => `${p.x},${p.y}`).join(" ");
               const last = points[points.length - 1];
-              const event_points = visible_events.map(e => {
-                const frac = (e.day - low) / (high - low);
-                const idx = Math.round(frac * (chart_points.length - 1));
-                const pt = points[Math.min(idx, points.length - 1)];
-                return { ...e, cx: pt.x, cy: pt.y };
-              });
               return (
                 <svg width="100%" viewBox={`0 0 ${w} ${h}`} style={{ display: "block" }}>
                   <defs>
@@ -229,65 +172,59 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
                     </linearGradient>
                   </defs>
                   {[0, 0.5, 1].map((p, i) => (
-                    <line key={i} x1={pd} x2={w - pd} y1={pd + p * (h - pd * 2)} y2={pd + p * (h - pd * 2)} stroke="rgba(255,255,255,.04)" />
+                    <line
+                      key={i}
+                      x1={pd}
+                      x2={w - pd}
+                      y1={pd + p * (h - pd * 2)}
+                      y2={pd + p * (h - pd * 2)}
+                      stroke="rgba(255,255,255,.04)"
+                    />
                   ))}
-                  <polygon points={`${points[0].x},${h - pd} ${polyline} ${last.x},${h - pd}`} fill="url(#player_chart_grad)" />
-                  <polyline points={polyline} fill="none" stroke={period_color} strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" opacity=".1" />
-                  <polyline points={polyline} fill="none" stroke={period_color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                  <circle cx={last.x} cy={last.y} r="4" fill={period_color} />
+                  <polygon
+                    points={`${points[0].x},${h - pd} ${polyline} ${last.x},${h - pd}`}
+                    fill="url(#player_chart_grad)"
+                  />
+                  <polyline
+                    points={polyline}
+                    fill="none"
+                    stroke={period_color}
+                    strokeWidth="6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    opacity=".1"
+                  />
+                  <polyline
+                    points={polyline}
+                    fill="none"
+                    stroke={period_color}
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  {points.map((pt, i) => (
+                    <circle
+                      key={i}
+                      cx={pt.x}
+                      cy={pt.y}
+                      r="3"
+                      fill={period_color}
+                      stroke="#040810"
+                      strokeWidth="2"
+                    />
+                  ))}
                   <circle cx={last.x} cy={last.y} r="9" fill={period_color} opacity=".15" />
-                  {selected_event && (() => {
-                    const se = event_points.find(e => e.i === selected_event.i);
-                    return se ? (
-                      <line x1={se.cx} y1={pd} x2={se.cx} y2={h - pd} stroke="rgba(255,255,255,.12)" strokeDasharray="3,2" />
-                    ) : null;
-                  })()}
-                  {event_points.map((e, i) => {
-                    const is_sel = selected_event?.i === e.i;
-                    return (
-                      <g key={i} onClick={() => set_selected_event(is_sel ? null : e)} style={{ cursor: "pointer" }}>
-                        <circle cx={e.cx} cy={e.cy} r="14" fill="transparent" />
-                        <circle
-                          cx={e.cx}
-                          cy={e.cy}
-                          r={is_sel ? 6 : 4}
-                          fill={is_sel ? "#fff" : "rgba(255,255,255,.55)"}
-                          stroke="#040810"
-                          strokeWidth="2"
-                        />
-                      </g>
-                    );
-                  })}
                 </svg>
               );
             })()}
-            {selected_event && (
-              <div
-                style={{
-                  marginTop: 8,
-                  background: "rgba(255,255,255,.03)",
-                  border: "1px solid rgba(255,255,255,.08)",
-                  borderRadius: 10,
-                  padding: "10px 12px",
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: 10,
-                  animation: "fu .12s ease",
-                }}
-              >
-                <span style={{ fontSize: 22 }}>{selected_event.icon}</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>{selected_event.label}</div>
-                  <span style={{ fontSize: 10, color: "rgba(255,255,255,.35)" }}>
-                    Day {selected_event.day} · {selected_event.type === "game" ? "Match" : "News"}
-                  </span>
-                </div>
+            {price_history !== null && price_history.length === 0 && (
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,.4)", padding: "20px 0", textAlign: "center" }}>
+                No price ticks yet for this player.
               </div>
             )}
           </div>
 
-          {/* Activity feed — real Sportmonks commentary for every action that
-              mentions this player, across all his matches in the active season. */}
+          {/* Activity feed — real Sportmonks commentary */}
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,.55)", letterSpacing: 0.5, textTransform: "uppercase" }}>
@@ -309,9 +246,7 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
                 </div>
               )}
               {comments?.map(c => {
-                const minute_label = c.extra_minute
-                  ? `${c.minute}+${c.extra_minute}'`
-                  : `${c.minute}'`;
+                const minute_label = c.extra_minute ? `${c.minute}+${c.extra_minute}'` : `${c.minute}'`;
                 return (
                   <div
                     key={c.id}
@@ -371,7 +306,6 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
             maxHeight: "92vh",
           }}
         >
-          {/* Watch toggle */}
           <button
             onClick={() => toggle_watch?.(player.id)}
             style={{
@@ -390,7 +324,6 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
             {is_watched ? "★" : "☆"}
           </button>
 
-          {/* KPIs grid */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
             <SmallKpi label="Value" value={`€${current_price}M`} />
             <SmallKpi
@@ -404,7 +337,6 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
             <SmallKpi label="Foot" value={player.foot ?? "—"} mono={false} />
           </div>
 
-          {/* Bio */}
           {player.bio && (
             <div>
               <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,.55)", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 6 }}>
@@ -414,7 +346,6 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
             </div>
           )}
 
-          {/* Tags */}
           {player.tags && player.tags.length > 0 && (
             <div>
               <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,.55)", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 6 }}>
@@ -441,7 +372,6 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
             </div>
           )}
 
-          {/* Physical */}
           <div style={{ display: "flex", gap: 6 }}>
             {[
               { label: "Height", value: player.height ?? "—" },
@@ -466,10 +396,8 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
             ))}
           </div>
 
-          {/* Your position */}
           <YourPositionCard player={player} current_price={current_price} />
 
-          {/* Trade actions — open dedicated dialog */}
           <div style={{ display: "flex", gap: 8 }}>
             <button
               onClick={() => set_trade_dialog_kind("buy")}
@@ -510,7 +438,6 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
         </div>
       </div>
 
-      {/* Trade dialog stacks on top of the player sheet */}
       <TradeDialog
         open={trade_dialog_kind !== null}
         player={player}
@@ -623,10 +550,10 @@ function YourPositionCard({ player, current_price }: { player: Player; current_p
       <div style={{ padding: "12px 14px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         <PositionStat label="Shares" value={String(Math.abs(holding.shares))} />
         <PositionStat label="Avg buy" value={`€${holding.average_buy_price}M`} />
-        <PositionStat label="Market value" value={`€${(market_value / 1000).toFixed(1)}k`} />
+        <PositionStat label="Market value" value={fmt_eur_m(market_value)} />
         <PositionStat
           label="P&L"
-          value={`${pnl >= 0 ? "+" : ""}€${(pnl / 1000).toFixed(2)}k`}
+          value={fmt_eur_m_signed(pnl)}
           color={pnl >= 0 ? "#37ff63" : "#ff285d"}
         />
         <PositionStat

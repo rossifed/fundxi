@@ -1,6 +1,6 @@
 import type { Position } from "@/domain/player/player";
 
-export type MatchStatus = "live" | "finished";
+export type MatchStatus = "live" | "finished" | "upcoming";
 
 export interface MatchPlayer {
   id: number;
@@ -31,6 +31,7 @@ export interface PlayerCurvePoint {
 }
 
 export interface Match {
+  fixture_id?: number;
   home_team_id: string;
   away_team_id: string;
   home_score: number;

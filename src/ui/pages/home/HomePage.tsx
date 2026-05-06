@@ -12,16 +12,18 @@ import { PerformanceChart } from "@/ui/components/PerformanceChart";
 import { PlayerChip } from "@/ui/components/PlayerChip";
 import { SectionHeader } from "@/ui/components/SectionHeader";
 import { Spark } from "@/ui/components/Spark";
-import { gen_spark } from "@/ui/helpers/chart_utils";
+import { spark_for_player, spark_market_index } from "@/infrastructure/repositories/valuations_repository";
+import { fmt_eur_m, fmt_eur_m_signed } from "@/ui/helpers/format";
 import { news_api } from "@/api/news_api";
 
 function news_icon(type: "prematch" | "postmatch"): string {
   return type === "postmatch" ? "🏁" : "📰";
 }
 
-const HERO_CHART_DATA = Array.from({ length: 60 }, (_, i) => ({
-  v: Math.round(10000 + Math.sin(i / 8) * 600 + i * 80 + Math.sin(i * 1.3) * 150),
-}));
+// Hero performance chart data: real "market index" derived from the
+// valuation engine — average of every player's price (normalized to 100
+// at tournament start). Recomputed on every render but the underlying
+// sparklines are cached in the repository.
 
 interface HomePageProps {
   on_open_player: (player: Player) => void;
@@ -40,6 +42,10 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match }: Hom
 
   const top_up = useMemo(() => players_api.top_movers(3, "up"), []);
   const top_down = useMemo(() => players_api.top_movers(3, "down"), []);
+  const hero_chart_data = useMemo(
+    () => spark_market_index(60).map(v => ({ v })),
+    [],
+  );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24, animation: "fu .3s ease" }}>
@@ -71,23 +77,18 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match }: Hom
           <div>
             <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 4 }}>
               <span className="mono" style={{ fontSize: 36, fontWeight: 900, letterSpacing: -1.5 }}>
-                €{(totals.total_value / 1000).toFixed(1)}k
+                {fmt_eur_m(totals.total_value)}
               </span>
               <span className={"ch " + (totals.return_pct >= 0 ? "cu" : "cn")} style={{ fontSize: 13 }}>
                 {totals.return_pct >= 0 ? "+" : ""}{totals.return_pct.toFixed(1)}%
               </span>
             </div>
             <div style={{ fontSize: 12, color: "rgba(255,255,255,.4)", marginBottom: 14 }}>
-              P&L {totals.pnl >= 0 ? "+" : ""}€{(totals.pnl / 1000).toFixed(1)}k · {holdings_count} holdings
-            </div>
-            <div style={{ display: "flex", gap: 20 }}>
-              <Stat label="Rank" value="#3" />
-              <Stat label="Best trade" value="+12.4%" color="#37ff63" />
-              <Stat label="Win rate" value="68%" />
+              P&L {fmt_eur_m_signed(totals.pnl)} · Cash {fmt_eur_m(totals.cash)} · {holdings_count} holdings
             </div>
           </div>
           <div style={{ height: 130 }}>
-            <PerformanceChart data={HERO_CHART_DATA} width={520} height={130} />
+            <PerformanceChart data={hero_chart_data} width={520} height={130} />
           </div>
         </div>
       </div>
@@ -236,7 +237,7 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match }: Hom
           overflow: "hidden",
         }}
       >
-        <SectionHeader title="Movers · 24h" cta="Open screener →" on_cta={() => on_navigate_tab("screener")} />
+        <SectionHeader title="Top movers · since tournament start" cta="Open screener →" on_cta={() => on_navigate_tab("screener")} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
           <MoversColumn label="Top gainers" players={top_up} on_open_player={on_open_player} />
           <MoversColumn label="Top losers" players={top_down} on_open_player={on_open_player} divider />
@@ -377,7 +378,11 @@ function MoversColumn({
       </div>
       {players.map((p, i) => {
         const team = teams_api.get(p.team_id);
-        const up = p.valuation.change_24h >= 0;
+        const tournament_return =
+          p.valuation.base_value > 0
+            ? ((p.valuation.current_price - p.valuation.base_value) / p.valuation.base_value) * 100
+            : 0;
+        const up = tournament_return >= 0;
         return (
           <div
             key={p.id}
@@ -404,7 +409,7 @@ function MoversColumn({
               </div>
             </div>
             <Spark
-              data={gen_spark(p.valuation.change_24h, p.id, 14)}
+              data={spark_for_player(p.id)}
               color={up ? "#37ff63" : "#ff285d"}
               width={56}
               height={22}
@@ -412,7 +417,7 @@ function MoversColumn({
             <div style={{ textAlign: "right", minWidth: 64 }}>
               <div className="mono" style={{ fontSize: 12, fontWeight: 700 }}>€{p.valuation.current_price}M</div>
               <div className="mono" style={{ fontSize: 11, fontWeight: 800, color: up ? "#37ff63" : "#ff285d" }}>
-                {up ? "+" : ""}{p.valuation.change_24h}%
+                {up ? "+" : ""}{tournament_return.toFixed(1)}%
               </div>
             </div>
           </div>
@@ -422,7 +427,7 @@ function MoversColumn({
   );
 }
 
-function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
+function _UnusedStat({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div>
       <div

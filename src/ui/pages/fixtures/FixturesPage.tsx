@@ -52,8 +52,10 @@ export function FixturesPage({ on_open_match }: FixturesPageProps) {
           const home = teams_api.get(fx.home_team_id);
           const away = teams_api.get(fx.away_team_id);
           if (!home || !away) return null;
-          const match_data = matches_api.get_match(fx.home_team_id, fx.away_team_id);
-          const clickable = (fx.status === "live" || fx.status === "finished") && !!match_data;
+          const handle_click = async () => {
+            const match = await matches_api.get_match_by_fixture_id(fx.id);
+            if (match) on_open_match(match);
+          };
           return (
             <FixtureCard
               key={fx.id}
@@ -62,8 +64,8 @@ export function FixturesPage({ on_open_match }: FixturesPageProps) {
               home_name={home.name}
               away_flag={away.flag}
               away_name={away.name}
-              clickable={clickable}
-              on_click={() => clickable && match_data && on_open_match(match_data)}
+              clickable
+              on_click={() => void handle_click()}
             />
           );
         })}

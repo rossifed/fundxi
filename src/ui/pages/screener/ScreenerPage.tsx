@@ -8,7 +8,7 @@ import { type SortKey } from "@/application/screener_service";
 import { PlayerChip } from "@/ui/components/PlayerChip";
 import { PositionBadge } from "@/ui/components/PositionBadge";
 import { Spark } from "@/ui/components/Spark";
-import { gen_spark } from "@/ui/helpers/chart_utils";
+import { spark_for_player } from "@/infrastructure/repositories/valuations_repository";
 import { price_label } from "@/ui/helpers/format";
 import { toggle_set } from "@/ui/helpers/state";
 import { position_color } from "@/ui/design/tokens";
@@ -385,7 +385,7 @@ export function ScreenerPage({ on_open_player, watchlist, toggle_watch }: Screen
                     {up ? "+" : ""}{p.valuation.change_24h}%
                   </span>
                   <span className="mono" style={{ fontWeight: 700, color: "rgba(255,255,255,.65)" }}>{p.valuation.performance_rating}</span>
-                  <Spark data={gen_spark(p.valuation.change_24h, p.id, 16)} color={up ? "#37ff63" : "#ff285d"} width={100} height={24} />
+                  <Spark data={spark_for_player(p.id)} color={up ? "#37ff63" : "#ff285d"} width={100} height={24} />
                   <span className="mono" style={{ color: "rgba(255,255,255,.45)" }}>{p.age ?? "—"}</span>
                 </div>
               );

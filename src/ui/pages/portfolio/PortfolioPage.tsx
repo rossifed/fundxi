@@ -8,16 +8,10 @@ import { PlayerChip } from "@/ui/components/PlayerChip";
 import { PositionBadge } from "@/ui/components/PositionBadge";
 import { PerformanceChart } from "@/ui/components/PerformanceChart";
 import { Donut } from "@/ui/components/Donut";
+import { spark_market_index } from "@/infrastructure/repositories/valuations_repository";
+import { fmt_eur_m, fmt_eur_m_signed, fmt_shares } from "@/ui/helpers/format";
 
-type Period = "inception" | "30d" | "7d" | "24h";
 type PositionsTab = "positions" | "trades";
-
-const PERIOD_LABELS: Record<Period, string> = {
-  inception: "Since Inception",
-  "30d": "Last 30 Days",
-  "7d": "Last 7 Days",
-  "24h": "Daily",
-};
 
 const CHART_PALETTE = [
   "rgba(255,255,255,.7)",
@@ -89,26 +83,23 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
       .map(x => ({ ...x, pct: ((x.v / total_value) * 100).toFixed(1) }));
   }, [holdings, total_value]);
 
-  const [period, set_period] = useState<Period>("30d");
   const [positions_tab, set_positions_tab] = useState<PositionsTab>("positions");
 
+  // Single chart: portfolio value rebased onto the real market index
+  // (= average of every player's price over the tournament). v0 has no
+  // per-trade history × price-tick join yet, so we approximate the
+  // portfolio curve as `total_value × index_t / index_T`. Same shape as
+  // the market for an evenly-weighted book; will be replaced once we
+  // compute holdings × historical prices on the backend.
   const performance_data = useMemo(() => {
-    const generate = (length: number, vol: number, trend: number) =>
-      Array.from({ length }, (_, i) => ({
-        v: Math.round(
-          10000 + Math.sin(i / Math.max(3, length / 7)) * vol + i * trend + Math.sin(i * 1.3) * vol * 0.25,
-        ),
-      }));
-    return {
-      inception: generate(120, 900, 42),
-      "30d": generate(60, 600, 80),
-      "7d": generate(28, 350, 110),
-      "24h": generate(48, 200, 55),
-    } as Record<Period, { v: number }[]>;
-  }, []);
-  const period_data = performance_data[period];
+    const idx = spark_market_index(120);
+    const last = idx[idx.length - 1] || 1;
+    return idx.map(v => ({ v: Math.round((v / last) * total_value) }));
+  }, [total_value]);
   const period_return =
-    period_data.length > 1 ? ((period_data[period_data.length - 1].v - period_data[0].v) / period_data[0].v) * 100 : 0;
+    performance_data.length > 1
+      ? ((performance_data[performance_data.length - 1].v - performance_data[0].v) / performance_data[0].v) * 100
+      : 0;
 
   const sorted_holdings = useMemo(() => [...holdings].sort((a, b) => b.market_value - a.market_value), [holdings]);
 
@@ -134,11 +125,12 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       {/* KPI row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
-        <KpiCard label="Total Value" value={`€${(total_value / 1000).toFixed(1)}k`} />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
+        <KpiCard label="Total Value" value={fmt_eur_m(total_value)} />
+        <KpiCard label="Cash" value={fmt_eur_m(totals.cash)} />
         <KpiCard
           label="P&L"
-          value={`${pnl >= 0 ? "+" : ""}€${(pnl / 1000).toFixed(1)}k`}
+          value={fmt_eur_m_signed(pnl)}
           color={pnl >= 0 ? "#37ff63" : "#ff285d"}
         />
         <KpiCard
@@ -161,36 +153,13 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 800 }}>Performance</div>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", marginTop: 2 }}>{PERIOD_LABELS[period]}</div>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", marginTop: 2 }}>Since tournament start</div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            <span className="mono" style={{ fontSize: 18, fontWeight: 800, color: period_return >= 0 ? "#37ff63" : "#ff285d" }}>
-              {period_return >= 0 ? "+" : ""}{period_return.toFixed(1)}%
-            </span>
-            <div style={{ display: "flex", gap: 4 }}>
-              {(["inception", "30d", "7d", "24h"] as Period[]).map(p => (
-                <button
-                  key={p}
-                  onClick={() => set_period(p)}
-                  style={{
-                    padding: "6px 12px",
-                    borderRadius: 6,
-                    fontSize: 11,
-                    fontWeight: period === p ? 700 : 500,
-                    border: "none",
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                    background: period === p ? "rgba(255,255,255,.08)" : "transparent",
-                    color: period === p ? "#fff" : "rgba(255,255,255,.35)",
-                  }}
-                >
-                  {p === "inception" ? "All" : p === "24h" ? "1D" : p.toUpperCase()}
-                </button>
-              ))}
-            </div>
-          </div>
+          <span className="mono" style={{ fontSize: 18, fontWeight: 800, color: period_return >= 0 ? "#37ff63" : "#ff285d" }}>
+            {period_return >= 0 ? "+" : ""}{period_return.toFixed(1)}%
+          </span>
         </div>
-        <PerformanceChart data={period_data} width={1100} height={220} />
+        <PerformanceChart data={performance_data} width={1100} height={220} />
       </div>
 
       {/* Breakdown — stacked, all visible at once */}
@@ -301,12 +270,12 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                     </div>
                   </div>
                   <PositionBadge position={h.player.position} />
-                  <span className="mono" style={{ textAlign: "right", fontWeight: 700 }}>{h.shares}</span>
+                  <span className="mono" style={{ textAlign: "right", fontWeight: 700 }}>{fmt_shares(h.shares)}</span>
                   <span className="mono" style={{ textAlign: "right", color: "rgba(255,255,255,.55)" }}>
                     €{h.average_buy_price}M
                   </span>
                   <span className="mono" style={{ textAlign: "right", fontWeight: 800 }}>
-                    €{(h.market_value / 1000).toFixed(1)}k
+                    {fmt_eur_m(h.market_value)}
                   </span>
                   <span
                     className="mono"
@@ -392,12 +361,12 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                         {t.player_name}
                       </span>
                     </div>
-                    <span className="mono" style={{ textAlign: "right" }}>{t.shares}</span>
+                    <span className="mono" style={{ textAlign: "right" }}>{fmt_shares(t.shares)}</span>
                     <span className="mono" style={{ textAlign: "right", color: "rgba(255,255,255,.55)" }}>
                       €{t.price}M
                     </span>
                     <span className="mono" style={{ textAlign: "right", fontWeight: 700 }}>
-                      €{(t.total / 1000).toFixed(1)}k
+                      {fmt_eur_m(t.total)}
                     </span>
                     <span style={{ textAlign: "right", color: "rgba(255,255,255,.35)", fontSize: 12 }}>{t.date}</span>
                   </div>
@@ -529,9 +498,11 @@ function ExposureCard({ total_value }: { total_value: number }) {
 }
 
 function ExposureView({ total_value }: { total_value: number }) {
+  // v0: long-only book. Shorts will land when the trade engine supports
+  // them; until then the exposure card reflects the actual portfolio.
   const long_value = total_value;
-  const short_value = 1781;
-  const total_exposure = long_value + short_value;
+  const short_value = 0;
+  const total_exposure = long_value + short_value || 1;
   const long_pct = ((long_value / total_exposure) * 100).toFixed(1);
   const short_pct = ((short_value / total_exposure) * 100).toFixed(1);
   const net_exposure = long_value - short_value;
@@ -571,14 +542,16 @@ function ExposureView({ total_value }: { total_value: number }) {
         </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-        <ExposureCell label="Long" value={`€${(long_value / 1000).toFixed(1)}k`} color="#37ff63" />
-        <ExposureCell label="Short" value={`€${(short_value / 1000).toFixed(1)}k`} color="#ff285d" />
-        <ExposureCell label="Net" value={`${net_exposure >= 0 ? "+" : ""}€${(net_exposure / 1000).toFixed(1)}k`} color="rgba(255,255,255,.7)" />
+        <ExposureCell label="Long" value={fmt_eur_m(long_value)} color="#37ff63" />
+        <ExposureCell label="Short" value={fmt_eur_m(short_value)} color="#ff285d" />
+        <ExposureCell label="Net" value={fmt_eur_m_signed(net_exposure)} color="rgba(255,255,255,.7)" />
       </div>
       <div style={{ marginTop: 14, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,.05)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 12 }}>
           <span style={{ color: "rgba(255,255,255,.35)" }}>L/S Ratio</span>
-          <span className="mono" style={{ fontWeight: 700 }}>{(long_value / short_value).toFixed(1)}x</span>
+          <span className="mono" style={{ fontWeight: 700 }}>
+            {short_value > 0 ? `${(long_value / short_value).toFixed(1)}x` : "∞"}
+          </span>
         </div>
       </div>
     </div>

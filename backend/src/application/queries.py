@@ -117,6 +117,14 @@ async def get_valuation_for_player(
     return await valuation_provider.get_for_player(player_id)
 
 
+def _tournament_return_pct(pwv: PlayerWithValuation) -> float:
+    """% return since the tournament baseline. Pure function."""
+    base = pwv.valuation.base_value
+    if base <= 0:
+        return 0.0
+    return (pwv.valuation.current_price - base) / base * 100.0
+
+
 async def list_top_movers(
     *,
     player_repo: PlayerRepository,
@@ -124,11 +132,14 @@ async def list_top_movers(
     direction: SortDirection,
     limit: int,
 ) -> list[PlayerWithValuation]:
-    """Top players sorted by `change_24h`. Direction DESC = best gainers,
-    ASC = worst losers. Walks the whole player list (cheap with synthetic
-    valuations; M5 will swap to a precomputed snapshot for efficiency)."""
+    """Top players sorted by total tournament return (current vs baseline).
+    Direction DESC = best gainers, ASC = worst losers. v0 keeps it simple —
+    no 24h / 7d periods until we have a need for them."""
     players = await player_repo.list_all()
     valuations = await valuation_provider.get_for_players([p.id for p in players])
     pairs = [PlayerWithValuation(player=p, valuation=valuations[p.id]) for p in players]
-    pairs = _sort_pairs_by_valuation(pairs, key=SortKey.CHANGE, direction=direction)
+    # Drop players who never played (no real return — pure baseline).
+    pairs = [p for p in pairs if abs(_tournament_return_pct(p)) > 0.001]
+    descending = direction is SortDirection.DESC
+    pairs.sort(key=_tournament_return_pct, reverse=descending)
     return pairs[:limit]

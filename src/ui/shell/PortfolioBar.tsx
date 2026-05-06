@@ -1,4 +1,5 @@
 import type { PortfolioTotals } from "@/domain/portfolio/portfolio_metrics";
+import { fmt_eur_m, fmt_eur_m_signed } from "@/ui/helpers/format";
 
 interface PortfolioBarProps {
   totals: PortfolioTotals;
@@ -39,7 +40,7 @@ export function PortfolioBar({ totals, on_click }: PortfolioBarProps) {
           PORTFOLIO
         </span>
         <span className="mono" style={{ fontSize: 13, fontWeight: 800 }}>
-          €{(total_value / 1000).toFixed(1)}k
+          {fmt_eur_m(total_value)}
         </span>
         <span
           className="mono"
@@ -62,7 +63,7 @@ export function PortfolioBar({ totals, on_click }: PortfolioBarProps) {
             fontWeight: 600,
           }}
         >
-          P&L {pnl >= 0 ? "+" : ""}€{(pnl / 1000).toFixed(1)}k
+          P&L {fmt_eur_m_signed(pnl)}
         </span>
         <span style={{ fontSize: 11, color: "rgba(255,255,255,.2)" }}>◈</span>
       </div>

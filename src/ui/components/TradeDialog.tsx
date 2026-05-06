@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { teams_api } from "@/api/teams_api";
+import { trades_api } from "@/api/trades_api";
 import { valuations_api } from "@/api/valuations_api";
 import { simulate_trade, type TradeMode } from "@/application/trade_service";
 import type { Player } from "@/domain/player/player";
 import { PlayerChip } from "@/ui/components/PlayerChip";
 import { Sheet } from "@/ui/components/Sheet";
+import { fmt_eur_m, fmt_shares } from "@/ui/helpers/format";
 
 type TradeKindLocal = "buy" | "sell";
 
@@ -46,6 +48,8 @@ export function TradeDialog({
   const [percentage, set_percentage] = useState(10);
   const [custom_shares, set_custom_shares] = useState(0);
   const [confirmed, set_confirmed] = useState<ConfirmedTrade | null>(null);
+  const [submitting, set_submitting] = useState(false);
+  const [error, set_error] = useState<string | null>(null);
 
   // Reset state every time the dialog re-opens.
   useEffect(() => {
@@ -55,6 +59,8 @@ export function TradeDialog({
       set_percentage(10);
       set_custom_shares(0);
       set_confirmed(null);
+      set_submitting(false);
+      set_error(null);
     }
   }, [open, initial_kind]);
 
@@ -189,15 +195,30 @@ export function TradeDialog({
           </button>
           <button
             onClick={() => {
-              if (!can_confirm) return;
-              set_confirmed({
-                kind,
-                shares: final_shares,
-                amount: final_amount,
-                percentage: final_pct,
-              });
+              if (!can_confirm || submitting) return;
+              set_submitting(true);
+              set_error(null);
+              trades_api
+                .execute({
+                  player_id: player.id,
+                  kind,
+                  shares: final_shares,
+                  price: current_price,
+                })
+                .then(() => {
+                  set_confirmed({
+                    kind,
+                    shares: final_shares,
+                    amount: final_amount,
+                    percentage: final_pct,
+                  });
+                })
+                .catch((err: unknown) => {
+                  set_error(err instanceof Error ? err.message : String(err));
+                })
+                .finally(() => set_submitting(false));
             }}
-            disabled={!can_confirm}
+            disabled={!can_confirm || submitting}
             style={{
               flex: 2,
               padding: "12px 0",
@@ -291,11 +312,11 @@ export function TradeDialog({
           }}
         >
           <span style={{ color: "rgba(255,255,255,.4)" }}>
-            CASH <span className="mono" style={{ color: "#fff", fontWeight: 700, marginLeft: 6 }}>€{(preview.cash_before / 1000).toFixed(1)}k</span>
+            CASH <span className="mono" style={{ color: "#fff", fontWeight: 700, marginLeft: 6 }}>{fmt_eur_m(preview.cash_before)}</span>
           </span>
           {held_shares > 0 && (
             <span style={{ color: "rgba(255,255,255,.4)" }}>
-              HOLDING <span className="mono" style={{ color: "#fff", fontWeight: 700, marginLeft: 6 }}>{held_shares} shares</span>
+              HOLDING <span className="mono" style={{ color: "#fff", fontWeight: 700, marginLeft: 6 }}>{fmt_shares(held_shares)} shares</span>
             </span>
           )}
         </div>
@@ -502,23 +523,23 @@ export function TradeDialog({
             Trade preview
           </div>
           <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: 5 }}>
-            <PreviewRow label="Shares" value={`${final_shares} @ €${current_price}M`} />
+            <PreviewRow label="Shares" value={`${fmt_shares(final_shares)} @ €${current_price}M`} />
             <PreviewRow
               label="Total"
-              value={`€${final_amount.toLocaleString()}`}
+              value={fmt_eur_m(final_amount)}
               accent={is_buy ? "#37ff63" : "#ff285d"}
               bold
             />
             <PreviewRow
               label="Position"
-              before={`${held_shares} shares`}
-              after={`${preview.shares_after} shares`}
+              before={`${fmt_shares(held_shares)} shares`}
+              after={`${fmt_shares(preview.shares_after)} shares`}
               accent={is_buy ? "#37ff63" : "#ff285d"}
             />
             <PreviewRow
               label="Cash"
-              before={`€${(preview.cash_before / 1000).toFixed(1)}k`}
-              after={`€${(preview.cash_after / 1000).toFixed(1)}k`}
+              before={fmt_eur_m(preview.cash_before)}
+              after={fmt_eur_m(preview.cash_after)}
               accent={is_buy ? "#ff285d" : "#37ff63"}
               warning={preview.cash_after < 0}
             />
@@ -565,7 +586,7 @@ export function TradeDialog({
           >
             <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
             <span style={{ fontSize: 12, color: "rgba(255,255,255,.7)", lineHeight: 1.45 }}>
-              Selling {final_shares} closes your {held_shares} shares and opens a short of {short_qty}.
+              Selling {fmt_shares(final_shares)} closes your {fmt_shares(held_shares)} shares and opens a short of {fmt_shares(short_qty)}.
             </span>
           </div>
         )}
