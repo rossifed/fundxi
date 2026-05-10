@@ -3,7 +3,7 @@
 DDD role: API contract DTOs.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel
 
@@ -25,6 +25,13 @@ class PlayerResponse(BaseModel):
     weight: int | None = None
     club: str | None = None
     bio: str | None = None
+    image_path: str | None = None
+    detailed_position: str | None = None
+    date_of_birth: date | None = None
+    birth_city: str | None = None
+    nationality_name: str | None = None
+    nationality_iso: str | None = None
+    nationality_flag_url: str | None = None
 
     @classmethod
     def from_domain(cls, player: Player) -> "PlayerResponse":
@@ -41,6 +48,13 @@ class PlayerResponse(BaseModel):
             weight=player.weight,
             club=player.club,
             bio=player.bio,
+            image_path=player.image_path,
+            detailed_position=player.detailed_position,
+            date_of_birth=player.date_of_birth,
+            birth_city=player.birth_city,
+            nationality_name=player.nationality_name,
+            nationality_iso=player.nationality_iso,
+            nationality_flag_url=player.nationality_flag_url,
         )
 
 

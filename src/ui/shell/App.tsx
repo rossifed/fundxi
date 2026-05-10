@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { matches_api } from "@/api/matches_api";
 import { players_api } from "@/api/players_api";
 import { portfolio_api } from "@/api/portfolio_api";
 import type { Match } from "@/domain/match/match";
@@ -53,6 +54,13 @@ export function App() {
     set_selected_player(null);
     set_selected_match(null);
     set_tab("portfolio");
+  };
+
+  const open_match_by_fixture_id = async (fixture_id: number) => {
+    const m = await matches_api.get_match_by_fixture_id(fixture_id);
+    if (!m) return;
+    set_selected_player(null);
+    set_selected_match(m);
   };
 
   let content: React.ReactNode;
@@ -186,6 +194,7 @@ export function App() {
           player={selected_player}
           on_close={close_player}
           go_portfolio={go_portfolio}
+          go_match={open_match_by_fixture_id}
           watchlist={watchlist}
           toggle_watch={toggle_watch}
         />

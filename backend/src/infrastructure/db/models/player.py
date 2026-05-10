@@ -3,7 +3,9 @@
 DDD role: Adapter. Domain ↔ ORM translation is the Repository's job.
 """
 
-from sqlalchemy import ForeignKey, String, Text
+from datetime import date
+
+from sqlalchemy import Date, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.db.base import Base
@@ -27,3 +29,10 @@ class PlayerORM(Base, AuditMixin):
     weight: Mapped[int | None]
     club: Mapped[str | None] = mapped_column(String(128))
     bio: Mapped[str | None] = mapped_column(Text)
+    image_path: Mapped[str | None] = mapped_column(String(255))
+    detailed_position: Mapped[str | None] = mapped_column(String(64))
+    date_of_birth: Mapped[date | None] = mapped_column(Date)
+    birth_city: Mapped[str | None] = mapped_column(String(128))
+    nationality_name: Mapped[str | None] = mapped_column(String(64))
+    nationality_iso: Mapped[str | None] = mapped_column(String(8))
+    nationality_flag_url: Mapped[str | None] = mapped_column(String(255))

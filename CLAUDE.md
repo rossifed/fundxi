@@ -82,6 +82,63 @@ Backend wiring plan: `infrastructure/repositories/*.ts` swap their bodies from
 in-memory arrays to `fetch('/api/...')`. Same import paths everywhere
 upstream → zero changes in `api/`, `application/`, `domain/`, `ui/`.
 
+## Data Sourcing — NON-NEGOTIABLE
+
+**Every value visible in the UI must originate from the provider (today
+Sportmonks) and be persisted in our own database before display.** No
+exceptions, no placeholders, no synthetic prose, no hardcoded lookup tables
+masquerading as data.
+
+Concretely:
+
+1. **No invented content.** Do NOT generate fake skills, fake bios,
+   templated prose, or "filler" copy from real fields just to make a section
+   look populated. If the data isn't there, the section is hidden — full
+   stop. "Wikipedia-style synthesized text" is forbidden.
+
+   **Single allowed exception**: a synthetic placeholder may live in the UI
+   *only* when the user has been explicitly told "this is fabricated", has
+   explicitly opted in to keeping it, AND a real source has been agreed for
+   the future. Track every such placeholder as a debt in the project memory
+   file so future sessions know it must be replaced.
+
+2. **No frontend hardcoded mappings of provider data.** A team color, a
+   confederation, a position label that is *intended to represent provider
+   data* must come from the DB — not from a `team_branding.ts`,
+   `position_label.ts`, or any in-frontend dictionary. If the provider
+   doesn't give it, the data doesn't exist; we don't invent it.
+
+   The single legitimate exception is **purely presentational mapping** —
+   e.g., translating a provider enum code (`FW`) to a UI string ("Forward")
+   in a `Record` is acceptable as long as it's clearly localisation, not
+   data. When in doubt, ask the user whether to (a) localise in code or (b)
+   ingest the provider's `name`/`label` field.
+
+3. **No direct provider calls from the frontend.** All Sportmonks reads go
+   through a Python ingestion worker → DB → BFF endpoint → frontend. The
+   frontend never knows the provider exists.
+
+4. **Schema decisions are user decisions.** Before adding a column to an
+   existing table, a new table, or a new field on a domain object, **ask the
+   user where the data should live**. Propose the schema (table, columns,
+   indexes, FKs, JSONB blobs for raw payload), wait for confirmation, then
+   implement. Don't pollute existing aggregates with unrelated fields and
+   don't fragment a single concept across two tables.
+
+5. **`raw` archive is mandatory for any new ingestion.** Provider responses
+   land in `raw.sportmonks_event` (idempotent on response_hash) before any
+   projection. The DB always carries the source of truth so we can replay or
+   debug a projector without re-hitting the provider.
+
+6. **Honesty in audit.** When the user asks "is this real?", trace each
+   visible field to its source: column name → table → projector → provider
+   include → endpoint. If anything in the chain is synthesized, declare it
+   immediately and propose a fix (cache the section behind a real-data
+   condition, or add an ingestion path).
+
+Violation of these rules is a stop-the-line bug. Fix before continuing
+feature work.
+
 ## Engineering Discipline
 
 Beyond layout, every change must respect the following.

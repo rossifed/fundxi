@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
-import { comments_api } from "@/api/comments_api";
+import { useEffect, useMemo, useState, type ReactNode } from "react"; // ReactNode kept for SectionTitle/SectionCard signatures
+
+import { players_api } from "@/api/players_api";
 import { portfolio_api } from "@/api/portfolio_api";
 import { teams_api } from "@/api/teams_api";
 import { valuations_api } from "@/api/valuations_api";
-import type { MatchComment } from "@/domain/match/match_comment";
 import { POSITION_LABEL, type Player } from "@/domain/player/player";
 import type { PricePoint } from "@/infrastructure/repositories/valuations_repository";
+import type { PlayerTournamentStat } from "@/infrastructure/repositories/player_stats_repository";
+import type { PlayerMatchEntry } from "@/infrastructure/repositories/player_matches_repository";
+import type { PlayerNewsEntry } from "@/infrastructure/repositories/player_news_repository";
 import { Sheet } from "@/ui/components/Sheet";
 import { fmt_eur_m, fmt_eur_m_signed } from "@/ui/helpers/format";
 import { PlayerChip } from "@/ui/components/PlayerChip";
@@ -16,11 +19,16 @@ import { TradeDialog } from "@/ui/components/TradeDialog";
 // real biographical source (Wikipedia API / curated CMS) is wired in.
 function synthesize_bio(player: Player, team_name: string, confederation?: string): string {
   const display_name = player.full_name ?? player.name;
-  const position_label = POSITION_LABEL[player.position].toLowerCase();
+  const detailed = player.detailed_position;
+  const position_label = (detailed ?? POSITION_LABEL[player.position]).toLowerCase();
   const article = /^[aeiou]/i.test(position_label) ? "an" : "a";
   const age_clause = player.age ? `${player.age}-year-old ` : "";
   const conf_clause = confederation ? ` (${confederation})` : "";
   const intro = `${display_name} is ${article} ${age_clause}${position_label} representing ${team_name}${conf_clause}.`;
+  const origin_bits: string[] = [];
+  if (player.birth_city) origin_bits.push(player.birth_city);
+  if (player.nationality_name && player.nationality_name !== team_name) origin_bits.push(player.nationality_name);
+  const origin_part = origin_bits.length > 0 ? ` Born in ${origin_bits.join(", ")}.` : "";
   const club_part = player.club ? ` He currently plays his club football at ${player.club}.` : "";
   const physical_bits: string[] = [];
   if (player.height) physical_bits.push(`stands ${player.height}`);
@@ -35,7 +43,7 @@ function synthesize_bio(player: Player, team_name: string, confederation?: strin
         : player.position === "MF"
           ? " A midfielder relied on to dictate tempo and link the lines."
           : " An attacking option tasked with creating and finishing chances.";
-  return intro + club_part + physical + role_hint;
+  return intro + origin_part + club_part + physical + role_hint;
 }
 
 // Synthetic top-skills by position. Until a real skills source (FBref / curated
@@ -63,30 +71,16 @@ function pick_skills(player: Player, count = 5): string[] {
   return out;
 }
 
-function comment_icon(c: MatchComment): string {
-  if (c.is_goal) return "⚽";
-  const t = c.comment.toLowerCase();
-  if (/yellow card/.test(t)) return "🟨";
-  if (/red card/.test(t)) return "🟥";
-  if (/substitution|replaces/.test(t)) return "🔄";
-  if (/penalty/.test(t)) return "🎯";
-  if (/assist/.test(t)) return "🅰️";
-  if (/save|goalkeeper/.test(t)) return "🧤";
-  if (/corner/.test(t)) return "📐";
-  if (/free kick/.test(t)) return "🎯";
-  if (/foul/.test(t)) return "⚠️";
-  return "▫️";
-}
-
 interface PlayerSheetProps {
   player: Player;
   on_close: () => void;
   go_portfolio?: () => void;
+  go_match?: (fixture_id: number) => void;
   watchlist?: Set<number>;
   toggle_watch?: (id: number) => void;
 }
 
-export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_watch }: PlayerSheetProps) {
+export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlist, toggle_watch }: PlayerSheetProps) {
   const team = teams_api.get(player.team_id) ?? {
     id: "?",
     name: "?",
@@ -102,24 +96,48 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
   const [trade_dialog_kind, set_trade_dialog_kind] = useState<"buy" | "sell" | null>(null);
   const is_watched = watchlist?.has(player.id) ?? false;
 
-  // Real Sportmonks commentary feed for this player. Loaded lazily on open;
-  // cached in the repo so re-opening is instant.
-  const [comments, set_comments] = useState<MatchComment[] | null>(null);
+  // Per-match summary list for this player — replaces the stand-alone
+  // commentary feed (which lacked match context). Each entry carries the
+  // fixture metadata + the player's stat line; click-through reopens the
+  // dedicated MatchView for full context.
+  const [match_entries, set_match_entries] = useState<PlayerMatchEntry[] | null>(null);
   useEffect(() => {
     let cancelled = false;
-    set_comments(null);
-    comments_api
-      .for_player(player.id, 100)
+    set_match_entries(null);
+    players_api
+      .get_matches(player.id)
       .then(items => {
-        if (!cancelled) set_comments(items);
+        if (!cancelled) set_match_entries(items);
       })
       .catch(() => {
-        if (!cancelled) set_comments([]);
+        if (!cancelled) set_match_entries([]);
       });
     return () => {
       cancelled = true;
     };
   }, [player.id]);
+
+  // Team-level news (Sportmonks news are tied to fixtures, not players).
+  // Lazy on first render of the news tab; we still fire the fetch up-front
+  // so switching tabs feels instant.
+  const [news_entries, set_news_entries] = useState<PlayerNewsEntry[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    set_news_entries(null);
+    players_api
+      .get_news(player.id)
+      .then(items => {
+        if (!cancelled) set_news_entries(items);
+      })
+      .catch(() => {
+        if (!cancelled) set_news_entries([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [player.id]);
+
+  const [active_tab, set_active_tab] = useState<"matches" | "news">("matches");
 
   // Real engine price-tick history. Single chart from the tournament baseline
   // through the latest tick. No period filtering in v0 — it would be honest
@@ -141,6 +159,23 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
     };
   }, [player.id]);
 
+  const [tournament_stats, set_tournament_stats] = useState<PlayerTournamentStat | null | undefined>(undefined);
+  useEffect(() => {
+    let cancelled = false;
+    set_tournament_stats(undefined);
+    players_api
+      .get_tournament_stats(player.id)
+      .then(stats => {
+        if (!cancelled) set_tournament_stats(stats);
+      })
+      .catch(() => {
+        if (!cancelled) set_tournament_stats(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [player.id]);
+
   const chart_points = useMemo(() => (price_history ?? []).map(p => p.price), [price_history]);
   const [hover_idx, set_hover_idx] = useState<number | null>(null);
   const period_return =
@@ -152,33 +187,74 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
 
   return (
     <Sheet open={true} on_close={on_close} max_width={1080}>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.4fr) minmax(380px, 1fr)", gridTemplateRows: "1fr", height: "100%", maxHeight: "92vh" }}>
-        {/* LEFT: hero + chart (sticky) + activity feed (scrolls) */}
+      <div style={{ display: "flex", flexDirection: "column", height: "100%", maxHeight: "92vh" }}>
+        {/* IDENTITY BAND — full-width header spanning both columns.
+            Just the player identity row (photo, name, flag/team, ★, jersey).
+            Personal info and About live below, each in their own column. */}
         <div
           style={{
-            borderRight: "1px solid rgba(255,255,255,.06)",
-            display: "flex",
-            flexDirection: "column",
-            overflow: "hidden",
-            minHeight: 0,
-            height: "100%",
-          }}
-        >
-        <div
-          style={{
-            padding: "20px 24px 12px",
-            display: "flex",
-            flexDirection: "column",
-            gap: 16,
+            padding: "16px 24px 12px",
             flexShrink: 0,
+            borderBottom: "1px solid rgba(255,255,255,.06)",
           }}
         >
-          {/* Hero */}
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <PlayerChip jersey_number={player.jersey_number} team_color={team.color} size={56} />
+            {player.image_path ? (
+              <img
+                src={player.image_path}
+                alt={player.full_name ?? player.name}
+                style={{
+                  width: 72,
+                  height: 72,
+                  borderRadius: 10,
+                  objectFit: "contain",
+                  background: "rgba(255,255,255,.05)",
+                  border: "1px solid rgba(255,255,255,.08)",
+                  flexShrink: 0,
+                }}
+              />
+            ) : (
+              <PlayerChip jersey_number={player.jersey_number} team_color={team.color} size={72} />
+            )}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1, letterSpacing: -0.5 }}>
-                {player.full_name ?? player.name}
+              <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+                <span
+                  className="mono"
+                  style={{
+                    fontSize: 22,
+                    fontWeight: 800,
+                    lineHeight: 1.1,
+                    letterSpacing: -0.5,
+                    color: "rgba(255,255,255,.55)",
+                  }}
+                >
+                  {player.jersey_number}
+                </span>
+                <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1, letterSpacing: -0.5 }}>
+                  {player.full_name ?? player.name}
+                </div>
+                <button
+                  onClick={() => toggle_watch?.(player.id)}
+                  aria-label={is_watched ? "Remove from watchlist" : "Add to watchlist"}
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: 6,
+                    background: is_watched ? "rgba(255,255,255,.08)" : "transparent",
+                    border: "1px solid rgba(255,255,255,.08)",
+                    color: is_watched ? "#fff" : "rgba(255,255,255,.5)",
+                    cursor: "pointer",
+                    fontSize: 14,
+                    fontFamily: "inherit",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                    alignSelf: "center",
+                  }}
+                >
+                  {is_watched ? "★" : "☆"}
+                </button>
               </div>
               <div
                 style={{
@@ -203,36 +279,106 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Chart header — period return only */}
-          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center" }}>
-            <span className="mono" style={{ fontSize: 18, fontWeight: 800, color: period_return >= 0 ? "#216c6e" : "#E41541" }}>
-              {period_return >= 0 ? "+" : ""}{period_return.toFixed(1)}%
-            </span>
-          </div>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.4fr) minmax(380px, 1fr)", gridTemplateRows: "1fr", flex: 1, minHeight: 0 }}>
+        {/* LEFT: chart-side — chart sticky + Fixtures/News scroll */}
+        <div
+          style={{
+            borderRight: "1px solid rgba(255,255,255,.06)",
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+            minHeight: 0,
+            height: "100%",
+          }}
+        >
+        <div
+          style={{
+            padding: "20px 24px 12px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 16,
+            flexShrink: 0,
+          }}
+        >
+          {/* Valuation — ribbon of KPIs above the chart (stock-app pattern). */}
+          {(() => {
+            const own_holding = portfolio_api.get_holding(player.id);
+            const own_shares = own_holding?.shares ?? 0;
+            const pnl = own_shares !== 0
+              ? own_shares * (current_price - (own_holding?.average_buy_price ?? 0))
+              : null;
+            const ph = price_history ?? [];
+            const since_start_pct =
+              ph.length > 1 ? ((ph[ph.length - 1].price - ph[0].price) / ph[0].price) * 100 : null;
+            let last_match_pct: number | null = null;
+            if (ph.length > 1) {
+              const last_fixture_id = [...ph].reverse().find(p => p.fixture_id !== null)?.fixture_id;
+              if (last_fixture_id != null) {
+                const ticks = ph.filter(p => p.fixture_id === last_fixture_id);
+                if (ticks.length > 1) {
+                  last_match_pct = ((ticks[ticks.length - 1].price - ticks[0].price) / ticks[0].price) * 100;
+                }
+              }
+            }
+            const apps = tournament_stats?.appearances ?? null;
+            const avg_match_pct = since_start_pct !== null && apps && apps > 0 ? since_start_pct / apps : null;
+            const fmt_pct = (v: number | null): string =>
+              v === null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
+            const pct_color = (v: number | null): string | undefined =>
+              v === null ? undefined : v >= 0 ? "#216c6e" : "#E41541";
+            return (
+              <SectionCard title="Valuation">
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 0 }}>
+                  <SmallKpi label="Value" value={`€${current_price}M`} />
+                  <SmallKpi label="Rating" value={String(performance_rating)} color="rgba(255,255,255,.85)" />
+                  <SmallKpi
+                    label="P&L"
+                    value={pnl !== null ? fmt_eur_m_signed(pnl) : "—"}
+                    color={pnl !== null ? (pnl >= 0 ? "#216c6e" : "#E41541") : undefined}
+                  />
+                  <SmallKpi label="Since Start" value={fmt_pct(since_start_pct)} color={pct_color(since_start_pct)} />
+                  <SmallKpi label="Last Match" value={fmt_pct(last_match_pct)} color={pct_color(last_match_pct)} />
+                  <SmallKpi label="Avg / Match" value={fmt_pct(avg_match_pct)} color={pct_color(avg_match_pct)} />
+                </div>
+              </SectionCard>
+            );
+          })()}
 
           {/* Chart */}
           <div style={{ position: "relative" }}>
             {(() => {
               const w = 600;
-              const h = 200;
+              const h = 260;
               const pd = 8;
-              if (chart_points.length < 2) return null;
-              const min = Math.min(...chart_points);
-              const max = Math.max(...chart_points);
+              const has_history = chart_points.length >= 2;
+              // When the player has no real ticks yet (rookies, didn't play),
+              // render a flat baseline at mid-height so the chart frame is
+              // always present and the layout below stays anchored.
+              const min = has_history ? Math.min(...chart_points) : 0;
+              const max = has_history ? Math.max(...chart_points) : 1;
               const range = max - min || 1;
-              const points = chart_points.map((v, i) => ({
-                x: pd + (i / (chart_points.length - 1)) * (w - pd * 2),
-                y: pd + ((max - v) / range) * (h - pd * 2),
-              }));
+              const points = has_history
+                ? chart_points.map((v, i) => ({
+                    x: pd + (i / (chart_points.length - 1)) * (w - pd * 2),
+                    y: pd + ((max - v) / range) * (h - pd * 2),
+                  }))
+                : [
+                    { x: pd, y: h / 2 },
+                    { x: w - pd, y: h / 2 },
+                  ];
               const polyline = points.map(p => `${p.x},${p.y}`).join(" ");
               const last = points[points.length - 1];
               const active_idx =
-                hover_idx !== null && hover_idx >= 0 && hover_idx < points.length ? hover_idx : null;
+                has_history && hover_idx !== null && hover_idx >= 0 && hover_idx < points.length
+                  ? hover_idx
+                  : null;
               const active_pt = active_idx !== null ? points[active_idx] : null;
               const active_record =
                 active_idx !== null && price_history ? price_history[active_idx] : null;
               const handle_move = (e: React.MouseEvent<SVGSVGElement>) => {
+                if (!has_history) return;
                 const rect = e.currentTarget.getBoundingClientRect();
                 const ratio = (e.clientX - rect.left) / rect.width;
                 const svg_x = ratio * w;
@@ -293,18 +439,21 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
-                  {points.map((pt, i) => (
-                    <circle
-                      key={i}
-                      cx={pt.x}
-                      cy={pt.y}
-                      r="3"
-                      fill={period_color}
-                      stroke="#040810"
-                      strokeWidth="2"
-                    />
-                  ))}
-                  <circle cx={last.x} cy={last.y} r="9" fill={period_color} opacity=".15" />
+                  {has_history && (
+                    <circle cx={last.x} cy={last.y} r="9" fill={period_color} opacity=".15" />
+                  )}
+                  {!has_history && (
+                    <text
+                      x={w / 2}
+                      y={h / 2 - 12}
+                      textAnchor="middle"
+                      fill="rgba(255,255,255,.35)"
+                      fontSize="13"
+                      fontWeight="600"
+                    >
+                      No matches played yet
+                    </text>
+                  )}
                   {active_pt && (
                     <>
                       <line
@@ -339,6 +488,13 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
               const dt = new Date(rec.ts);
               const date_label = dt.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
               const time_label = dt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+              // % change since tournament open (first tick) → hovered point.
+              // Stable reference so successive hovers can be read against each
+              // other: a 14% hover then a 10% hover means a 4pp local drop.
+              const first_price = price_history[0].price;
+              const delta_pct = first_price !== 0 ? ((rec.price - first_price) / first_price) * 100 : 0;
+              const delta_label = `${delta_pct >= 0 ? "+" : ""}${delta_pct.toFixed(2)}%`;
+              const delta_color = delta_pct >= 0 ? "#216c6e" : "#E41541";
               return (
                 <div
                   style={{
@@ -356,8 +512,13 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
                     backdropFilter: "blur(4px)",
                   }}
                 >
-                  <div className="mono" style={{ fontSize: 14, fontWeight: 800, color: "#fff" }}>
-                    €{rec.price.toFixed(2)}M
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                    <div className="mono" style={{ fontSize: 14, fontWeight: 800, color: "#fff" }}>
+                      €{rec.price.toFixed(2)}M
+                    </div>
+                    <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: delta_color }}>
+                      {delta_label}
+                    </div>
                   </div>
                   <div style={{ fontSize: 10, color: "rgba(255,255,255,.5)", marginTop: 2 }}>
                     {date_label} · {time_label}
@@ -365,15 +526,13 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
                 </div>
               );
             })()}
-            {price_history !== null && price_history.length === 0 && (
-              <div style={{ fontSize: 12, color: "rgba(255,255,255,.4)", padding: "20px 0", textAlign: "center" }}>
-                No price ticks yet for this player.
-              </div>
-            )}
           </div>
+
         </div>
 
-        {/* Activity feed — title sticky, only the entries scroll */}
+        {/* Match log — sticky title + scrollable list of matches the player
+            appeared in. Each row gives the match context (opponent, score,
+            W/D/L) and the player's stat line, derived entirely from our DB. */}
         <div
           style={{
             flex: 1,
@@ -392,81 +551,256 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
               flexShrink: 0,
             }}
           >
-            <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,.55)", letterSpacing: 0.5, textTransform: "uppercase" }}>
-              Activity
-            </span>
+            <div style={{ display: "flex", gap: 4 }}>
+              {(["matches", "news"] as const).map(tab => {
+                const active = active_tab === tab;
+                const label = tab === "matches" ? "Fixtures" : "News";
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => set_active_tab(tab)}
+                    style={{
+                      background: active ? "rgba(255,255,255,.06)" : "transparent",
+                      border: "1px solid rgba(255,255,255,.06)",
+                      color: active ? "#fff" : "rgba(255,255,255,.45)",
+                      padding: "4px 10px",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      letterSpacing: 0.5,
+                      textTransform: "uppercase",
+                      borderRadius: 5,
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
             <span style={{ fontSize: 11, color: "rgba(255,255,255,.25)" }}>
-              {comments === null ? "loading…" : `${comments.length} entries`}
+              {active_tab === "matches"
+                ? match_entries === null
+                  ? "loading…"
+                  : `${match_entries.length} appearances`
+                : news_entries === null
+                  ? "loading…"
+                  : `${news_entries.length} articles`}
             </span>
           </div>
           <div
             className="scroll-visible"
-            style={{ flex: 1, overflowY: "auto", minHeight: 0, display: "flex", flexDirection: "column" }}
+            style={{ flex: 1, overflowY: "auto", minHeight: 0, display: "flex", flexDirection: "column", gap: 6 }}
           >
-              {comments === null && (
+            {active_tab === "matches" ? <>
+            {match_entries === null && (
+              <div style={{ padding: "12px 8px", fontSize: 12, color: "rgba(255,255,255,.4)" }}>
+                loading…
+              </div>
+            )}
+            {match_entries !== null && match_entries.length === 0 && (
+              <div style={{ padding: "12px 8px", fontSize: 12, color: "rgba(255,255,255,.4)" }}>
+                No matches played yet for this player.
+              </div>
+            )}
+            {match_entries?.map(m => {
+              const is_home = m.player_team_id === m.home_team_id;
+              const home = teams_api.get(m.home_team_id);
+              const away = teams_api.get(m.away_team_id);
+              const opp = is_home ? away : home;
+              const my_score = is_home ? m.home_score : m.away_score;
+              const opp_score = is_home ? m.away_score : m.home_score;
+              const is_finished = m.status === "finished";
+              const is_live = m.status === "live";
+              const is_upcoming = m.status === "upcoming";
+              const result =
+                !is_finished || my_score == null || opp_score == null
+                  ? null
+                  : my_score > opp_score
+                    ? "W"
+                    : my_score < opp_score
+                      ? "L"
+                      : "D";
+              const result_color =
+                result === "W" ? "#216c6e" : result === "L" ? "#E41541" : "rgba(255,255,255,.45)";
+              const dt = m.kickoff_at ? new Date(m.kickoff_at) : null;
+              const date_label = dt
+                ? dt.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "2-digit" })
+                : "—";
+              const time_label = dt
+                ? dt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+                : "";
+              const score_label = my_score != null && opp_score != null ? `${my_score}-${opp_score}` : "—";
+              const pct_label =
+                m.in_match_pct != null
+                  ? `${m.in_match_pct >= 0 ? "+" : ""}${m.in_match_pct.toFixed(2)}%`
+                  : "—";
+              const pct_color =
+                m.in_match_pct == null
+                  ? "rgba(255,255,255,.3)"
+                  : m.in_match_pct >= 0
+                    ? "#216c6e"
+                    : "#E41541";
+              return (
+                <div
+                  key={m.fixture_id}
+                  onClick={() => go_match?.(m.fixture_id)}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "32px 22px minmax(0, 1fr) auto auto",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "8px 10px",
+                    borderRadius: 6,
+                    background: is_live
+                      ? "rgba(244,18,88,.08)"
+                      : is_upcoming
+                        ? "rgba(255,255,255,.015)"
+                        : "rgba(255,255,255,.025)",
+                    border: `1px solid ${is_live ? "rgba(244,18,88,.25)" : "rgba(255,255,255,.05)"}`,
+                    cursor: go_match ? "pointer" : "default",
+                  }}
+                >
+                  {is_live ? (
+                    <span
+                      style={{
+                        fontSize: 9,
+                        fontWeight: 800,
+                        color: "#fff",
+                        background: "#F41258",
+                        padding: "2px 5px",
+                        borderRadius: 3,
+                        letterSpacing: 0.6,
+                      }}
+                    >
+                      LIVE
+                    </span>
+                  ) : is_upcoming ? (
+                    <span style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,.4)", letterSpacing: 0.5 }}>
+                      SOON
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 12, fontWeight: 800, color: result_color, letterSpacing: 0.5 }}>
+                      {result ?? "—"}
+                    </span>
+                  )}
+                  {opp?.flag_url ? (
+                    <img
+                      src={opp.flag_url}
+                      alt={opp.name}
+                      style={{ width: 22, height: 22, objectFit: "contain", flexShrink: 0 }}
+                    />
+                  ) : (
+                    <span style={{ fontSize: 16 }}>{opp?.flag ?? ""}</span>
+                  )}
+                  <div style={{ minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: "#fff",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {opp?.name ?? (is_home ? m.away_team_id : m.home_team_id)}
+                    </div>
+                    <div style={{ fontSize: 10, color: "rgba(255,255,255,.4)" }}>
+                      {is_upcoming || is_live
+                        ? `${date_label}${time_label ? ` · ${time_label}` : ""}`
+                        : `${date_label}${m.role ? ` · ${m.role === "starter" ? "starter" : "bench"}` : ""}`}
+                    </div>
+                  </div>
+                  <span className="mono" style={{ fontSize: 12, fontWeight: 800, color: "#fff" }}>
+                    {is_finished || is_live ? score_label : "—"}
+                  </span>
+                  <span
+                    className="mono"
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 800,
+                      color: is_finished ? pct_color : "rgba(255,255,255,.3)",
+                      minWidth: 64,
+                      textAlign: "right",
+                    }}
+                  >
+                    {is_finished ? pct_label : "—"}
+                  </span>
+                </div>
+              );
+            })}
+            </> : <>
+              {news_entries === null && (
                 <div style={{ padding: "12px 8px", fontSize: 12, color: "rgba(255,255,255,.4)" }}>
-                  loading commentary feed…
+                  loading…
                 </div>
               )}
-              {comments !== null && comments.length === 0 && (
+              {news_entries !== null && news_entries.length === 0 && (
                 <div style={{ padding: "12px 8px", fontSize: 12, color: "rgba(255,255,255,.4)" }}>
-                  No commentary entries for this player in the active season.
+                  No news yet for this player's team.
                 </div>
               )}
-              {comments?.map(c => {
-                const minute_label = c.extra_minute ? `${c.minute}+${c.extra_minute}'` : `${c.minute}'`;
+              {news_entries?.map(n => {
+                const dt = n.published_at ? new Date(n.published_at) : null;
+                const date_label = dt
+                  ? dt.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "2-digit" })
+                  : "—";
+                const type_label = n.type === "prematch" ? "PRE" : n.type === "postmatch" ? "POST" : n.type.toUpperCase();
                 return (
                   <div
-                    key={c.id}
+                    key={n.id}
                     style={{
-                      display: "flex",
-                      alignItems: "flex-start",
+                      display: "grid",
+                      gridTemplateColumns: "44px minmax(0, 1fr) auto",
+                      alignItems: "center",
                       gap: 10,
-                      padding: "10px 8px",
-                      borderRadius: 8,
-                      borderBottom: "1px solid rgba(255,255,255,.03)",
-                      background: c.is_goal ? "rgba(72,255,67,.06)" : "transparent",
+                      padding: "8px 10px",
+                      borderRadius: 6,
+                      background: "rgba(255,255,255,.025)",
+                      border: "1px solid rgba(255,255,255,.05)",
                     }}
                   >
                     <span
-                      className="mono"
-                      style={{ fontSize: 11, color: "rgba(255,255,255,.35)", fontWeight: 700, minWidth: 36 }}
+                      style={{
+                        fontSize: 9,
+                        fontWeight: 800,
+                        color: "rgba(255,255,255,.55)",
+                        background: "rgba(255,255,255,.04)",
+                        border: "1px solid rgba(255,255,255,.06)",
+                        padding: "2px 5px",
+                        borderRadius: 4,
+                        textAlign: "center",
+                        letterSpacing: 0.6,
+                      }}
                     >
-                      {minute_label}
+                      {type_label}
                     </span>
-                    <span style={{ fontSize: 16, minWidth: 22, marginTop: 1 }}>{comment_icon(c)}</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 500, lineHeight: 1.45, color: "rgba(255,255,255,.85)" }}>
-                        {c.comment}
-                      </div>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: "#fff",
+                        lineHeight: 1.35,
+                      }}
+                    >
+                      {n.title}
                     </div>
-                    {c.is_goal && (
-                      <span
-                        style={{
-                          fontSize: 9,
-                          fontWeight: 800,
-                          color: "#216c6e",
-                          background: "rgba(72,255,67,.12)",
-                          padding: "3px 8px",
-                          borderRadius: 4,
-                          letterSpacing: 0.6,
-                          flexShrink: 0,
-                        }}
-                      >
-                        GOAL
-                      </span>
-                    )}
+                    <span style={{ fontSize: 10, color: "rgba(255,255,255,.35)", whiteSpace: "nowrap" }}>
+                      {date_label}
+                    </span>
                   </div>
                 );
               })}
-            </div>
+            </>}
           </div>
         </div>
+        </div>
 
-        {/* RIGHT: KPIs + bio + trade flow */}
+        {/* RIGHT: info-side — Personal / Skills / Stats / Valuation / Position / Buy-Sell */}
         <div
           style={{
-            padding: "20px 24px",
+            padding: "16px 20px",
             display: "flex",
             flexDirection: "column",
             gap: 16,
@@ -474,88 +808,101 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
             maxHeight: "92vh",
           }}
         >
-          <button
-            onClick={() => toggle_watch?.(player.id)}
-            style={{
-              alignSelf: "flex-end",
-              width: 36,
-              height: 36,
-              borderRadius: 8,
-              background: is_watched ? "rgba(255,255,255,.08)" : "rgba(255,255,255,.03)",
-              border: "1px solid rgba(255,255,255,.06)",
-              color: is_watched ? "#fff" : "rgba(255,255,255,.35)",
-              cursor: "pointer",
-              fontSize: 16,
-              fontFamily: "inherit",
-            }}
-          >
-            {is_watched ? "★" : "☆"}
-          </button>
-
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,.55)", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 6 }}>
-              About
-            </div>
-            <p style={{ fontSize: 13, color: "rgba(255,255,255,.7)", lineHeight: 1.6 }}>
-              {player.bio ?? synthesize_bio(player, team.name, team.confederation)}
-            </p>
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-            <SmallKpi label="Value" value={`€${current_price}M`} />
-            <SmallKpi
-              label="24h"
-              value={`${change_24h >= 0 ? "+" : ""}${change_24h}%`}
-              color={change_24h >= 0 ? "#216c6e" : "#E41541"}
-            />
-            <SmallKpi label="Rating" value={String(performance_rating)} color="rgba(255,255,255,.7)" />
-            <SmallKpi label="Position" value={POSITION_LABEL[player.position]} mono={false} />
-            <SmallKpi label="Age" value={String(player.age ?? "—")} />
-            <SmallKpi label="Foot" value={player.foot ?? "—"} mono={false} />
-          </div>
-
-          <div style={{ display: "flex", gap: 6 }}>
-            {[
-              { label: "Height", value: player.height ?? "—" },
-              { label: "Weight", value: player.weight ?? "—" },
-            ].map(s => (
+          {false && (
+            <SectionCard title="About">
               <div
-                key={s.label}
                 style={{
-                  flex: 1,
-                  background: "rgba(255,255,255,.02)",
-                  border: "1px solid rgba(255,255,255,.04)",
-                  borderRadius: 8,
-                  padding: "8px",
-                  textAlign: "center",
+                  background: "rgba(255,255,255,.025)",
+                  border: "1px solid rgba(255,255,255,.05)",
+                  padding: "8px 10px",
+                  fontSize: 12,
+                  color: "#fff",
+                  lineHeight: 1.45,
                 }}
               >
-                <div style={{ fontSize: 9, color: "rgba(255,255,255,.35)", textTransform: "uppercase", fontWeight: 700, letterSpacing: 0.5 }}>
-                  {s.label}
-                </div>
-                <div style={{ fontSize: 13, fontWeight: 700, marginTop: 2 }}>{s.value}</div>
+                {player.bio ?? synthesize_bio(player, team.name, team.confederation)}
               </div>
-            ))}
-          </div>
+            </SectionCard>
+          )}
 
-          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-            {(player.tags && player.tags.length > 0 ? player.tags : pick_skills(player)).map(t => (
-              <span
-                key={t}
-                style={{
-                  padding: "4px 10px",
-                  borderRadius: 6,
-                  fontSize: 11,
-                  fontWeight: 600,
-                  background: "rgba(255,255,255,.04)",
-                  color: "rgba(255,255,255,.7)",
-                  border: "1px solid rgba(255,255,255,.06)",
-                }}
-              >
-                {t}
-              </span>
-            ))}
-          </div>
+          <SectionCard title="Personal">
+            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr", gap: 0 }}>
+              <SmallKpi
+                label="Position"
+                value={player.detailed_position ?? POSITION_LABEL[player.position]}
+                mono={false}
+              />
+              <SmallKpi label="Age" value={String(player.age ?? "—")} />
+              <SmallKpi label="Foot" value={player.foot ?? "—"} mono={false} />
+              <SmallKpi label="Height" value={player.height ?? "—"} />
+              <SmallKpi label="Weight" value={player.weight ?? "—"} />
+            </div>
+          </SectionCard>
+
+          <SectionCard title="Skills">
+            <div
+              style={{
+                display: "flex",
+                gap: 0,
+                flexWrap: "wrap",
+                background: "rgba(255,255,255,.025)",
+                border: "1px solid rgba(255,255,255,.05)",
+                padding: "6px",
+              }}
+            >
+              {(player.tags && player.tags.length > 0 ? player.tags : pick_skills(player)).map(t => (
+                <span
+                  key={t}
+                  style={{
+                    margin: 2,
+                    padding: "5px 10px",
+                    borderRadius: 5,
+                    fontSize: 12,
+                    fontWeight: 800,
+                    background: "rgba(255,255,255,.06)",
+                    color: "#fff",
+                    border: "1px solid rgba(255,255,255,.1)",
+                  }}
+                >
+                  {t}
+                </span>
+              ))}
+            </div>
+          </SectionCard>
+
+          {tournament_stats !== undefined && tournament_stats !== null && (
+            <SectionCard title="Statistics">
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 0 }}>
+                <SmallKpi label="Appearances" value={String(tournament_stats.appearances ?? 0)} />
+                <SmallKpi label="Min" value={String(tournament_stats.minutes_played ?? 0)} />
+                <SmallKpi
+                  label="Goals"
+                  value={String(tournament_stats.goals ?? 0)}
+                  color={(tournament_stats.goals ?? 0) > 0 ? "#216c6e" : undefined}
+                />
+                <SmallKpi
+                  label="Assists"
+                  value={String(tournament_stats.assists ?? 0)}
+                  color={(tournament_stats.assists ?? 0) > 0 ? "#216c6e" : undefined}
+                />
+                <SmallKpi
+                  label="Shots"
+                  value={`${tournament_stats.shots_on_target ?? 0}/${tournament_stats.shots_total ?? 0}`}
+                />
+                <SmallKpi
+                  label="Yellow Cards"
+                  value={String(tournament_stats.yellow_cards ?? 0)}
+                  color={(tournament_stats.yellow_cards ?? 0) > 0 ? "#E0A800" : undefined}
+                />
+                <SmallKpi
+                  label="Red Cards"
+                  value={String(tournament_stats.red_cards ?? 0)}
+                  color={(tournament_stats.red_cards ?? 0) > 0 ? "#E41541" : undefined}
+                />
+                <SmallKpi label="Key Passes" value={String(tournament_stats.key_passes ?? 0)} />
+              </div>
+            </SectionCard>
+          )}
 
           <YourPositionCard player={player} current_price={current_price} />
 
@@ -599,6 +946,7 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
           </div>
         </div>
       </div>
+      </div>
 
       <TradeDialog
         open={trade_dialog_kind !== null}
@@ -619,99 +967,102 @@ function YourPositionCard({ player, current_price }: { player: Player; current_p
   const holding = portfolio_api.get_holding(player.id);
   const totals = portfolio_api.get_totals();
 
-  if (!holding || holding.shares === 0) {
-    return (
-      <div
+  // Body height is fixed (filled-state grid height) so the empty-state
+  // message and the populated grid take the same vertical space — keeps
+  // Buy/Sell anchored regardless of holding state.
+  const BODY_MIN_HEIGHT = 132;
+  const has_position = !!holding && holding.shares !== 0;
+
+  const header = (status_label: string, color: string, bg: string) => (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "6px 10px",
+        background: "rgba(255,255,255,.025)",
+        borderBottom: "1px solid rgba(255,255,255,.05)",
+      }}
+    >
+      <span
         style={{
-          background: "rgba(255,255,255,.02)",
-          border: "1px solid rgba(255,255,255,.05)",
-          borderRadius: 10,
-          overflow: "hidden",
+          fontSize: 11,
+          fontWeight: 700,
+          color: "rgba(255,255,255,.55)",
+          letterSpacing: 0.5,
+          textTransform: "uppercase",
         }}
       >
+        Your position
+      </span>
+      <span
+        style={{
+          fontSize: 10,
+          fontWeight: 800,
+          color,
+          background: bg,
+          padding: "3px 8px",
+          borderRadius: 4,
+          letterSpacing: 0.5,
+        }}
+      >
+        {status_label}
+      </span>
+    </div>
+  );
+
+  const card_style: React.CSSProperties = {
+    background: "rgba(255,255,255,.02)",
+    border: "1px solid rgba(255,255,255,.05)",
+    borderRadius: 10,
+    overflow: "hidden",
+  };
+
+  if (!has_position) {
+    return (
+      <div style={card_style}>
+        {header("—", "rgba(255,255,255,.4)", "rgba(255,255,255,.04)")}
         <div
           style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "10px 14px",
-            borderBottom: "1px solid rgba(255,255,255,.04)",
+            minHeight: BODY_MIN_HEIGHT,
+            padding: "12px 14px",
+            fontSize: 12,
+            color: "rgba(255,255,255,.4)",
+            lineHeight: 1.5,
           }}
         >
-          <span
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              color: "rgba(255,255,255,.55)",
-              letterSpacing: 0.5,
-              textTransform: "uppercase",
-            }}
-          >
-            Your position
-          </span>
-          <span style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,.4)" }}>— Not held</span>
-        </div>
-        <div style={{ padding: "12px 14px", fontSize: 12, color: "rgba(255,255,255,.4)", lineHeight: 1.5 }}>
-          You don't hold this player. Use the trade panel below to open a position.
+          You don&apos;t hold this player. Use the trade panel below to open a position.
         </div>
       </div>
     );
   }
 
-  const market_value = holding.shares * current_price;
-  const cost_basis = holding.shares * holding.average_buy_price;
+  const market_value = holding!.shares * current_price;
+  const cost_basis = holding!.shares * holding!.average_buy_price;
   const pnl = market_value - cost_basis;
   const return_pct = cost_basis === 0 ? 0 : (pnl / cost_basis) * 100;
   const portfolio_pct = totals.total_value === 0 ? 0 : (market_value / totals.total_value) * 100;
-  const is_long = holding.shares > 0;
-  const accent = is_long ? "#216c6e" : "#E41541";
+  const is_long = holding!.shares > 0;
 
   return (
-    <div
-      style={{
-        background: "rgba(255,255,255,.02)",
-        border: "1px solid rgba(255,255,255,.05)",
-        borderRadius: 10,
-        overflow: "hidden",
-      }}
-    >
+    <div style={card_style}>
+      {header(
+        is_long ? "LONG" : "SHORT",
+        is_long ? "#216c6e" : "#E41541",
+        is_long ? "rgba(55,255,99,.1)" : "rgba(255,40,93,.1)",
+      )}
       <div
         style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "10px 14px",
-          borderBottom: "1px solid rgba(255,255,255,.04)",
+          minHeight: BODY_MIN_HEIGHT,
+          padding: "12px 14px",
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 10,
+          alignContent: "center",
         }}
       >
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            color: "rgba(255,255,255,.55)",
-            letterSpacing: 0.5,
-            textTransform: "uppercase",
-          }}
-        >
-          Your position
-        </span>
-        <span
-          style={{
-            fontSize: 10,
-            fontWeight: 800,
-            color: accent,
-            background: is_long ? "rgba(55,255,99,.1)" : "rgba(255,40,93,.1)",
-            padding: "3px 8px",
-            borderRadius: 4,
-            letterSpacing: 0.5,
-          }}
-        >
-          {is_long ? "📈 LONG" : "📉 SHORT"}
-        </span>
-      </div>
-      <div style={{ padding: "12px 14px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        <PositionStat label="Shares" value={String(Math.abs(holding.shares))} />
-        <PositionStat label="Avg buy" value={`€${holding.average_buy_price}M`} />
+        <PositionStat label="Shares" value={String(Math.abs(holding!.shares))} />
+        <PositionStat label="Avg buy" value={`€${holding!.average_buy_price}M`} />
         <PositionStat label="Market value" value={fmt_eur_m(market_value)} />
         <PositionStat
           label="P&L"
@@ -750,6 +1101,52 @@ function PositionStat({ label, value, color }: { label: string; value: string; c
   );
 }
 
+function SectionCard({ title, children }: { title: string; children: ReactNode }) {
+  // Title cell + content row touch (no vertical gap), like Position + the
+  // numeric strip in the left Personal section. Title loses its bottom border
+  // and bottom radius so it visually blends into the cells below.
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 700,
+          color: "rgba(255,255,255,.55)",
+          letterSpacing: 0.5,
+          textTransform: "uppercase",
+          background: "rgba(255,255,255,.025)",
+          border: "1px solid rgba(255,255,255,.05)",
+          borderBottom: "none",
+          borderRadius: "6px 6px 0 0",
+          padding: "6px 10px",
+        }}
+      >
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+
+function SectionTitle({ children }: { children: ReactNode }) {
+  return (
+    <div
+      style={{
+        fontSize: 10,
+        fontWeight: 700,
+        color: "rgba(255,255,255,.5)",
+        letterSpacing: 0.5,
+        textTransform: "uppercase",
+        marginBottom: 4,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+
 function SmallKpi({
   label,
   value,
@@ -766,16 +1163,16 @@ function SmallKpi({
       style={{
         background: "rgba(255,255,255,.025)",
         border: "1px solid rgba(255,255,255,.05)",
-        borderRadius: 8,
-        padding: "10px 12px",
+        borderRadius: 6,
+        padding: "6px 9px",
       }}
     >
-      <div style={{ fontSize: 10, color: "rgba(255,255,255,.35)", textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 600 }}>
+      <div style={{ fontSize: 9, color: "rgba(255,255,255,.35)", textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 600 }}>
         {label}
       </div>
       <div
         className={mono ? "mono" : ""}
-        style={{ fontSize: 15, fontWeight: 800, color: color ?? "#fff", marginTop: 2 }}
+        style={{ fontSize: 13, fontWeight: 800, color: color ?? "#fff", marginTop: 1 }}
       >
         {value}
       </div>

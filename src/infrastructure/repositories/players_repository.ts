@@ -14,6 +14,13 @@ interface PlayerDTO {
   weight: number | null;       // kg (int)
   club: string | null;
   bio: string | null;
+  image_path: string | null;
+  detailed_position: string | null;
+  date_of_birth: string | null;
+  birth_city: string | null;
+  nationality_name: string | null;
+  nationality_iso: string | null;
+  nationality_flag_url: string | null;
 }
 
 let PLAYERS: Player[] = [];
@@ -33,6 +40,13 @@ function dto_to_domain(dto: PlayerDTO): Player {
     weight: dto.weight != null ? `${dto.weight}kg` : undefined,
     club: dto.club ?? undefined,
     bio: dto.bio ?? undefined,
+    image_path: dto.image_path ?? undefined,
+    detailed_position: dto.detailed_position ?? undefined,
+    date_of_birth: dto.date_of_birth ?? undefined,
+    birth_city: dto.birth_city ?? undefined,
+    nationality_name: dto.nationality_name ?? undefined,
+    nationality_iso: dto.nationality_iso ?? undefined,
+    nationality_flag_url: dto.nationality_flag_url ?? undefined,
   };
 }
 

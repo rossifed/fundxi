@@ -22,4 +22,11 @@ export interface Player {
   weight?: string;
   club?: string;
   bio?: string;
+  image_path?: string;          // Sportmonks player headshot (CDN, to be mirrored S3 later)
+  detailed_position?: string;    // e.g., "Centre-Back", "Holding Midfielder"
+  date_of_birth?: string;        // ISO date "YYYY-MM-DD"
+  birth_city?: string;
+  nationality_name?: string;
+  nationality_iso?: string;      // ISO2 code, e.g. "AR"
+  nationality_flag_url?: string; // Sportmonks country flag PNG
 }

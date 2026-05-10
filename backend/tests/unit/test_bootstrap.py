@@ -90,6 +90,19 @@ class _FakePlayerRepo:
     async def search(self, criteria: object) -> list[Player]:
         raise NotImplementedError
 
+    async def map_sportmonks_to_internal_id(self) -> dict[int, int]:
+        return {}
+
+
+class _FakeStatRepo:
+    def __init__(self) -> None:
+        self.upserts: list[tuple[object, int]] = []
+
+    async def upsert_by_sportmonks_id(
+        self, stat: object, *, sportmonks_statistic_id: int, raw_stats: object
+    ) -> None:
+        self.upserts.append((stat, sportmonks_statistic_id))
+
 
 class _FakeFixtureRepo:
     def __init__(self) -> None:
@@ -249,7 +262,7 @@ async def test_bootstrap_fixtures_passes_includes() -> None:
     assert count == 1
     assert client.calls[0][1] == {
         "filters": "fixtureSeasons:100",
-        "include": "participants;state",
+        "include": "participants;state;scores",
         "page": 1,
     }
     fixture, sportmonks_id = fixture_repo.upserts[0]
@@ -408,6 +421,7 @@ async def test_bootstrap_for_season_orchestrates_three_steps() -> None:
     team_repo = _FakeTeamRepo()
     fixture_repo = _FakeFixtureRepo()
     player_repo = _FakePlayerRepo()
+    stat_repo = _FakeStatRepo()
     news_repo = _FakeNewsRepo()
     comment_repo = _FakeMatchCommentRepo()
 
@@ -417,6 +431,7 @@ async def test_bootstrap_for_season_orchestrates_three_steps() -> None:
         team_repo=team_repo,
         fixture_repo=fixture_repo,
         player_repo=player_repo,
+        stat_repo=stat_repo,
         news_repo=news_repo,
         comment_repo=comment_repo,
         season_id=100,
@@ -430,6 +445,6 @@ async def test_bootstrap_for_season_orchestrates_three_steps() -> None:
     # so we still expect 0 ingested but the orchestration must not crash.
     assert report.news == 0
     assert report.comments == 0
-    # 3 endpoints (teams, fixtures, squads) + 2 news endpoints + 1 fixture call
-    # for comments = 6 raw archive entries.
-    assert len(raw_archive.events) == 6
+    # 3 endpoints (teams, fixtures, squads) + 1 squad re-call for player stats
+    # + 2 news endpoints + 1 fixture call for comments = 7 raw archive entries.
+    assert len(raw_archive.events) == 7

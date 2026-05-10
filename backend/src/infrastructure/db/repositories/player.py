@@ -27,6 +27,13 @@ def _to_domain(orm: PlayerORM) -> Player:
         weight=orm.weight,
         club=orm.club,
         bio=orm.bio,
+        image_path=orm.image_path,
+        detailed_position=orm.detailed_position,
+        date_of_birth=orm.date_of_birth,
+        birth_city=orm.birth_city,
+        nationality_name=orm.nationality_name,
+        nationality_iso=orm.nationality_iso,
+        nationality_flag_url=orm.nationality_flag_url,
     )
 
 
@@ -48,6 +55,13 @@ class SqlAlchemyPlayerRepository:
             weight=player.weight,
             club=player.club,
             bio=player.bio,
+            image_path=player.image_path,
+            detailed_position=player.detailed_position,
+            date_of_birth=player.date_of_birth,
+            birth_city=player.birth_city,
+            nationality_name=player.nationality_name,
+            nationality_iso=player.nationality_iso,
+            nationality_flag_url=player.nationality_flag_url,
         )
         update_payload = {
             "name": stmt.excluded.name,
@@ -61,6 +75,13 @@ class SqlAlchemyPlayerRepository:
             "weight": stmt.excluded.weight,
             "club": stmt.excluded.club,
             "bio": stmt.excluded.bio,
+            "image_path": stmt.excluded.image_path,
+            "detailed_position": stmt.excluded.detailed_position,
+            "date_of_birth": stmt.excluded.date_of_birth,
+            "birth_city": stmt.excluded.birth_city,
+            "nationality_name": stmt.excluded.nationality_name,
+            "nationality_iso": stmt.excluded.nationality_iso,
+            "nationality_flag_url": stmt.excluded.nationality_flag_url,
         }
         stmt = stmt.on_conflict_do_update(index_elements=["sportmonks_id"], set_=update_payload)
         await self._session.execute(stmt)
@@ -73,6 +94,15 @@ class SqlAlchemyPlayerRepository:
         result = await self._session.execute(select(PlayerORM).where(PlayerORM.id == player_id))
         row = result.scalar_one_or_none()
         return _to_domain(row) if row else None
+
+    async def map_sportmonks_to_internal_id(self) -> dict[int, int]:
+        """Return {sportmonks_id: internal_id} for every player with a stable
+        Sportmonks identifier. Used by stat ingestion to resolve squad
+        entries back to our internal core.player.id."""
+        result = await self._session.execute(
+            select(PlayerORM.sportmonks_id, PlayerORM.id).where(PlayerORM.sportmonks_id.is_not(None))
+        )
+        return {smk: internal for smk, internal in result.all() if smk is not None}
 
     async def search(self, criteria: ScreenerCriteria) -> list[Player]:
         stmt = select(PlayerORM)

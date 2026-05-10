@@ -4,11 +4,12 @@ import { portfolio_api } from "@/api/portfolio_api";
 import { teams_api } from "@/api/teams_api";
 import type { Player, Position } from "@/domain/player/player";
 import { POSITION_LABEL } from "@/domain/player/player";
-import { type SortKey } from "@/application/screener_service";
 import { PlayerChip } from "@/ui/components/PlayerChip";
 import { PositionBadge } from "@/ui/components/PositionBadge";
-import { Spark } from "@/ui/components/Spark";
-import { spark_for_player } from "@/infrastructure/repositories/valuations_repository";
+import {
+  screener_repository,
+  type ScreenerEntry,
+} from "@/infrastructure/repositories/screener_repository";
 import { price_label } from "@/ui/helpers/format";
 import { toggle_set } from "@/ui/helpers/state";
 import { position_color } from "@/ui/design/tokens";
@@ -22,6 +23,70 @@ const CONFEDERATIONS = [
   { code: "OFC", label: "Oceania" },
 ] as const;
 
+type Tab = "valuation" | "statistics" | "personal";
+type SortDir = "asc" | "desc";
+
+type SortKey =
+  | "name"
+  | "team"
+  | "position"
+  | "value"
+  | "change_24h"
+  | "pnl"
+  | "since_start"
+  | "last_match"
+  | "avg_match"
+  | "appearances"
+  | "minutes_played"
+  | "goals"
+  | "assists"
+  | "shots"
+  | "rating_avg"
+  | "age"
+  | "foot"
+  | "height"
+  | "weight";
+
+interface ColumnDef {
+  key: SortKey;
+  label: string;
+  width: string;
+  align?: "left" | "center" | "right";
+}
+
+// Variable columns by tab. The identity block (★ + Player + Team + Pos +
+// Value) stays fixed across tabs — switching the tab swaps only these
+// trailing columns. Sort state is preserved across tabs (the underlying
+// dataset is unchanged; column visibility is purely cosmetic).
+const TABS: Record<Tab, ColumnDef[]> = {
+  valuation: [
+    { key: "since_start", label: "All-time", width: "85px", align: "right" },
+    { key: "last_match", label: "Last Match", width: "95px", align: "right" },
+    { key: "avg_match", label: "Avg / Match", width: "100px", align: "right" },
+  ],
+  statistics: [
+    { key: "appearances", label: "Apps", width: "50px", align: "right" },
+    { key: "minutes_played", label: "Min", width: "55px", align: "right" },
+    { key: "goals", label: "G", width: "40px", align: "right" },
+    { key: "assists", label: "A", width: "40px", align: "right" },
+    { key: "shots", label: "Shots", width: "55px", align: "right" },
+    { key: "rating_avg", label: "Rate", width: "55px", align: "right" },
+  ],
+  personal: [
+    { key: "age", label: "Age", width: "45px", align: "right" },
+    { key: "foot", label: "Foot", width: "65px", align: "right" },
+    { key: "height", label: "Ht", width: "60px", align: "right" },
+    { key: "weight", label: "Wt", width: "60px", align: "right" },
+  ],
+};
+
+const STAR_W = 28;
+const PLAYER_W = 210;
+const TEAM_W = 115;
+const POS_W = 45;
+const VALUE_W = 75;
+const ROW_GAP = 6;
+
 interface ScreenerPageProps {
   on_open_player: (player: Player) => void;
   watchlist?: Set<number>;
@@ -32,82 +97,150 @@ export function ScreenerPage({ on_open_player, watchlist, toggle_watch }: Screen
   const [position_filters, set_position_filters] = useState<Set<Position>>(new Set());
   const [team_filters, set_team_filters] = useState<Set<string>>(new Set());
   const [price_range, set_price_range] = useState<[number, number]>([0, 999]);
-  const [sort_key, set_sort_key] = useState<SortKey>("value");
   const [search, set_search] = useState("");
-  const [show_filters, set_show_filters] = useState(true);
+  const [show_filters, set_show_filters] = useState(false);
+  const [tab, set_tab] = useState<Tab>("valuation");
+  const [sort_key, set_sort_key] = useState<SortKey>("value");
+  const [sort_dir, set_sort_dir] = useState<SortDir>("desc");
 
-  const all_team_ids = useMemo(() => Array.from(new Set(players_api.list().map(p => p.team_id))), []);
+  const all_entries = useMemo(() => screener_repository.find_all(), []);
+  const all_team_ids = useMemo(
+    () => Array.from(new Set(all_entries.map(e => e.team_id))),
+    [all_entries],
+  );
   const my_holdings = useMemo(() => portfolio_api.get_holdings(), []);
   const held_ids = useMemo(() => new Set(my_holdings.map(h => h.player_id)), [my_holdings]);
 
-  const filtered = useMemo(
-    () =>
-      players_api.search({
-        positions: position_filters,
-        team_ids: team_filters,
-        min_value: price_range[0],
-        max_value: price_range[1],
-        search,
-        sort: sort_key,
-      }),
-    [position_filters, team_filters, price_range, search, sort_key],
-  );
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const result = all_entries.filter(e => {
+      if (position_filters.size > 0 && !position_filters.has(e.position as Position)) return false;
+      if (team_filters.size > 0 && !team_filters.has(e.team_id)) return false;
+      if (e.current_price < price_range[0] || e.current_price > price_range[1]) return false;
+      if (q) {
+        const team = teams_api.get(e.team_id);
+        const hay = `${e.name} ${e.full_name ?? ""} ${e.club ?? ""} ${team?.name ?? ""}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+    const dir = sort_dir === "asc" ? 1 : -1;
+    result.sort((a, b) => {
+      const va = pluck(a, sort_key);
+      const vb = pluck(b, sort_key);
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      if (typeof va === "string" && typeof vb === "string") return dir * va.localeCompare(vb);
+      return dir * ((va as number) - (vb as number));
+    });
+    return result;
+  }, [all_entries, position_filters, team_filters, price_range, search, sort_key, sort_dir]);
 
   const has_filters =
     position_filters.size > 0 || team_filters.size > 0 || price_range[0] > 0 || price_range[1] < 999;
   const active_count =
     position_filters.size + team_filters.size + (price_range[0] > 0 || price_range[1] < 999 ? 1 : 0);
 
+  const columns = TABS[tab];
+  const variable_template = columns.map(c => c.width).join(" ");
+  const grid_template = `${STAR_W}px ${PLAYER_W}px ${TEAM_W}px ${POS_W}px ${VALUE_W}px ${variable_template}`;
+
+  const set_sort = (key: SortKey) => {
+    if (sort_key === key) {
+      set_sort_dir(sort_dir === "asc" ? "desc" : "asc");
+    } else {
+      set_sort_key(key);
+      set_sort_dir("desc");
+    }
+  };
+
+  const open_player_by_id = (id: number) => {
+    const p = players_api.get(id);
+    if (p) on_open_player(p);
+  };
+
   return (
-    <div style={{ display: "flex", gap: 16, alignItems: "flex-start", animation: "fu .3s ease" }}>
-      {/* Filter sidebar */}
-      {show_filters && (
-        <aside
+    <div style={{ display: "flex", flexDirection: "column", gap: 12, animation: "fu .3s ease" }}>
+      {/* Search + filter toggle */}
+      <div style={{ display: "flex", gap: 8 }}>
+        <button
+          onClick={() => set_show_filters(!show_filters)}
           style={{
-            width: 240,
+            padding: "10px 14px",
+            borderRadius: 10,
+            fontSize: 12,
+            fontWeight: 700,
+            border: "1px solid rgba(255,255,255,.06)",
+            background: show_filters ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.02)",
+            color: show_filters ? "#fff" : "rgba(255,255,255,.5)",
+            cursor: "pointer",
+            fontFamily: "inherit",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
             flexShrink: 0,
+          }}
+        >
+          ⚙ Filters {active_count > 0 && `(${active_count})`}
+        </button>
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            background: "rgba(255,255,255,.04)",
+            border: "1px solid rgba(255,255,255,.06)",
+            borderRadius: 10,
+            padding: "0 14px",
+          }}
+        >
+          <span style={{ fontSize: 16, color: "rgba(255,255,255,.25)" }}>🔍</span>
+          <input
+            value={search}
+            onChange={e => set_search(e.target.value)}
+            placeholder="Search players, teams, clubs..."
+            style={{
+              flex: 1,
+              background: "transparent",
+              border: "none",
+              outline: "none",
+              color: "#fff",
+              fontSize: 13,
+              fontFamily: "'Inter',sans-serif",
+              padding: "10px 0",
+              minWidth: 0,
+            }}
+          />
+          {search && (
+            <span
+              onClick={() => set_search("")}
+              style={{ fontSize: 13, color: "rgba(255,255,255,.25)", cursor: "pointer", padding: "4px 6px" }}
+            >
+              ✕
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Collapsible top filter bar (3 horizontal sections, hidden by default) */}
+      {show_filters && (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(180px, auto) minmax(220px, auto) 1fr",
+            gap: 24,
+            padding: "14px 16px",
             background: "rgba(255,255,255,.02)",
             border: "1px solid rgba(255,255,255,.04)",
             borderRadius: 12,
-            padding: "16px",
-            position: "sticky",
-            top: 108,
-            display: "flex",
-            flexDirection: "column",
-            gap: 18,
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: 0.3, textTransform: "uppercase", color: "rgba(255,255,255,.7)" }}>
-              Filters
-            </span>
-            {has_filters && (
-              <button
-                onClick={() => {
-                  set_position_filters(new Set());
-                  set_team_filters(new Set());
-                  set_price_range([0, 999]);
-                }}
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  color: "rgba(255,255,255,.35)",
-                  fontSize: 11,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  padding: 0,
-                }}
-              >
-                Reset
-              </button>
-            )}
-          </div>
-
           {/* Position */}
           <div>
             <FilterLabel>Position</FilterLabel>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               {(["FW", "MF", "DF", "GK"] as Position[]).map(p => {
                 const on = position_filters.has(p);
                 return (
@@ -115,7 +248,7 @@ export function ScreenerPage({ on_open_player, watchlist, toggle_watch }: Screen
                     key={p}
                     onClick={() => toggle_set(position_filters, set_position_filters, p)}
                     style={{
-                      padding: "7px 10px",
+                      padding: "6px 10px",
                       borderRadius: 8,
                       fontSize: 12,
                       fontWeight: on ? 700 : 500,
@@ -127,7 +260,6 @@ export function ScreenerPage({ on_open_player, watchlist, toggle_watch }: Screen
                       display: "flex",
                       alignItems: "center",
                       gap: 6,
-                      textAlign: "left",
                     }}
                   >
                     <div style={{ width: 6, height: 6, borderRadius: 2, background: position_color[p], opacity: on ? 1 : 0.4 }} />
@@ -141,7 +273,7 @@ export function ScreenerPage({ on_open_player, watchlist, toggle_watch }: Screen
           {/* Price range */}
           <div>
             <FilterLabel>Price range</FilterLabel>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
               {([[0, 30], [30, 60], [60, 100], [100, 150], [150, 999]] as [number, number][]).map(([lo, hi]) => {
                 const active = price_range[0] === lo && price_range[1] === hi;
                 return (
@@ -149,19 +281,18 @@ export function ScreenerPage({ on_open_player, watchlist, toggle_watch }: Screen
                     key={lo}
                     onClick={() => set_price_range(active ? [0, 999] : [lo, hi])}
                     style={{
-                      padding: "7px 10px",
+                      padding: "6px 10px",
                       borderRadius: 6,
                       fontSize: 12,
                       fontWeight: active ? 700 : 500,
-                      border: "none",
+                      border: "1px solid " + (active ? "rgba(255,255,255,.18)" : "rgba(255,255,255,.06)"),
                       cursor: "pointer",
                       fontFamily: "inherit",
                       background: active ? "rgba(255,255,255,.06)" : "transparent",
                       color: active ? "#fff" : "rgba(255,255,255,.4)",
-                      textAlign: "left",
                     }}
                   >
-                    {price_label(lo)} — {price_label(hi)}
+                    {price_label(lo)}–{price_label(hi)}
                   </button>
                 );
               })}
@@ -169,243 +300,451 @@ export function ScreenerPage({ on_open_player, watchlist, toggle_watch }: Screen
           </div>
 
           {/* Teams */}
-          <div>
-            <FilterLabel>
-              Team {team_filters.size > 0 ? `(${team_filters.size})` : ""}
-            </FilterLabel>
-            <div style={{ maxHeight: 380, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
-              {CONFEDERATIONS.map(conf => {
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <FilterLabel inline>
+                Team {team_filters.size > 0 ? `(${team_filters.size})` : ""}
+              </FilterLabel>
+              {has_filters && (
+                <button
+                  onClick={() => {
+                    set_position_filters(new Set());
+                    set_team_filters(new Set());
+                    set_price_range([0, 999]);
+                  }}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "rgba(255,255,255,.45)",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    padding: 0,
+                  }}
+                >
+                  Reset all
+                </button>
+              )}
+            </div>
+            <div style={{ maxHeight: 110, overflowY: "auto", display: "flex", flexWrap: "wrap", gap: 4 }}>
+              {CONFEDERATIONS.flatMap(conf => {
                 const teams_in_conf = all_team_ids.filter(id => teams_api.get(id)?.confederation === conf.code);
-                if (teams_in_conf.length === 0) return null;
-                return (
-                  <div key={conf.code}>
-                    <div style={{ fontSize: 10, color: "rgba(255,255,255,.25)", fontWeight: 700, letterSpacing: 0.5, marginBottom: 4 }}>
-                      {conf.label}
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                      {teams_in_conf.map(id => {
-                        const team = teams_api.get(id);
-                        if (!team) return null;
-                        const on = team_filters.has(id);
-                        return (
-                          <button
-                            key={id}
-                            onClick={() => toggle_set(team_filters, set_team_filters, id)}
-                            style={{
-                              padding: "5px 8px",
-                              borderRadius: 5,
-                              fontSize: 12,
-                              fontWeight: on ? 700 : 500,
-                              border: "none",
-                              cursor: "pointer",
-                              fontFamily: "inherit",
-                              background: on ? "rgba(255,255,255,.06)" : "transparent",
-                              color: on ? "#fff" : "rgba(255,255,255,.4)",
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 6,
-                              textAlign: "left",
-                            }}
-                          >
-                            <span style={{ fontSize: 13 }}>{team.flag}</span>
-                            <span style={{ flex: 1 }}>{team.name}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
+                return teams_in_conf.map(id => {
+                  const team = teams_api.get(id);
+                  if (!team) return null;
+                  const on = team_filters.has(id);
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => toggle_set(team_filters, set_team_filters, id)}
+                      style={{
+                        padding: "4px 8px",
+                        borderRadius: 5,
+                        fontSize: 11,
+                        fontWeight: on ? 700 : 500,
+                        border: "1px solid " + (on ? "rgba(255,255,255,.18)" : "rgba(255,255,255,.06)"),
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                        background: on ? "rgba(255,255,255,.06)" : "transparent",
+                        color: on ? "#fff" : "rgba(255,255,255,.5)",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 5,
+                      }}
+                    >
+                      <span style={{ fontSize: 12 }}>{team.flag}</span>
+                      <span>{team.name}</span>
+                    </button>
+                  );
+                });
               })}
             </div>
           </div>
-        </aside>
+        </div>
       )}
 
-      {/* Results */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        {/* Search + filter toggle */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-          <button
-            onClick={() => set_show_filters(!show_filters)}
-            style={{
-              padding: "10px 14px",
-              borderRadius: 10,
-              fontSize: 12,
-              fontWeight: 700,
-              border: "1px solid rgba(255,255,255,.06)",
-              background: show_filters ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.02)",
-              color: show_filters ? "#fff" : "rgba(255,255,255,.5)",
-              cursor: "pointer",
-              fontFamily: "inherit",
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              flexShrink: 0,
-            }}
-          >
-            ⚙ Filters {active_count > 0 && `(${active_count})`}
-          </button>
-          <div
-            style={{
-              flex: 1,
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              background: "rgba(255,255,255,.04)",
-              border: "1px solid rgba(255,255,255,.06)",
-              borderRadius: 10,
-              padding: "0 14px",
-            }}
-          >
-            <span style={{ fontSize: 16, color: "rgba(255,255,255,.25)" }}>🔍</span>
-            <input
-              value={search}
-              onChange={e => set_search(e.target.value)}
-              placeholder="Search players, teams, clubs..."
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: 4 }}>
+        {(["valuation", "statistics", "personal"] as Tab[]).map(t => {
+          const active = tab === t;
+          return (
+            <button
+              key={t}
+              onClick={() => set_tab(t)}
               style={{
-                flex: 1,
-                background: "transparent",
-                border: "none",
-                outline: "none",
-                color: "#fff",
-                fontSize: 13,
-                fontFamily: "'Inter',sans-serif",
-                padding: "10px 0",
-                minWidth: 0,
+                padding: "8px 14px",
+                border: "1px solid rgba(255,255,255,.06)",
+                background: active ? "rgba(255,255,255,.06)" : "transparent",
+                color: active ? "#fff" : "rgba(255,255,255,.45)",
+                fontSize: 12,
+                fontWeight: 700,
+                letterSpacing: 0.4,
+                textTransform: "uppercase",
+                borderRadius: 8,
+                cursor: "pointer",
+                fontFamily: "inherit",
               }}
-            />
-            {search && (
-              <span
-                onClick={() => set_search("")}
-                style={{ fontSize: 13, color: "rgba(255,255,255,.25)", cursor: "pointer", padding: "4px 6px" }}
-              >
-                ✕
-              </span>
-            )}
-          </div>
-        </div>
+            >
+              {t}
+            </button>
+          );
+        })}
+      </div>
 
-        {/* Count + result table */}
+      {/* Result table — compact widths so everything fits without scroll. */}
+      <div
+        style={{
+          background: "rgba(255,255,255,.02)",
+          border: "1px solid rgba(255,255,255,.04)",
+          borderRadius: 12,
+        }}
+      >
+        {/* Header row */}
         <div
           style={{
+            display: "grid",
+            gridTemplateColumns: grid_template,
+            padding: "10px 16px",
+            borderBottom: "1px solid rgba(255,255,255,.06)",
+            fontSize: 10,
+            fontWeight: 700,
+            color: "rgba(255,255,255,.45)",
+            letterSpacing: 0.5,
+            textTransform: "uppercase",
+            alignItems: "center",
+            gap: ROW_GAP,
             background: "rgba(255,255,255,.02)",
-            border: "1px solid rgba(255,255,255,.04)",
-            borderRadius: 12,
-            overflow: "hidden",
           }}
         >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "32px 1fr 80px 60px 70px 60px 50px 110px 70px",
-              padding: "10px 16px",
-              borderBottom: "1px solid rgba(255,255,255,.06)",
-              fontSize: 10,
-              fontWeight: 700,
-              color: "rgba(255,255,255,.45)",
-              letterSpacing: 0.5,
-              textTransform: "uppercase",
-              alignItems: "center",
-              gap: 8,
-              background: "rgba(255,255,255,.02)",
-            }}
-          >
-            <span></span>
-            <span>Player</span>
-            <span>Team</span>
-            <span>Pos</span>
-            <ColumnHeader label="Value" sort_key="value" current={sort_key} on_select={set_sort_key} />
-            <ColumnHeader label="24h" sort_key="change" current={sort_key} on_select={set_sort_key} />
-            <ColumnHeader label="Rtg" sort_key="rating" current={sort_key} on_select={set_sort_key} />
-            <span style={{ textAlign: "center" }}>Trend</span>
-            <ColumnHeader label="Age" sort_key="age" current={sort_key} on_select={set_sort_key} />
-          </div>
+          <span />
+          <ColumnHeader label="Player" sort_key="name" current={sort_key} dir={sort_dir} on_select={set_sort} />
+          <ColumnHeader label="Team" sort_key="team" current={sort_key} dir={sort_dir} on_select={set_sort} />
+          <ColumnHeader label="Pos" sort_key="position" current={sort_key} dir={sort_dir} on_select={set_sort} />
+          <ColumnHeader label="Value" sort_key="value" current={sort_key} dir={sort_dir} on_select={set_sort} align="right" />
+          {columns.map(c => (
+            <ColumnHeader
+              key={c.key}
+              label={c.label}
+              sort_key={c.key}
+              current={sort_key}
+              dir={sort_dir}
+              on_select={set_sort}
+              align={c.align}
+            />
+          ))}
+        </div>
 
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            {filtered.map(p => {
-              const team = teams_api.get(p.team_id);
-              const watched = watchlist?.has(p.id) ?? false;
-              const held = held_ids.has(p.id);
-              const up = p.valuation.change_24h >= 0;
-              return (
-                <div
-                  key={p.id}
-                  onClick={() => on_open_player(p)}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "32px 1fr 80px 60px 70px 60px 50px 110px 70px",
-                    padding: "11px 16px",
-                    borderBottom: "1px solid rgba(255,255,255,.025)",
-                    cursor: "pointer",
-                    alignItems: "center",
-                    gap: 8,
-                    fontSize: 13,
-                    transition: "background .1s",
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.03)")}
-                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                >
-                  <span
-                    onClick={e => {
-                      e.stopPropagation();
-                      toggle_watch?.(p.id);
-                    }}
-                    style={{
-                      fontSize: 16,
-                      color: watched ? "#fff" : "rgba(255,255,255,.15)",
-                      cursor: "pointer",
-                      lineHeight: 1,
-                    }}
-                  >
-                    {watched ? "★" : "☆"}
-                  </span>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                    <PlayerChip jersey_number={p.jersey_number} team_color={team?.color ?? "#666"} size={32} />
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "flex", alignItems: "center", gap: 6 }}>
-                        {p.name}
-                        {held && (
-                          <span style={{ fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,.5)", background: "rgba(255,255,255,.06)", padding: "1px 5px", borderRadius: 3 }}>
-                            HELD
-                          </span>
-                        )}
-                      </div>
-                      <div style={{ fontSize: 11, color: "rgba(255,255,255,.25)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {p.club ?? "—"}
-                      </div>
-                    </div>
-                  </div>
-                  <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "rgba(255,255,255,.55)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    <span style={{ fontSize: 14 }}>{team?.flag}</span>
-                    <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{team?.name}</span>
-                  </span>
-                  <PositionBadge position={p.position} />
-                  <span className="mono" style={{ fontWeight: 700 }}>€{p.valuation.current_price}M</span>
-                  <span className="mono" style={{ fontWeight: 700, color: up ? "#216c6e" : "#E41541" }}>
-                    {up ? "+" : ""}{p.valuation.change_24h}%
-                  </span>
-                  <span className="mono" style={{ fontWeight: 700, color: "rgba(255,255,255,.65)" }}>{p.valuation.performance_rating}</span>
-                  <Spark data={spark_for_player(p.id)} color={up ? "#183C82" : "#F41258"} width={100} height={24} />
-                  <span className="mono" style={{ color: "rgba(255,255,255,.45)" }}>{p.age ?? "—"}</span>
-                </div>
-              );
-            })}
+        {/* Body */}
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {filtered.map(e => {
+            const team = teams_api.get(e.team_id);
+            const watched = watchlist?.has(e.id) ?? false;
+            const held = held_ids.has(e.id);
+            return (
+              <Row
+                key={e.id}
+                entry={e}
+                team_color={team?.color ?? "#666"}
+                team_flag={team?.flag}
+                team_flag_url={team?.flag_url}
+                team_name={team?.name}
+                watched={watched}
+                held={held}
+                grid_template={grid_template}
+                columns={columns}
+                on_open={() => open_player_by_id(e.id)}
+                on_toggle_watch={() => toggle_watch?.(e.id)}
+              />
+            );
+          })}
+        </div>
+        {filtered.length === 0 && (
+          <div style={{ padding: 40, textAlign: "center", color: "rgba(255,255,255,.25)", fontSize: 13 }}>
+            No players match your filters
           </div>
-          {filtered.length === 0 && (
-            <div style={{ padding: 40, textAlign: "center", color: "rgba(255,255,255,.25)", fontSize: 13 }}>
-              No players match your filters
-            </div>
-          )}
-        </div>
-        <div style={{ padding: "10px 4px 0", fontSize: 11, color: "rgba(255,255,255,.35)" }}>
-          {filtered.length} players
-        </div>
+        )}
+      </div>
+      <div style={{ padding: "0 4px", fontSize: 11, color: "rgba(255,255,255,.35)" }}>
+        {filtered.length} players
       </div>
     </div>
   );
 }
 
-function FilterLabel({ children }: { children: React.ReactNode }) {
+interface RowProps {
+  entry: ScreenerEntry;
+  team_color: string;
+  team_flag?: string;
+  team_flag_url?: string;
+  team_name?: string;
+  watched: boolean;
+  held: boolean;
+  grid_template: string;
+  columns: ColumnDef[];
+  on_open: () => void;
+  on_toggle_watch: () => void;
+}
+
+function Row({
+  entry: e,
+  team_color,
+  team_flag,
+  team_flag_url,
+  team_name,
+  watched,
+  held,
+  grid_template,
+  columns,
+  on_open,
+  on_toggle_watch,
+}: RowProps) {
+  return (
+    <div
+      onClick={on_open}
+      onMouseEnter={ev => (ev.currentTarget.style.background = "rgba(255,255,255,.03)")}
+      onMouseLeave={ev => (ev.currentTarget.style.background = "transparent")}
+      style={{
+        display: "grid",
+        gridTemplateColumns: grid_template,
+        padding: "10px 16px",
+        borderBottom: "1px solid rgba(255,255,255,.025)",
+        cursor: "pointer",
+        alignItems: "center",
+        gap: ROW_GAP,
+        fontSize: 13,
+        background: "transparent",
+        transition: "background .1s",
+      }}
+    >
+      <span
+        onClick={ev => {
+          ev.stopPropagation();
+          on_toggle_watch();
+        }}
+        style={{
+          fontSize: 16,
+          color: watched ? "#fff" : "rgba(255,255,255,.15)",
+          cursor: "pointer",
+          lineHeight: 1,
+        }}
+      >
+        {watched ? "★" : "☆"}
+      </span>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          minWidth: 0,
+        }}
+      >
+        {e.image_path ? (
+          <img
+            src={e.image_path}
+            alt={e.full_name ?? e.name}
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 8,
+              objectFit: "contain",
+              background: "rgba(255,255,255,.05)",
+              border: "1px solid rgba(255,255,255,.08)",
+              flexShrink: 0,
+            }}
+          />
+        ) : (
+          <PlayerChip jersey_number={e.jersey_number} team_color={team_color} size={36} />
+        )}
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+            <span
+              className="mono"
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: "rgba(255,255,255,.45)",
+                flexShrink: 0,
+              }}
+            >
+              {e.jersey_number}
+            </span>
+            <span
+              style={{
+                fontWeight: 700,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                minWidth: 0,
+              }}
+            >
+              {e.name}
+            </span>
+            {held && (
+              <span style={{ fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,.5)", background: "rgba(255,255,255,.06)", padding: "1px 5px", borderRadius: 3, flexShrink: 0 }}>
+                HELD
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,.25)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {e.club ?? "—"}
+          </div>
+        </div>
+      </div>
+      <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "rgba(255,255,255,.55)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
+        {team_flag_url ? (
+          <img src={team_flag_url} alt={team_name ?? ""} style={{ width: 18, height: 18, objectFit: "contain", flexShrink: 0 }} />
+        ) : (
+          <span style={{ fontSize: 14 }}>{team_flag}</span>
+        )}
+        <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{team_name}</span>
+      </span>
+      <PositionBadge position={e.position as Position} />
+      <span className="mono" style={{ fontWeight: 700, textAlign: "right", whiteSpace: "nowrap" }}>
+        €{e.current_price.toFixed(2)}M
+      </span>
+      {columns.map(c => (
+        <ScreenerCell key={c.key} entry={e} column={c} />
+      ))}
+    </div>
+  );
+}
+
+function pluck(e: ScreenerEntry, key: SortKey): number | string | null {
+  switch (key) {
+    case "name":
+      return e.name;
+    case "team":
+      return e.team_id;
+    case "position":
+      return e.position;
+    case "value":
+      return e.current_price;
+    case "change_24h":
+      return e.change_24h;
+    case "pnl":
+      return e.pnl;
+    case "since_start":
+      return e.since_start_pct;
+    case "last_match":
+      return e.last_match_pct;
+    case "avg_match":
+      return e.avg_match_pct;
+    case "appearances":
+      return e.appearances;
+    case "minutes_played":
+      return e.minutes_played;
+    case "goals":
+      return e.goals;
+    case "assists":
+      return e.assists;
+    case "shots":
+      return e.shots_total;
+    case "rating_avg":
+      return e.rating_avg;
+    case "age":
+      return e.age;
+    case "foot":
+      return e.foot;
+    case "height":
+      return e.height;
+    case "weight":
+      return e.weight;
+  }
+}
+
+function fmt_pct(v: number | null): string {
+  if (v === null) return "—";
+  return `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
+}
+
+function fmt_int(v: number | null): string {
+  return v === null ? "—" : String(v);
+}
+
+function pct_color(v: number | null): string | undefined {
+  if (v === null) return undefined;
+  return v >= 0 ? "#216c6e" : "#E41541";
+}
+
+function ScreenerCell({ entry: e, column: c }: { entry: ScreenerEntry; column: ColumnDef }) {
+  const align = c.align ?? "left";
+  const base_style: React.CSSProperties = {
+    fontWeight: 700,
+    textAlign: align,
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  };
+  switch (c.key) {
+    case "pnl":
+      return (
+        <span
+          className="mono"
+          style={{
+            ...base_style,
+            color: e.pnl == null ? "rgba(255,255,255,.3)" : e.pnl >= 0 ? "#216c6e" : "#E41541",
+          }}
+        >
+          {e.pnl == null ? "—" : `${e.pnl >= 0 ? "+" : ""}${e.pnl.toFixed(2)}M`}
+        </span>
+      );
+    case "since_start":
+      return (
+        <span className="mono" style={{ ...base_style, color: pct_color(e.since_start_pct) ?? "#fff" }}>
+          {fmt_pct(e.since_start_pct)}
+        </span>
+      );
+    case "last_match":
+      return (
+        <span className="mono" style={{ ...base_style, color: pct_color(e.last_match_pct) ?? "#fff" }}>
+          {fmt_pct(e.last_match_pct)}
+        </span>
+      );
+    case "avg_match":
+      return (
+        <span className="mono" style={{ ...base_style, color: pct_color(e.avg_match_pct) ?? "#fff" }}>
+          {fmt_pct(e.avg_match_pct)}
+        </span>
+      );
+    case "appearances":
+      return <span className="mono" style={base_style}>{fmt_int(e.appearances)}</span>;
+    case "minutes_played":
+      return <span className="mono" style={base_style}>{fmt_int(e.minutes_played)}</span>;
+    case "goals":
+      return (
+        <span className="mono" style={{ ...base_style, color: (e.goals ?? 0) > 0 ? "#216c6e" : undefined }}>
+          {fmt_int(e.goals)}
+        </span>
+      );
+    case "assists":
+      return (
+        <span className="mono" style={{ ...base_style, color: (e.assists ?? 0) > 0 ? "#216c6e" : undefined }}>
+          {fmt_int(e.assists)}
+        </span>
+      );
+    case "shots":
+      return (
+        <span className="mono" style={base_style}>
+          {e.shots_on_target ?? 0}/{e.shots_total ?? 0}
+        </span>
+      );
+    case "rating_avg":
+      return <span className="mono" style={base_style}>{e.rating_avg != null ? e.rating_avg.toFixed(2) : "—"}</span>;
+    case "age":
+      return <span className="mono" style={base_style}>{fmt_int(e.age)}</span>;
+    case "foot":
+      return <span style={{ ...base_style, color: "rgba(255,255,255,.7)" }}>{e.foot ?? "—"}</span>;
+    case "height":
+      return <span className="mono" style={base_style}>{e.height != null ? `${e.height}cm` : "—"}</span>;
+    case "weight":
+      return <span className="mono" style={base_style}>{e.weight != null ? `${e.weight}kg` : "—"}</span>;
+    default:
+      return <span style={base_style}>—</span>;
+  }
+}
+
+function FilterLabel({ children, inline }: { children: React.ReactNode; inline?: boolean }) {
   return (
     <div
       style={{
@@ -414,7 +753,7 @@ function FilterLabel({ children }: { children: React.ReactNode }) {
         color: "rgba(255,255,255,.35)",
         letterSpacing: 0.5,
         textTransform: "uppercase",
-        marginBottom: 8,
+        marginBottom: inline ? 0 : 8,
       }}
     >
       {children}
@@ -426,12 +765,16 @@ function ColumnHeader({
   label,
   sort_key,
   current,
+  dir,
   on_select,
+  align = "left",
 }: {
   label: string;
   sort_key: SortKey;
   current: SortKey;
+  dir: SortDir;
   on_select: (k: SortKey) => void;
+  align?: "left" | "center" | "right";
 }) {
   const active = current === sort_key;
   return (
@@ -439,13 +782,14 @@ function ColumnHeader({
       onClick={() => on_select(sort_key)}
       style={{
         cursor: "pointer",
-        color: active ? "#fff" : "rgba(255,255,255,.45)",
-        fontWeight: active ? 800 : 700,
         userSelect: "none",
+        color: active ? "#fff" : undefined,
+        textAlign: align,
+        display: "block",
       }}
     >
       {label}
-      {active ? " ↓" : ""}
+      {active && (dir === "asc" ? " ▲" : " ▼")}
     </span>
   );
 }

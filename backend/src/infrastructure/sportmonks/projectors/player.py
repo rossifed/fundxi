@@ -105,7 +105,48 @@ def project_player(
     weight = weight_raw if isinstance(weight_raw, int) else None
 
     dob_raw = payload.get("date_of_birth")
-    age = _compute_age(dob_raw if isinstance(dob_raw, str) else None, on_date=today)
+    dob_iso = dob_raw if isinstance(dob_raw, str) else None
+    age = _compute_age(dob_iso, on_date=today)
+    dob_value: date | None = None
+    if dob_iso:
+        try:
+            dob_value = datetime.strptime(dob_iso, "%Y-%m-%d").date()
+        except ValueError:
+            dob_value = None
+
+    image_path = _clean_str(payload.get("image_path"))
+
+    detailed_position: str | None = None
+    detailed_position_payload = payload.get("detailedposition")
+    if isinstance(detailed_position_payload, dict):
+        detailed_position = _clean_str(detailed_position_payload.get("name"))
+
+    birth_city: str | None = None
+    city_payload = payload.get("city")
+    if isinstance(city_payload, dict):
+        birth_city = _clean_str(city_payload.get("name"))
+
+    nationality_name: str | None = None
+    nationality_iso: str | None = None
+    nationality_flag_url: str | None = None
+    nationality_payload = payload.get("nationality")
+    if isinstance(nationality_payload, dict):
+        nationality_name = _clean_str(nationality_payload.get("name"))
+        nationality_iso = _clean_str(nationality_payload.get("iso2"))
+        nationality_flag_url = _clean_str(nationality_payload.get("image_path"))
+
+    # Sportmonks "preferred foot" lives in the metadata include, not the
+    # default player payload. type_id=229 maps to "Preferred Foot" in their
+    # metadata taxonomy. Stored verbatim ("left" / "right" / etc.) — UI
+    # localisation is the consumer's job.
+    foot: str | None = None
+    metadata_payload = payload.get("metadata")
+    if isinstance(metadata_payload, list):
+        for entry in metadata_payload:
+            if isinstance(entry, dict) and entry.get("type_id") == 229:
+                foot = _clean_str(entry.get("values"))
+                if foot:
+                    break
 
     player = Player(
         id=0,  # sentinel; assigned by DB on insert
@@ -115,7 +156,15 @@ def project_player(
         position=position,
         full_name=full_name,
         age=age,
+        foot=foot,
         height=height,
         weight=weight,
+        image_path=image_path,
+        detailed_position=detailed_position,
+        date_of_birth=dob_value,
+        birth_city=birth_city,
+        nationality_name=nationality_name,
+        nationality_iso=nationality_iso,
+        nationality_flag_url=nationality_flag_url,
     )
     return player, sportmonks_id

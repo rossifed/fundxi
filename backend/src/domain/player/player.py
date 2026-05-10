@@ -6,6 +6,7 @@ DDD roles:
 """
 
 from dataclasses import dataclass
+from datetime import date
 from enum import StrEnum
 
 
@@ -30,3 +31,10 @@ class Player:
     weight: int | None = None
     club: str | None = None
     bio: str | None = None
+    image_path: str | None = None
+    detailed_position: str | None = None
+    date_of_birth: date | None = None
+    birth_city: str | None = None
+    nationality_name: str | None = None
+    nationality_iso: str | None = None
+    nationality_flag_url: str | None = None

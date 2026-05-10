@@ -24,6 +24,9 @@ from src.infrastructure.db.repositories.fixture import SqlAlchemyFixtureReposito
 from src.infrastructure.db.repositories.match_comment import SqlAlchemyMatchCommentRepository
 from src.infrastructure.db.repositories.news import SqlAlchemyNewsRepository
 from src.infrastructure.db.repositories.player import SqlAlchemyPlayerRepository
+from src.infrastructure.db.repositories.player_tournament_stat import (
+    SqlAlchemyPlayerTournamentStatRepository,
+)
 from src.infrastructure.db.repositories.raw_sportmonks_event import SqlAlchemyRawSportmonksEventRepository
 from src.infrastructure.db.repositories.team import SqlAlchemyTeamRepository
 from src.infrastructure.db.session import SessionLocal
@@ -65,6 +68,7 @@ async def run() -> BootstrapReport:
             team_repo=SqlAlchemyTeamRepository(session),
             fixture_repo=SqlAlchemyFixtureRepository(session),
             player_repo=SqlAlchemyPlayerRepository(session),
+            stat_repo=SqlAlchemyPlayerTournamentStatRepository(session),
             news_repo=SqlAlchemyNewsRepository(session),
             comment_repo=SqlAlchemyMatchCommentRepository(session),
             season_id=settings.active_season_id,
@@ -78,6 +82,7 @@ async def run() -> BootstrapReport:
         players=report.players,
         news=report.news,
         comments=report.comments,
+        player_stats=report.player_stats,
     )
     return report
 

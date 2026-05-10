@@ -410,7 +410,6 @@ function MoversColumn({
             </div>
             <Spark
               data={spark_for_player(p.id)}
-              color={up ? "#183C82" : "#F41258"}
               width={56}
               height={22}
             />

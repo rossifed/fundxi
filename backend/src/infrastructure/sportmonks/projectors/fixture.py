@@ -51,6 +51,29 @@ def _project_status(state_payload: object) -> FixtureStatus:
     return FixtureStatus.UPCOMING
 
 
+def _final_score(scores_payload: object, location: str) -> int | None:
+    """Pick the final ('CURRENT') score for the home/away participant.
+    Sportmonks emits multiple score blocks per fixture (1ST_HALF, 2ND_HALF,
+    CURRENT). CURRENT is the running total, which equals full-time once the
+    fixture is finished."""
+    if not isinstance(scores_payload, list):
+        return None
+    for entry in scores_payload:
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("description") != "CURRENT":
+            continue
+        score = entry.get("score")
+        if not isinstance(score, dict):
+            continue
+        if score.get("participant") != location:
+            continue
+        goals = score.get("goals")
+        if isinstance(goals, int):
+            return goals
+    return None
+
+
 def _team_id_from_participants(participants: list[dict[str, Any]], location: str) -> str:
     for p in participants:
         meta = p.get("meta")
@@ -94,12 +117,18 @@ def project_fixture(payload: dict[str, Any], *, group: str) -> tuple[Fixture, in
     minute_raw = payload.get("minute")
     minute = minute_raw if isinstance(minute_raw, int) else None
 
+    scores_payload = payload.get("scores")
+    home_score = _final_score(scores_payload, "home")
+    away_score = _final_score(scores_payload, "away")
+
     fixture = Fixture(
         id=0,
         home_team_id=home_team_id,
         away_team_id=away_team_id,
         status=status,
         group=group,
+        home_score=home_score,
+        away_score=away_score,
         kickoff_at=_parse_kickoff(payload.get("starting_at")),
         minute=minute,
     )

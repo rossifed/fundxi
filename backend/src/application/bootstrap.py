@@ -20,12 +20,14 @@ from src.domain.match.fixture_repository import FixtureRepository
 from src.domain.match.match_comment import MatchCommentRepository
 from src.domain.news.news_repository import NewsRepository
 from src.domain.player.player_repository import PlayerRepository
+from src.domain.player.player_tournament_stat_repository import PlayerTournamentStatRepository
 from src.domain.team.team_repository import TeamRepository
 from src.infrastructure.sportmonks.client import SportmonksClient
 from src.infrastructure.sportmonks.projectors.fixture import project_fixture
 from src.infrastructure.sportmonks.projectors.match_comment import project_match_comment
 from src.infrastructure.sportmonks.projectors.news import project_news
 from src.infrastructure.sportmonks.projectors.player import project_player
+from src.infrastructure.sportmonks.projectors.player_stat import project_player_stat
 from src.infrastructure.sportmonks.projectors.team import project_team
 
 log = structlog.get_logger(__name__)
@@ -48,6 +50,7 @@ class BootstrapReport:
     players: int
     news: int = 0
     comments: int = 0
+    player_stats: int = 0
 
 
 async def _paginate_pages(
@@ -108,7 +111,7 @@ async def bootstrap_fixtures(
     endpoint = "/fixtures"
     base_params = {
         "filters": f"fixtureSeasons:{season_id}",
-        "include": "participants;state",
+        "include": "participants;state;scores",
     }
     count = 0
     async for params, envelope in _paginate_pages(client, endpoint, base_params=base_params):
@@ -131,7 +134,9 @@ async def bootstrap_squads(
     season_id: int,
     today: date,
 ) -> int:
-    base_params = {"include": "player.position"}
+    base_params = {
+        "include": "player.position;player.detailedPosition;player.nationality;player.city;player.metadata"
+    }
     count = 0
     skipped = 0
     for sportmonks_team_id, internal_team_id in teams:
@@ -168,6 +173,74 @@ async def bootstrap_squads(
                 await player_repo.upsert_by_sportmonks_id(player, sportmonks_id=sportmonks_id)
                 count += 1
     log.info("bootstrap.squads.done", count=count, skipped=skipped, season_id=season_id)
+    return count
+
+
+async def bootstrap_player_stats(
+    *,
+    client: SportmonksClient,
+    raw_archive: RawEventArchive,
+    player_repo: PlayerRepository,
+    stat_repo: PlayerTournamentStatRepository,
+    teams: list[tuple[int, str]],
+    season_id: int,
+) -> int:
+    """Per-team squad fetch with player.statistics include — efficient (one
+    call per team covers all its players + their stats). Filters down to the
+    target season_id at projection time so we don't accidentally store
+    historical seasons.
+
+    Resolves Sportmonks player_id → internal core.player.id via the player
+    repo's mapping table; squad entries we can't resolve (player not yet
+    ingested) are skipped — re-running bootstrap then re-running this stage
+    closes the gap.
+    """
+    base_params = {"include": "player.statistics.details"}
+    sportmonks_to_internal = await player_repo.map_sportmonks_to_internal_id()
+    count = 0
+    skipped = 0
+    for sportmonks_team_id, _internal_team_id in teams:
+        endpoint = f"/squads/seasons/{season_id}/teams/{sportmonks_team_id}"
+        async for params, envelope in _paginate_pages(client, endpoint, base_params=base_params):
+            await raw_archive.insert_if_new(endpoint=endpoint, params=params, response=envelope)
+            for squad_entry in _data_items(envelope):
+                player_payload = squad_entry.get("player")
+                if not isinstance(player_payload, dict):
+                    skipped += 1
+                    continue
+                sportmonks_player_id = player_payload.get("id")
+                if not isinstance(sportmonks_player_id, int):
+                    skipped += 1
+                    continue
+                internal_player_id = sportmonks_to_internal.get(sportmonks_player_id)
+                if internal_player_id is None:
+                    skipped += 1
+                    continue
+                blocks = player_payload.get("statistics") or []
+                if not isinstance(blocks, list):
+                    continue
+                for block in blocks:
+                    if not isinstance(block, dict):
+                        continue
+                    if block.get("season_id") != season_id:
+                        continue
+                    try:
+                        stat, smk_stat_id, raw = project_player_stat(
+                            block, internal_player_id=internal_player_id
+                        )
+                    except (ValueError, TypeError) as exc:
+                        log.warning(
+                            "bootstrap.player_stats.skip",
+                            sportmonks_player_id=sportmonks_player_id,
+                            reason=str(exc),
+                        )
+                        skipped += 1
+                        continue
+                    await stat_repo.upsert_by_sportmonks_id(
+                        stat, sportmonks_statistic_id=smk_stat_id, raw_stats=raw
+                    )
+                    count += 1
+    log.info("bootstrap.player_stats.done", count=count, skipped=skipped, season_id=season_id)
     return count
 
 
@@ -249,6 +322,7 @@ async def bootstrap_for_season(
     team_repo: TeamRepository,
     fixture_repo: FixtureRepository,
     player_repo: PlayerRepository,
+    stat_repo: PlayerTournamentStatRepository,
     news_repo: NewsRepository,
     comment_repo: MatchCommentRepository,
     season_id: int,
@@ -266,6 +340,14 @@ async def bootstrap_for_season(
         season_id=season_id,
         today=today,
     )
+    player_stats = await bootstrap_player_stats(
+        client=client,
+        raw_archive=raw_archive,
+        player_repo=player_repo,
+        stat_repo=stat_repo,
+        teams=teams,
+        season_id=season_id,
+    )
     news = await bootstrap_news(
         client=client,
         raw_archive=raw_archive,
@@ -279,4 +361,11 @@ async def bootstrap_for_season(
         comment_repo=comment_repo,
         fixture_repo=fixture_repo,
     )
-    return BootstrapReport(teams=len(teams), fixtures=fixtures, players=players, news=news, comments=comments)
+    return BootstrapReport(
+        teams=len(teams),
+        fixtures=fixtures,
+        players=players,
+        news=news,
+        comments=comments,
+        player_stats=player_stats,
+    )

@@ -40,11 +40,54 @@ class TradeOutcome:
     holding: Holding | None  # None if the position was fully closed
 
 
-def _new_average(prev_shares: float, prev_avg: float, add_shares: float, add_price: float) -> float:
-    """Weighted average for a buy add. Pure function."""
-    if prev_shares + add_shares == 0:
-        return 0.0
-    return round((prev_shares * prev_avg + add_shares * add_price) / (prev_shares + add_shares), 2)
+def _compute_new_avg(
+    *, prev_shares: float, prev_avg: float, kind: TradeKind, qty: float, price: float
+) -> float:
+    """Weighted "open price" of the position after the trade. Pure function.
+
+    Convention: `average_buy_price` (Holding) carries the cost basis of the
+    OPEN side regardless of direction.
+      - long  (shares > 0): weighted average of buys
+      - short (shares < 0): weighted average of opens (sell-to-open prices)
+
+    Direction transitions:
+      - extending an existing long via buy / extending an existing short via
+        sell  → weighted average against the new fill
+      - reducing a long via sell / reducing a short via buy   → avg unchanged
+        for the remaining position (realized P&L is implicit in cash delta)
+      - crossing zero (long → short via sell, short → long via buy) → avg
+        resets to the current fill price; only the new opening leg matters
+    """
+    if kind is TradeKind.BUY:
+        new_shares = prev_shares + qty
+        if prev_shares >= 0:
+            # opening or extending a long
+            denom = prev_shares + qty
+            if denom == 0:
+                return 0.0
+            return round((prev_shares * prev_avg + qty * price) / denom, 2)
+        # prev_shares < 0 — we're covering a short
+        if new_shares <= 0:
+            # still short (or exactly flat) — avg unchanged
+            return prev_avg
+        # crossed to long — reset basis to the fill price
+        return round(price, 2)
+
+    # SELL
+    new_shares = prev_shares - qty
+    if prev_shares <= 0:
+        # opening or extending a short — average open prices
+        prev_open = abs(prev_shares)
+        denom = prev_open + qty
+        if denom == 0:
+            return 0.0
+        return round((prev_open * prev_avg + qty * price) / denom, 2)
+    # prev_shares > 0 — we're reducing a long
+    if new_shares >= 0:
+        # still long (or exactly flat) — avg unchanged
+        return prev_avg
+    # crossed to short — reset basis to the fill price
+    return round(price, 2)
 
 
 async def execute_trade(
@@ -56,7 +99,12 @@ async def execute_trade(
 ) -> TradeOutcome:
     """Mutate cash + holding + insert trade in one transaction. The caller
     hydrates the Portfolio (cleaner DI for the web layer that already has
-    user_id + portfolio fetched)."""
+    user_id + portfolio fetched).
+
+    Shorting is allowed: a SELL beyond the held long opens (or extends) a
+    short position, materialised as a Holding with negative shares. A BUY
+    while short covers (and may flip back to long).
+    """
     if request.shares <= 0:
         raise TradeError("shares must be positive")
     if request.price <= 0:
@@ -66,17 +114,31 @@ async def execute_trade(
 
     total = round(request.shares * request.price, 2)
     held = await portfolio_repo.get_holding(portfolio_id=request.portfolio_id, player_id=request.player_id)
+    prev_shares = held.shares if held else 0.0
+    prev_avg = held.average_buy_price if held else 0.0
 
     if request.kind is TradeKind.BUY:
         if portfolio.cash < total:
             raise TradeError(f"insufficient cash: need €{total:.2f}M, have €{portfolio.cash:.2f}M")
-        new_shares = (held.shares if held else 0.0) + request.shares
-        new_avg = _new_average(
-            prev_shares=held.shares if held else 0.0,
-            prev_avg=held.average_buy_price if held else 0.0,
-            add_shares=request.shares,
-            add_price=request.price,
-        )
+        new_shares = prev_shares + request.shares
+        new_cash = round(portfolio.cash - total, 2)
+    else:  # SELL — including selling beyond holding (short) or while flat / already short
+        new_shares = prev_shares - request.shares
+        new_cash = round(portfolio.cash + total, 2)
+
+    new_avg = _compute_new_avg(
+        prev_shares=prev_shares,
+        prev_avg=prev_avg,
+        kind=request.kind,
+        qty=request.shares,
+        price=request.price,
+    )
+
+    if abs(new_shares) <= 1e-6:
+        # position fully closed
+        await portfolio_repo.delete_holding(portfolio_id=request.portfolio_id, player_id=request.player_id)
+        new_holding = None
+    else:
         new_holding = Holding(
             portfolio_id=request.portfolio_id,
             player_id=request.player_id,
@@ -84,24 +146,6 @@ async def execute_trade(
             average_buy_price=new_avg,
         )
         await portfolio_repo.upsert_holding(new_holding)
-        new_cash = round(portfolio.cash - total, 2)
-    else:  # SELL
-        if not held or held.shares < request.shares:
-            owned = held.shares if held else 0.0
-            raise TradeError(f"oversell: trying to sell {request.shares}, only own {owned}")
-        new_shares = held.shares - request.shares
-        if new_shares <= 1e-6:
-            await portfolio_repo.delete_holding(portfolio_id=request.portfolio_id, player_id=request.player_id)
-            new_holding = None
-        else:
-            new_holding = Holding(
-                portfolio_id=request.portfolio_id,
-                player_id=request.player_id,
-                shares=new_shares,
-                average_buy_price=held.average_buy_price,  # avg unchanged on sell
-            )
-            await portfolio_repo.upsert_holding(new_holding)
-        new_cash = round(portfolio.cash + total, 2)
 
     await portfolio_repo.update_cash(portfolio_id=request.portfolio_id, new_cash=new_cash)
 
