@@ -109,10 +109,31 @@ export function RightRail({ watchlist, on_open_player, on_open_match }: RightRai
                   onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.025)")}
                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                 >
-                  <PlayerChip jersey_number={p.jersey_number} team_color={team?.color ?? "#666"} size={28} />
+                  {p.image_path ? (
+                    <img
+                      src={p.image_path}
+                      alt={p.full_name ?? p.name}
+                      style={{
+                        width: 30,
+                        height: 30,
+                        borderRadius: 6,
+                        objectFit: "contain",
+                        background: "rgba(255,255,255,.05)",
+                        border: "1px solid rgba(255,255,255,.08)",
+                        flexShrink: 0,
+                      }}
+                    />
+                  ) : (
+                    <PlayerChip jersey_number={p.jersey_number} team_color={team?.color ?? "#666"} size={30} />
+                  )}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {p.name}
+                    <div style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0 }}>
+                      <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,.4)", flexShrink: 0 }}>
+                        {p.jersey_number}
+                      </span>
+                      <span style={{ fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
+                        {p.name}
+                      </span>
                     </div>
                     <div style={{ fontSize: 10, color: "rgba(255,255,255,.3)", display: "flex", alignItems: "center", gap: 4 }}>
                       <span>{team?.flag}</span>

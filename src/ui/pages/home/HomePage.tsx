@@ -1,19 +1,16 @@
 import { useMemo } from "react";
 import { matches_api } from "@/api/matches_api";
 import { players_api } from "@/api/players_api";
-import { portfolio_api } from "@/api/portfolio_api";
 import { teams_api } from "@/api/teams_api";
 import { leagues_api } from "@/api/leagues_api";
 import type { Match } from "@/domain/match/match";
 import type { Player } from "@/domain/player/player";
 import type { PlayerWithValuation } from "@/domain/market/player_valuation";
 import { LiveBadge } from "@/ui/components/LiveBadge";
-import { PerformanceChart } from "@/ui/components/PerformanceChart";
 import { PlayerChip } from "@/ui/components/PlayerChip";
 import { SectionHeader } from "@/ui/components/SectionHeader";
 import { Spark } from "@/ui/components/Spark";
-import { spark_for_player, spark_market_index } from "@/infrastructure/repositories/valuations_repository";
-import { fmt_eur_m, fmt_eur_m_signed } from "@/ui/helpers/format";
+import { spark_for_player } from "@/infrastructure/repositories/valuations_repository";
 import { news_api } from "@/api/news_api";
 
 function news_icon(type: "prematch" | "postmatch"): string {
@@ -34,65 +31,15 @@ interface HomePageProps {
 }
 
 export function HomePage({ on_open_player, on_navigate_tab, on_open_match }: HomePageProps) {
-  const totals = portfolio_api.get_totals();
-  const holdings_count = portfolio_api.get_holdings().length;
   const live = matches_api.get_live_match();
   const upcoming = matches_api.list_fixtures().filter(f => f.status === "upcoming").slice(0, 3);
   const my_leagues = leagues_api.list();
 
-  const top_up = useMemo(() => players_api.top_movers(3, "up"), []);
-  const top_down = useMemo(() => players_api.top_movers(3, "down"), []);
-  const hero_chart_data = useMemo(
-    () => spark_market_index(60).map(v => ({ v })),
-    [],
-  );
+  const top_up = useMemo(() => players_api.top_movers(5, "up"), []);
+  const top_down = useMemo(() => players_api.top_movers(5, "down"), []);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24, animation: "fu .3s ease" }}>
-      {/* Portfolio hero */}
-      <div
-        style={{
-          background: "rgba(255,255,255,.025)",
-          border: "1px solid rgba(255,255,255,.06)",
-          borderRadius: 14,
-          overflow: "hidden",
-        }}
-      >
-        <SectionHeader
-          title="Portfolio"
-          cta="Open →"
-          on_cta={() => on_navigate_tab("portfolio")}
-        />
-        <div
-          onClick={() => on_navigate_tab("portfolio")}
-          style={{
-            padding: "18px 22px",
-            cursor: "pointer",
-            display: "grid",
-            gridTemplateColumns: "1fr 2fr",
-            gap: 24,
-            alignItems: "center",
-          }}
-        >
-          <div>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 4 }}>
-              <span className="mono" style={{ fontSize: 36, fontWeight: 900, letterSpacing: -1.5 }}>
-                {fmt_eur_m(totals.total_value)}
-              </span>
-              <span className={"ch " + (totals.return_pct >= 0 ? "cu" : "cn")} style={{ fontSize: 13 }}>
-                {totals.return_pct >= 0 ? "+" : ""}{totals.return_pct.toFixed(1)}%
-              </span>
-            </div>
-            <div style={{ fontSize: 12, color: "rgba(255,255,255,.4)", marginBottom: 14 }}>
-              P&L {fmt_eur_m_signed(totals.pnl)} · Cash {fmt_eur_m(totals.cash)} · {holdings_count} holdings
-            </div>
-          </div>
-          <div style={{ height: 130 }}>
-            <PerformanceChart data={hero_chart_data} width={520} height={130} />
-          </div>
-        </div>
-      </div>
-
       {/* Match Center + Leagues */}
       <div style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: 16 }}>
         {/* Match Center */}
@@ -208,7 +155,6 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match }: Hom
                   onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.02)")}
                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                 >
-                  <span style={{ fontSize: 22 }}>{l.icon}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 700 }}>{l.name}</div>
                     <div style={{ fontSize: 10, color: "rgba(255,255,255,.3)" }}>
@@ -216,7 +162,7 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match }: Hom
                     </div>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <div className="mono" style={{ fontSize: 16, fontWeight: 800 }}>#{me.rank}</div>
+                    <div className="mono" style={{ fontSize: 16, fontWeight: 800 }}>{me.rank}</div>
                     <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: me.return_pct >= 0 ? "#216c6e" : "#E41541" }}>
                       {me.return_pct >= 0 ? "+" : ""}{me.return_pct}%
                     </div>
@@ -398,10 +344,31 @@ function MoversColumn({
             onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.025)")}
             onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
           >
-            <PlayerChip jersey_number={p.jersey_number} team_color={team?.color ?? "#666"} size={32} />
+            {p.image_path ? (
+              <img
+                src={p.image_path}
+                alt={p.full_name ?? p.name}
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 7,
+                  objectFit: "contain",
+                  background: "rgba(255,255,255,.05)",
+                  border: "1px solid rgba(255,255,255,.08)",
+                  flexShrink: 0,
+                }}
+              />
+            ) : (
+              <PlayerChip jersey_number={p.jersey_number} team_color={team?.color ?? "#666"} size={34} />
+            )}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {p.name}
+              <div style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0 }}>
+                <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,.4)", flexShrink: 0 }}>
+                  {p.jersey_number}
+                </span>
+                <span style={{ fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
+                  {p.name}
+                </span>
               </div>
               <div style={{ fontSize: 10, color: "rgba(255,255,255,.3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "flex", alignItems: "center", gap: 4 }}>
                 <span>{team?.flag}</span>

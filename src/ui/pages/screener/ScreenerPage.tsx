@@ -6,10 +6,12 @@ import type { Player, Position } from "@/domain/player/player";
 import { POSITION_LABEL } from "@/domain/player/player";
 import { PlayerChip } from "@/ui/components/PlayerChip";
 import { PositionBadge } from "@/ui/components/PositionBadge";
+import { Spark } from "@/ui/components/Spark";
 import {
   screener_repository,
   type ScreenerEntry,
 } from "@/infrastructure/repositories/screener_repository";
+import { spark_for_player } from "@/infrastructure/repositories/valuations_repository";
 import { price_label } from "@/ui/helpers/format";
 import { toggle_set } from "@/ui/helpers/state";
 import { position_color } from "@/ui/design/tokens";
@@ -47,11 +49,14 @@ type SortKey =
   | "height"
   | "weight";
 
+type ColumnKey = SortKey | "spark";
+
 interface ColumnDef {
-  key: SortKey;
+  key: ColumnKey;
   label: string;
   width: string;
   align?: "left" | "center" | "right";
+  sortable?: boolean; // defaults to true; spark is false
 }
 
 // Variable columns by tab. The identity block (★ + Player + Team + Pos +
@@ -60,9 +65,10 @@ interface ColumnDef {
 // dataset is unchanged; column visibility is purely cosmetic).
 const TABS: Record<Tab, ColumnDef[]> = {
   valuation: [
-    { key: "since_start", label: "All-time", width: "85px", align: "right" },
-    { key: "last_match", label: "Last Match", width: "95px", align: "right" },
-    { key: "avg_match", label: "Avg / Match", width: "100px", align: "right" },
+    { key: "since_start", label: "All-time", width: "75px", align: "right" },
+    { key: "last_match", label: "Last Match", width: "85px", align: "right" },
+    { key: "avg_match", label: "Avg / Match", width: "90px", align: "right" },
+    { key: "spark", label: "Trend", width: "100px", align: "left", sortable: false },
   ],
   statistics: [
     { key: "appearances", label: "Apps", width: "50px", align: "right" },
@@ -83,9 +89,9 @@ const TABS: Record<Tab, ColumnDef[]> = {
 const STAR_W = 28;
 const PLAYER_W = 210;
 const TEAM_W = 115;
-const POS_W = 45;
-const VALUE_W = 75;
-const ROW_GAP = 6;
+const POS_W = 60;
+const VALUE_W = 80;
+const ROW_GAP = 8;
 
 interface ScreenerPageProps {
   on_open_player: (player: Player) => void;
@@ -107,6 +113,15 @@ export function ScreenerPage({ on_open_player, watchlist, toggle_watch }: Screen
   const all_team_ids = useMemo(
     () => Array.from(new Set(all_entries.map(e => e.team_id))),
     [all_entries],
+  );
+  const sorted_team_ids = useMemo(
+    () =>
+      [...all_team_ids].sort((a, b) => {
+        const na = teams_api.get(a)?.name ?? a;
+        const nb = teams_api.get(b)?.name ?? b;
+        return na.localeCompare(nb);
+      }),
+    [all_team_ids],
   );
   const my_holdings = useMemo(() => portfolio_api.get_holdings(), []);
   const held_ids = useMemo(() => new Set(my_holdings.map(h => h.player_id)), [my_holdings]);
@@ -224,140 +239,142 @@ export function ScreenerPage({ on_open_player, watchlist, toggle_watch }: Screen
         </div>
       </div>
 
-      {/* Collapsible top filter bar (3 horizontal sections, hidden by default) */}
+      {/* Filter panel: header (title + Reset on right) then Position+Price
+          on a row, then all teams alphabetically as a single flat list. */}
       {show_filters && (
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(180px, auto) minmax(220px, auto) 1fr",
-            gap: 24,
+            display: "flex",
+            flexDirection: "column",
+            gap: 14,
             padding: "14px 16px",
             background: "rgba(255,255,255,.02)",
             border: "1px solid rgba(255,255,255,.04)",
             borderRadius: 12,
           }}
         >
-          {/* Position */}
-          <div>
-            <FilterLabel>Position</FilterLabel>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {(["FW", "MF", "DF", "GK"] as Position[]).map(p => {
-                const on = position_filters.has(p);
-                return (
-                  <button
-                    key={p}
-                    onClick={() => toggle_set(position_filters, set_position_filters, p)}
-                    style={{
-                      padding: "6px 10px",
-                      borderRadius: 8,
-                      fontSize: 12,
-                      fontWeight: on ? 700 : 500,
-                      border: on ? "1px solid rgba(255,255,255,.18)" : "1px solid rgba(255,255,255,.06)",
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                      background: on ? position_color[p] + "18" : "rgba(255,255,255,.02)",
-                      color: on ? "#fff" : "rgba(255,255,255,.4)",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                    }}
-                  >
-                    <div style={{ width: 6, height: 6, borderRadius: 2, background: position_color[p], opacity: on ? 1 : 0.4 }} />
-                    {POSITION_LABEL[p]}
-                  </button>
-                );
-              })}
-            </div>
+          {/* Header — title left + Reset all right (always rendered) */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,.55)", letterSpacing: 0.5, textTransform: "uppercase" }}>
+              Filters
+            </span>
+            <button
+              onClick={() => {
+                set_position_filters(new Set());
+                set_team_filters(new Set());
+                set_price_range([0, 999]);
+              }}
+              disabled={!has_filters}
+              style={{
+                background: has_filters ? "rgba(255,255,255,.04)" : "transparent",
+                border: "1px solid rgba(255,255,255,.06)",
+                color: has_filters ? "rgba(255,255,255,.7)" : "rgba(255,255,255,.2)",
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: has_filters ? "pointer" : "default",
+                fontFamily: "inherit",
+                padding: "5px 12px",
+                borderRadius: 6,
+              }}
+            >
+              Reset all{has_filters ? ` (${active_count})` : ""}
+            </button>
           </div>
 
-          {/* Price range */}
-          <div>
-            <FilterLabel>Price range</FilterLabel>
-            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-              {([[0, 30], [30, 60], [60, 100], [100, 150], [150, 999]] as [number, number][]).map(([lo, hi]) => {
-                const active = price_range[0] === lo && price_range[1] === hi;
-                return (
-                  <button
-                    key={lo}
-                    onClick={() => set_price_range(active ? [0, 999] : [lo, hi])}
-                    style={{
-                      padding: "6px 10px",
-                      borderRadius: 6,
-                      fontSize: 12,
-                      fontWeight: active ? 700 : 500,
-                      border: "1px solid " + (active ? "rgba(255,255,255,.18)" : "rgba(255,255,255,.06)"),
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                      background: active ? "rgba(255,255,255,.06)" : "transparent",
-                      color: active ? "#fff" : "rgba(255,255,255,.4)",
-                    }}
-                  >
-                    {price_label(lo)}–{price_label(hi)}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Teams */}
-          <div style={{ minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-              <FilterLabel inline>
-                Team {team_filters.size > 0 ? `(${team_filters.size})` : ""}
-              </FilterLabel>
-              {has_filters && (
-                <button
-                  onClick={() => {
-                    set_position_filters(new Set());
-                    set_team_filters(new Set());
-                    set_price_range([0, 999]);
-                  }}
-                  style={{
-                    background: "transparent",
-                    border: "none",
-                    color: "rgba(255,255,255,.45)",
-                    fontSize: 11,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                    padding: 0,
-                  }}
-                >
-                  Reset all
-                </button>
-              )}
-            </div>
-            <div style={{ maxHeight: 110, overflowY: "auto", display: "flex", flexWrap: "wrap", gap: 4 }}>
-              {CONFEDERATIONS.flatMap(conf => {
-                const teams_in_conf = all_team_ids.filter(id => teams_api.get(id)?.confederation === conf.code);
-                return teams_in_conf.map(id => {
-                  const team = teams_api.get(id);
-                  if (!team) return null;
-                  const on = team_filters.has(id);
+          {/* Position + Price on one row */}
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 28, flexWrap: "wrap" }}>
+            <div>
+              <FilterLabel>Position</FilterLabel>
+              <div style={{ display: "flex", gap: 6 }}>
+                {(["FW", "MF", "DF", "GK"] as Position[]).map(p => {
+                  const on = position_filters.has(p);
                   return (
                     <button
-                      key={id}
-                      onClick={() => toggle_set(team_filters, set_team_filters, id)}
+                      key={p}
+                      onClick={() => toggle_set(position_filters, set_position_filters, p)}
                       style={{
-                        padding: "4px 8px",
-                        borderRadius: 5,
-                        fontSize: 11,
-                        fontWeight: on ? 700 : 500,
-                        border: "1px solid " + (on ? "rgba(255,255,255,.18)" : "rgba(255,255,255,.06)"),
+                        padding: "6px 10px",
+                        borderRadius: 8,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        border: on ? "1px solid rgba(255,255,255,.22)" : "1px solid rgba(255,255,255,.06)",
                         cursor: "pointer",
                         fontFamily: "inherit",
-                        background: on ? "rgba(255,255,255,.06)" : "transparent",
-                        color: on ? "#fff" : "rgba(255,255,255,.5)",
+                        background: on ? position_color[p] + "22" : "rgba(255,255,255,.02)",
+                        color: on ? "#fff" : "rgba(255,255,255,.4)",
                         display: "flex",
                         alignItems: "center",
-                        gap: 5,
+                        gap: 6,
                       }}
                     >
-                      <span style={{ fontSize: 12 }}>{team.flag}</span>
-                      <span>{team.name}</span>
+                      <div style={{ width: 6, height: 6, borderRadius: 2, background: position_color[p], opacity: on ? 1 : 0.4 }} />
+                      {POSITION_LABEL[p]}
                     </button>
                   );
-                });
+                })}
+              </div>
+            </div>
+
+            <div>
+              <FilterLabel>Price range</FilterLabel>
+              <div style={{ display: "flex", gap: 4 }}>
+                {([[0, 30], [30, 60], [60, 100], [100, 150], [150, 999]] as [number, number][]).map(([lo, hi]) => {
+                  const active = price_range[0] === lo && price_range[1] === hi;
+                  return (
+                    <button
+                      key={lo}
+                      onClick={() => set_price_range(active ? [0, 999] : [lo, hi])}
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 6,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        border: "1px solid " + (active ? "rgba(255,255,255,.22)" : "rgba(255,255,255,.06)"),
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                        background: active ? "rgba(255,255,255,.08)" : "transparent",
+                        color: active ? "#fff" : "rgba(255,255,255,.4)",
+                      }}
+                    >
+                      {price_label(lo)}–{price_label(hi)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Teams — flat alphabetical list, no confederation grouping */}
+          <div>
+            <FilterLabel>Teams</FilterLabel>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+              {sorted_team_ids.map(id => {
+                const team = teams_api.get(id);
+                if (!team) return null;
+                const on = team_filters.has(id);
+                return (
+                  <button
+                    key={id}
+                    onClick={() => toggle_set(team_filters, set_team_filters, id)}
+                    style={{
+                      padding: "4px 8px",
+                      borderRadius: 5,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      border: "1px solid " + (on ? "rgba(255,255,255,.22)" : "rgba(255,255,255,.06)"),
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                      background: on ? "rgba(255,255,255,.08)" : "transparent",
+                      color: on ? "#fff" : "rgba(255,255,255,.55)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 5,
+                    }}
+                  >
+                    <span style={{ fontSize: 12 }}>{team.flag}</span>
+                    <span>{team.name}</span>
+                  </button>
+                );
               })}
             </div>
           </div>
@@ -426,7 +443,7 @@ export function ScreenerPage({ on_open_player, watchlist, toggle_watch }: Screen
             <ColumnHeader
               key={c.key}
               label={c.label}
-              sort_key={c.key}
+              sort_key={c.key === "spark" ? null : c.key}
               current={sort_key}
               dir={sort_dir}
               on_select={set_sort}
@@ -586,9 +603,11 @@ function Row({
               </span>
             )}
           </div>
-          <div style={{ fontSize: 11, color: "rgba(255,255,255,.25)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {e.club ?? "—"}
-          </div>
+          {e.club && (
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,.25)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {e.club}
+            </div>
+          )}
         </div>
       </div>
       <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "rgba(255,255,255,.55)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
@@ -600,7 +619,7 @@ function Row({
         <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{team_name}</span>
       </span>
       <PositionBadge position={e.position as Position} />
-      <span className="mono" style={{ fontWeight: 700, textAlign: "right", whiteSpace: "nowrap" }}>
+      <span className="mono" style={{ fontWeight: 700, textAlign: "right", whiteSpace: "nowrap", display: "block" }}>
         €{e.current_price.toFixed(2)}M
       </span>
       {columns.map(c => (
@@ -675,8 +694,11 @@ function ScreenerCell({ entry: e, column: c }: { entry: ScreenerEntry; column: C
     whiteSpace: "nowrap",
     overflow: "hidden",
     textOverflow: "ellipsis",
+    display: "block",
   };
   switch (c.key) {
+    case "spark":
+      return <Spark data={spark_for_player(e.id)} width={96} height={22} />;
     case "pnl":
       return (
         <span
@@ -770,18 +792,19 @@ function ColumnHeader({
   align = "left",
 }: {
   label: string;
-  sort_key: SortKey;
+  sort_key: SortKey | null;
   current: SortKey;
   dir: SortDir;
   on_select: (k: SortKey) => void;
   align?: "left" | "center" | "right";
 }) {
-  const active = current === sort_key;
+  const sortable = sort_key !== null;
+  const active = sortable && current === sort_key;
   return (
     <span
-      onClick={() => on_select(sort_key)}
+      onClick={sortable ? () => on_select(sort_key) : undefined}
       style={{
-        cursor: "pointer",
+        cursor: sortable ? "pointer" : "default",
         userSelect: "none",
         color: active ? "#fff" : undefined,
         textAlign: align,

@@ -3,11 +3,13 @@ import { fmt_eur_m, fmt_eur_m_signed } from "@/ui/helpers/format";
 
 interface PortfolioBarProps {
   totals: PortfolioTotals;
+  holdings_count: number;
   on_click: () => void;
 }
 
-export function PortfolioBar({ totals, on_click }: PortfolioBarProps) {
-  const { total_value, pnl, return_pct } = totals;
+export function PortfolioBar({ totals, holdings_count, on_click }: PortfolioBarProps) {
+  const { total_value, cash, pnl, return_pct } = totals;
+  const up = pnl >= 0;
   return (
     <div
       onClick={on_click}
@@ -26,14 +28,14 @@ export function PortfolioBar({ totals, on_click }: PortfolioBarProps) {
         cursor: "pointer",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
         <div
           style={{
             width: 5,
             height: 5,
             borderRadius: 3,
-            background: pnl >= 0 ? "#216c6e" : "#E41541",
-            boxShadow: `0 0 6px ${pnl >= 0 ? "rgba(55,255,99,.4)" : "rgba(255,40,93,.4)"}`,
+            background: up ? "#216c6e" : "#E41541",
+            boxShadow: `0 0 6px ${up ? "rgba(55,255,99,.4)" : "rgba(255,40,93,.4)"}`,
           }}
         />
         <span style={{ fontSize: 11, color: "rgba(255,255,255,.35)", fontWeight: 600, letterSpacing: 0.3 }}>
@@ -47,26 +49,36 @@ export function PortfolioBar({ totals, on_click }: PortfolioBarProps) {
           style={{
             fontSize: 12,
             fontWeight: 700,
-            color: return_pct >= 0 ? "#216c6e" : "#E41541",
+            color: up ? "#216c6e" : "#E41541",
           }}
         >
           {return_pct >= 0 ? "+" : ""}
           {return_pct.toFixed(1)}%
         </span>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <span
-          className="mono"
-          style={{
-            fontSize: 12,
-            color: pnl >= 0 ? "#216c6e" : "#E41541",
-            fontWeight: 600,
-          }}
-        >
-          P&L {fmt_eur_m_signed(pnl)}
-        </span>
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <Stat label="Cash" value={fmt_eur_m(cash)} />
+        <Stat label="Holdings" value={String(holdings_count)} />
+        <Stat
+          label="P&L"
+          value={fmt_eur_m_signed(pnl)}
+          color={up ? "#216c6e" : "#E41541"}
+        />
         <span style={{ fontSize: 11, color: "rgba(255,255,255,.2)" }}>◈</span>
       </div>
     </div>
+  );
+}
+
+function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "baseline", gap: 5 }}>
+      <span style={{ fontSize: 10, color: "rgba(255,255,255,.35)", fontWeight: 600, letterSpacing: 0.3, textTransform: "uppercase" }}>
+        {label}
+      </span>
+      <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: color ?? "#fff" }}>
+        {value}
+      </span>
+    </span>
   );
 }

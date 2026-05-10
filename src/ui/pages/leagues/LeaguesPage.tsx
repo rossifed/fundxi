@@ -275,12 +275,9 @@ export function LeaguesPage() {
               padding: "16px 18px",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
-              <span style={{ fontSize: 32 }}>{league.icon}</span>
-              <div>
-                <div style={{ fontSize: 16, fontWeight: 800 }}>{league.name}</div>
-                <div style={{ fontSize: 12, color: "rgba(255,255,255,.45)" }}>{league.description}</div>
-              </div>
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 16, fontWeight: 800 }}>{league.name}</div>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,.45)" }}>{league.description}</div>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,.04)" }}>
               <span style={{ color: "rgba(255,255,255,.35)" }}>
@@ -312,7 +309,7 @@ export function LeaguesPage() {
                     Your rank
                   </div>
                   <div className="mono" style={{ fontSize: 28, fontWeight: 900, marginTop: 2 }}>
-                    #{me.rank}
+                    {me.rank}
                     <span style={{ fontSize: 13, color: "rgba(255,255,255,.35)", fontWeight: 500 }}> / {league.member_count}</span>
                   </div>
                 </div>
@@ -422,7 +419,7 @@ export function LeaguesPage() {
               }}
             >
               <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,.35)" }}>
-                #{entry.rank}
+                {entry.rank}
               </span>
               <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 16 }}>{entry.avatar}</span>
