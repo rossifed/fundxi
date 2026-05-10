@@ -424,7 +424,7 @@ function PitchSvg({
             {players.map(p => {
               const change = player_changes[p.id] ?? 0;
               const sel = picked?.id === p.id;
-              const change_color = change > 0 ? "#37ff63" : change < 0 ? "#ff285d" : "rgba(255,255,255,.3)";
+              const change_color = change > 0 ? "#216c6e" : change < 0 ? "#E41541" : "rgba(255,255,255,.3)";
               const yT = p.y / 100;
               const lx = lerp(fTL.x, fBL.x, yT);
               const rx = lerp(fTR.x, fBR.x, yT);
@@ -553,7 +553,7 @@ function SportmonksCommentary({
     <div style={{ padding: "8px" }}>
       {comments.map(c => {
         const minute_label = c.extra_minute ? `${c.minute}+${c.extra_minute}'` : `${c.minute}'`;
-        const accent = c.is_goal ? "#37ff63" : c.is_important ? "rgba(255,255,255,.55)" : "rgba(255,255,255,.25)";
+        const accent = c.is_goal ? "#216c6e" : c.is_important ? "rgba(255,255,255,.55)" : "rgba(255,255,255,.25)";
         return (
           <div
             key={c.id}
@@ -603,7 +603,7 @@ function _UnusedCommentaryFeed({
       {events.map((ev, i) => {
         const importance =
           ev.type === "⚽"
-            ? "#37ff63"
+            ? "#216c6e"
             : ev.type === "🟨"
               ? "rgba(255,255,255,.5)"
               : "rgba(255,255,255,.35)";
@@ -690,7 +690,7 @@ function PickedPlayerPanel({
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
         <Stat label="Value" value={`€${pitch_player.value}M`} />
-        <Stat label="In-game" value={`${in_match_change >= 0 ? "+" : ""}${in_match_change}%`} color={in_match_change >= 0 ? "#37ff63" : "#ff285d"} />
+        <Stat label="In-game" value={`${in_match_change >= 0 ? "+" : ""}${in_match_change}%`} color={in_match_change >= 0 ? "#216c6e" : "#E41541"} />
         <Stat label="Rating" value={String(pitch_player.rating)} color="rgba(255,255,255,.7)" />
       </div>
 
@@ -721,7 +721,7 @@ function PickedPlayerPanel({
             fontSize: 13,
             fontWeight: 800,
             borderRadius: 9,
-            background: "linear-gradient(135deg,#22c55e,#16a34a)",
+            background: "linear-gradient(135deg,#216c6e,#16a34a)",
             color: "#fff",
             border: "none",
             cursor: "pointer",
@@ -740,7 +740,7 @@ function PickedPlayerPanel({
             fontWeight: 800,
             borderRadius: 9,
             background: "rgba(255,40,93,.1)",
-            color: "#ff285d",
+            color: "#E41541",
             border: "1px solid rgba(255,40,93,.25)",
             cursor: "pointer",
             fontFamily: "inherit",
@@ -821,7 +821,7 @@ function PlayerRow({
         <div style={{ fontSize: 10, color: "rgba(255,255,255,.3)" }}>{subtitle}</div>
       </div>
       <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,.5)" }}>€{value}M</span>
-      <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: change >= 0 ? "#37ff63" : "#ff285d", minWidth: 36, textAlign: "right" }}>
+      <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: change >= 0 ? "#216c6e" : "#E41541", minWidth: 36, textAlign: "right" }}>
         {change >= 0 ? "+" : ""}{change}%
       </span>
       <span

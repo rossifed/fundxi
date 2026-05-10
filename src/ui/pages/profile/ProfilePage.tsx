@@ -69,7 +69,7 @@ export function ProfilePage({ on_navigate_tab }: ProfilePageProps) {
             padding: "8px 16px", borderRadius: 10, fontSize: 13, fontWeight: 600,
             border: "1px solid rgba(255,255,255,.06)",
             background: edit_mode ? "rgba(55,255,99,.12)" : "rgba(255,255,255,.04)",
-            color: edit_mode ? "#37ff63" : "rgba(255,255,255,.35)",
+            color: edit_mode ? "#216c6e" : "rgba(255,255,255,.35)",
             cursor: "pointer", fontFamily: "inherit",
           }}
         >
@@ -130,7 +130,7 @@ export function ProfilePage({ on_navigate_tab }: ProfilePageProps) {
                       padding: "7px 12px", borderRadius: 8, fontSize: 12, fontWeight: on ? 700 : 500,
                       border: on ? "1px solid rgba(55,255,99,.3)" : "1px solid rgba(255,255,255,.05)",
                       background: on ? "rgba(55,255,99,.15)" : "rgba(255,255,255,.02)",
-                      color: on ? "#37ff63" : "rgba(255,255,255,.35)",
+                      color: on ? "#216c6e" : "rgba(255,255,255,.35)",
                       cursor: "pointer", fontFamily: "inherit",
                       display: "flex", alignItems: "center", gap: 4, minHeight: 36,
                     }}
@@ -157,10 +157,10 @@ export function ProfilePage({ on_navigate_tab }: ProfilePageProps) {
           {[
             { label: "Joined", value: TRADING_STATS.joined },
             { label: "Trades", value: String(TRADING_STATS.trades) },
-            { label: "Win Rate", value: TRADING_STATS.win_rate, color: "#37ff63" },
-            { label: "Best Trade", value: TRADING_STATS.best_trade, color: "#37ff63" },
+            { label: "Win Rate", value: TRADING_STATS.win_rate, color: "#216c6e" },
+            { label: "Best Trade", value: TRADING_STATS.best_trade, color: "#216c6e" },
             { label: "Streak", value: TRADING_STATS.streak, color: "rgba(255,255,255,.5)" },
-            { label: "Leagues", value: TRADING_STATS.leagues, color: "#37ff63" },
+            { label: "Leagues", value: TRADING_STATS.leagues, color: "#216c6e" },
           ].map((s, i) => (
             <div key={i} style={{ background: "rgba(255,255,255,.02)", borderRadius: 10, padding: "10px", textAlign: "center" }}>
               <div style={{ fontSize: 11, color: "rgba(255,255,255,.25)" }}>{s.label}</div>
@@ -206,7 +206,7 @@ export function ProfilePage({ on_navigate_tab }: ProfilePageProps) {
           onClick={() => on_navigate_tab("leagues")}
           style={{
             width: "100%", padding: "14px 0", fontSize: 13, fontWeight: 700, borderRadius: 12,
-            background: "rgba(55,255,99,.08)", color: "#37ff63",
+            background: "rgba(55,255,99,.08)", color: "#216c6e",
             border: "1px solid rgba(55,255,99,.12)", cursor: "pointer", fontFamily: "inherit",
           }}
         >

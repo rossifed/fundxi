@@ -131,12 +131,12 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
         <KpiCard
           label="P&L"
           value={fmt_eur_m_signed(pnl)}
-          color={pnl >= 0 ? "#37ff63" : "#ff285d"}
+          color={pnl >= 0 ? "#216c6e" : "#E41541"}
         />
         <KpiCard
           label="Return"
           value={`${return_pct >= 0 ? "+" : ""}${return_pct.toFixed(1)}%`}
-          color={return_pct >= 0 ? "#37ff63" : "#ff285d"}
+          color={return_pct >= 0 ? "#216c6e" : "#E41541"}
         />
         <KpiCard label="Players" value={String(holdings.length)} />
       </div>
@@ -155,7 +155,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
             <div style={{ fontSize: 14, fontWeight: 800 }}>Performance</div>
             <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", marginTop: 2 }}>Since tournament start</div>
           </div>
-          <span className="mono" style={{ fontSize: 18, fontWeight: 800, color: period_return >= 0 ? "#37ff63" : "#ff285d" }}>
+          <span className="mono" style={{ fontSize: 18, fontWeight: 800, color: period_return >= 0 ? "#216c6e" : "#E41541" }}>
             {period_return >= 0 ? "+" : ""}{period_return.toFixed(1)}%
           </span>
         </div>
@@ -282,7 +282,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                     style={{
                       textAlign: "right",
                       fontWeight: 700,
-                      color: h.pnl >= 0 ? "#37ff63" : "#ff285d",
+                      color: h.pnl >= 0 ? "#216c6e" : "#E41541",
                     }}
                   >
                     {h.pnl >= 0 ? "+" : ""}{h.return_pct.toFixed(1)}%
@@ -341,7 +341,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                         padding: "3px 8px",
                         borderRadius: 4,
                         background: is_buy ? "rgba(34,197,94,.1)" : "rgba(255,40,93,.1)",
-                        color: is_buy ? "#37ff63" : "#ff285d",
+                        color: is_buy ? "#216c6e" : "#E41541",
                         textAlign: "center",
                         letterSpacing: 0.5,
                         width: "fit-content",
@@ -527,7 +527,7 @@ function ExposureView({ total_value }: { total_value: number }) {
             justifyContent: "center",
           }}
         >
-          <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: "#37ff63" }}>📈 {long_pct}%</span>
+          <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: "#216c6e" }}>📈 {long_pct}%</span>
         </div>
         <div
           style={{
@@ -538,12 +538,12 @@ function ExposureView({ total_value }: { total_value: number }) {
             justifyContent: "center",
           }}
         >
-          <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: "#ff285d" }}>📉 {short_pct}%</span>
+          <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: "#E41541" }}>📉 {short_pct}%</span>
         </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-        <ExposureCell label="Long" value={fmt_eur_m(long_value)} color="#37ff63" />
-        <ExposureCell label="Short" value={fmt_eur_m(short_value)} color="#ff285d" />
+        <ExposureCell label="Long" value={fmt_eur_m(long_value)} color="#216c6e" />
+        <ExposureCell label="Short" value={fmt_eur_m(short_value)} color="#E41541" />
         <ExposureCell label="Net" value={fmt_eur_m_signed(net_exposure)} color="rgba(255,255,255,.7)" />
       </div>
       <div style={{ marginTop: 14, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,.05)" }}>

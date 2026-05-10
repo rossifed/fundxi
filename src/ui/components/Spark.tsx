@@ -20,7 +20,8 @@ export function Spark({ data, color, width = 60, height = 20 }: SparkProps) {
     <svg width={width} height={height} style={{ display: "block" }}>
       <defs>
         <linearGradient id={gradient_id} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity=".2" />
+          <stop offset="0%" stopColor={color} stopOpacity="1" />
+          <stop offset="10%" stopColor={color} stopOpacity="1" />
           <stop offset="100%" stopColor={color} stopOpacity="0" />
         </linearGradient>
       </defs>

@@ -51,7 +51,7 @@ export function LeaguesPage() {
               }}
             >
               <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", marginBottom: 4, letterSpacing: 0.5 }}>INVITE CODE</div>
-              <div className="mono" style={{ fontSize: 28, fontWeight: 800, color: "#37ff63", letterSpacing: 3 }}>
+              <div className="mono" style={{ fontSize: 28, fontWeight: 800, color: "#216c6e", letterSpacing: 3 }}>
                 {created.code}
               </div>
             </div>
@@ -114,7 +114,7 @@ export function LeaguesPage() {
                 fontSize: 13,
                 fontWeight: 700,
                 borderRadius: 10,
-                background: create_name.trim() ? "linear-gradient(135deg,#37ff63,#00c853)" : "rgba(255,255,255,.04)",
+                background: create_name.trim() ? "linear-gradient(135deg,#216c6e,#00c853)" : "rgba(255,255,255,.04)",
                 color: create_name.trim() ? "#fff" : "rgba(255,255,255,.2)",
                 border: "none",
                 cursor: create_name.trim() ? "pointer" : "default",
@@ -179,7 +179,7 @@ export function LeaguesPage() {
             fontSize: 13,
             fontWeight: 700,
             borderRadius: 10,
-            background: join_code.length >= 4 ? "linear-gradient(135deg,#22c55e,#16a34a)" : "rgba(255,255,255,.04)",
+            background: join_code.length >= 4 ? "linear-gradient(135deg,#216c6e,#16a34a)" : "rgba(255,255,255,.04)",
             color: join_code.length >= 4 ? "#fff" : "rgba(255,255,255,.2)",
             border: "none",
             cursor: join_code.length >= 4 ? "pointer" : "default",
@@ -287,7 +287,7 @@ export function LeaguesPage() {
                 {league.member_count} {league.is_public ? "players" : "members"}
               </span>
               {!league.is_public && league.invite_code && (
-                <span className="mono" style={{ color: "#37ff63", fontWeight: 700 }}>{league.invite_code}</span>
+                <span className="mono" style={{ color: "#216c6e", fontWeight: 700 }}>{league.invite_code}</span>
               )}
             </div>
           </div>
@@ -318,7 +318,7 @@ export function LeaguesPage() {
                 </div>
               </div>
               <div style={{ textAlign: "right" }}>
-                <div className="mono" style={{ fontSize: 18, fontWeight: 800, color: me.return_pct >= 0 ? "#37ff63" : "#ff285d" }}>
+                <div className="mono" style={{ fontSize: 18, fontWeight: 800, color: me.return_pct >= 0 ? "#216c6e" : "#E41541" }}>
                   {me.return_pct >= 0 ? "+" : ""}{me.return_pct}%
                 </div>
                 <div className="mono" style={{ fontSize: 12, color: "rgba(255,255,255,.45)", marginTop: 2 }}>
@@ -356,9 +356,9 @@ export function LeaguesPage() {
                   <div style={{ fontSize: 18, marginTop: 4 }}>{entry.avatar}</div>
                   <div style={{ fontSize: 12, fontWeight: 700, marginTop: 4 }}>
                     {entry.name}
-                    {entry.is_me && <div style={{ fontSize: 10, color: "#37ff63", fontWeight: 700 }}>(you)</div>}
+                    {entry.is_me && <div style={{ fontSize: 10, color: "#216c6e", fontWeight: 700 }}>(you)</div>}
                   </div>
-                  <div className="mono" style={{ fontSize: 13, fontWeight: 800, color: entry.return_pct >= 0 ? "#37ff63" : "#ff285d", marginTop: 4 }}>
+                  <div className="mono" style={{ fontSize: 13, fontWeight: 800, color: entry.return_pct >= 0 ? "#216c6e" : "#E41541", marginTop: 4 }}>
                     {entry.return_pct > 0 ? "+" : ""}{entry.return_pct}%
                   </div>
                 </div>
@@ -428,13 +428,13 @@ export function LeaguesPage() {
                 <span style={{ fontSize: 16 }}>{entry.avatar}</span>
                 <span style={{ fontWeight: entry.is_me ? 700 : 500 }}>
                   {entry.name}
-                  {entry.is_me && <span style={{ fontSize: 10, color: "#37ff63", marginLeft: 6, fontWeight: 700 }}>YOU</span>}
+                  {entry.is_me && <span style={{ fontSize: 10, color: "#216c6e", marginLeft: 6, fontWeight: 700 }}>YOU</span>}
                 </span>
               </span>
               <span className="mono" style={{ textAlign: "right", color: "rgba(255,255,255,.55)" }}>
                 €{entry.value.toLocaleString()}
               </span>
-              <span className="mono" style={{ textAlign: "right", fontWeight: 700, color: entry.return_pct >= 0 ? "#37ff63" : "#ff285d" }}>
+              <span className="mono" style={{ textAlign: "right", fontWeight: 700, color: entry.return_pct >= 0 ? "#216c6e" : "#E41541" }}>
                 {entry.return_pct >= 0 ? "+" : ""}{entry.return_pct}%
               </span>
             </div>

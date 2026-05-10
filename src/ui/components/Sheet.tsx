@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ambient_gradient } from "@/ui/design/tokens";
 
 interface SheetProps {
   open: boolean;
@@ -41,7 +42,7 @@ export function Sheet({ open, on_close, children, footer, max_width = 720 }: She
           width: "100%",
           maxWidth: max_width,
           maxHeight: "92vh",
-          background: "#020406",
+          background: ambient_gradient,
           borderRadius: 16,
           display: "flex",
           flexDirection: "column",
@@ -84,7 +85,7 @@ export function Sheet({ open, on_close, children, footer, max_width = 720 }: She
               flexShrink: 0,
               padding: "14px 20px",
               borderTop: "1px solid rgba(255,255,255,.06)",
-              background: "#020406",
+              background: "#020109",
             }}
           >
             {footer}

@@ -9,6 +9,25 @@
   display: none;
 }
 
+.scroll-visible {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+.scroll-visible::-webkit-scrollbar {
+  display: block;
+  width: 8px;
+}
+.scroll-visible::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-visible::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+}
+.scroll-visible::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
 html,
 body,
 #root {
@@ -78,9 +97,9 @@ body,
 }
 
 .bg.on {
-  background: rgba(55, 255, 99, 0.08);
-  color: #37ff63;
-  border-color: rgba(55, 255, 99, 0.15);
+  background: rgba(33, 108, 110, 0.08);
+  color: #216c6e;
+  border-color: rgba(33, 108, 110, 0.15);
 }
 
 .ch {
@@ -93,11 +112,11 @@ body,
 }
 
 .cu {
-  background: rgba(55, 255, 99, 0.1);
-  color: #37ff63;
+  background: rgba(33, 108, 110, 0.1);
+  color: #216c6e;
 }
 
 .cn {
-  background: rgba(255, 40, 93, 0.1);
-  color: #ff285d;
+  background: rgba(228, 21, 65, 0.1);
+  color: #E41541;
 }

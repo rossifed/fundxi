@@ -1,5 +1,4 @@
 import { useId } from "react";
-import { colors } from "@/ui/design/tokens";
 
 interface PerfPoint {
   v: number;
@@ -26,13 +25,14 @@ export function PerformanceChart({ data, width = 350, height = 140 }: Performanc
   const last = points[points.length - 1];
   const first = points[0];
   const is_up = last.y <= first.y;
-  const color = is_up ? colors.green : colors.red;
+  const color = is_up ? "#183C82" : "#F41258";
 
   return (
     <svg width="100%" viewBox={`0 0 ${width} ${height}`} style={{ display: "block" }}>
       <defs>
         <linearGradient id={gradient_id} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity=".3" />
+          <stop offset="0%" stopColor={color} stopOpacity="1" />
+          <stop offset="10%" stopColor={color} stopOpacity="1" />
           <stop offset="100%" stopColor={color} stopOpacity="0" />
         </linearGradient>
       </defs>

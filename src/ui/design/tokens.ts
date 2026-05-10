@@ -3,9 +3,9 @@ import type { Position } from "@/domain/player/player";
 // Brand & semantic colors. Strict palette: green for up, red for down, white/grey for everything else.
 export const colors = {
   background: "#020406",
-  green: "#48ff43",
-  green_soft: "#37ff63",
-  red: "#ff285d",
+  green: "#216c6e",
+  green_soft: "#216c6e",
+  red: "#E41541",
   white: "#fff",
   text: {
     primary: "#fff",
@@ -23,7 +23,7 @@ export const colors = {
 } as const;
 
 export const ambient_gradient =
-  "radial-gradient(ellipse 120% 80% at 10% 5%, #152a42, #0a1520 35%, #040810 55%, #020406 100%)";
+  "radial-gradient(ellipse 85% 60% at 100% 0%, #393690 0%, #11377E 25%, #07081D 65%, #020109 100%)";
 
 // Position UI tokens (presentation only — domain stays in @/domain/player/player.ts)
 export const position_color: Record<Position, string> = {

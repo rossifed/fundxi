@@ -55,7 +55,7 @@ export function BootstrapGate({ children }: Props) {
       )}
       {state === "error" && (
         <>
-          <div style={{ fontSize: 16, fontWeight: 700, color: "#ff285d" }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "#E41541" }}>
             backend unreachable
           </div>
           <div style={{ opacity: 0.7, fontSize: 13, maxWidth: 520, textAlign: "center" }}>

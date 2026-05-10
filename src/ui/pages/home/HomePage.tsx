@@ -217,7 +217,7 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match }: Hom
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div className="mono" style={{ fontSize: 16, fontWeight: 800 }}>#{me.rank}</div>
-                    <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: me.return_pct >= 0 ? "#37ff63" : "#ff285d" }}>
+                    <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: me.return_pct >= 0 ? "#216c6e" : "#E41541" }}>
                       {me.return_pct >= 0 ? "+" : ""}{me.return_pct}%
                     </div>
                   </div>
@@ -348,7 +348,7 @@ function LiveMatchCard({ match, on_open }: { match: Match; on_open: () => void }
             return (
               <span key={m.id}>
                 {p?.name ?? `#${m.id}`}{" "}
-                <span style={{ color: m.change >= 0 ? "#37ff63" : "#ff285d", fontWeight: 700 }}>
+                <span style={{ color: m.change >= 0 ? "#216c6e" : "#E41541", fontWeight: 700 }}>
                   {m.change >= 0 ? "+" : ""}{m.change}%
                 </span>
               </span>
@@ -410,13 +410,13 @@ function MoversColumn({
             </div>
             <Spark
               data={spark_for_player(p.id)}
-              color={up ? "#37ff63" : "#ff285d"}
+              color={up ? "#183C82" : "#F41258"}
               width={56}
               height={22}
             />
             <div style={{ textAlign: "right", minWidth: 64 }}>
               <div className="mono" style={{ fontSize: 12, fontWeight: 700 }}>€{p.valuation.current_price}M</div>
-              <div className="mono" style={{ fontSize: 11, fontWeight: 800, color: up ? "#37ff63" : "#ff285d" }}>
+              <div className="mono" style={{ fontSize: 11, fontWeight: 800, color: up ? "#216c6e" : "#E41541" }}>
                 {up ? "+" : ""}{tournament_return.toFixed(1)}%
               </div>
             </div>

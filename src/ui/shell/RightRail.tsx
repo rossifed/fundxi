@@ -121,7 +121,7 @@ export function RightRail({ watchlist, on_open_player, on_open_match }: RightRai
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div className="mono" style={{ fontSize: 12, fontWeight: 700 }}>€{current_price}M</div>
-                    <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: up ? "#37ff63" : "#ff285d" }}>
+                    <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: up ? "#216c6e" : "#E41541" }}>
                       {up ? "+" : ""}{change_24h}%
                     </div>
                   </div>

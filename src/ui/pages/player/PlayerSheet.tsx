@@ -12,6 +12,57 @@ import { PlayerChip } from "@/ui/components/PlayerChip";
 import { PositionBadge } from "@/ui/components/PositionBadge";
 import { TradeDialog } from "@/ui/components/TradeDialog";
 
+// Wikipedia-style synthetic bio composed from the data we have. Until a
+// real biographical source (Wikipedia API / curated CMS) is wired in.
+function synthesize_bio(player: Player, team_name: string, confederation?: string): string {
+  const display_name = player.full_name ?? player.name;
+  const position_label = POSITION_LABEL[player.position].toLowerCase();
+  const article = /^[aeiou]/i.test(position_label) ? "an" : "a";
+  const age_clause = player.age ? `${player.age}-year-old ` : "";
+  const conf_clause = confederation ? ` (${confederation})` : "";
+  const intro = `${display_name} is ${article} ${age_clause}${position_label} representing ${team_name}${conf_clause}.`;
+  const club_part = player.club ? ` He currently plays his club football at ${player.club}.` : "";
+  const physical_bits: string[] = [];
+  if (player.height) physical_bits.push(`stands ${player.height}`);
+  if (player.weight) physical_bits.push(`weighs ${player.weight}`);
+  if (player.foot) physical_bits.push(`favours his ${player.foot.toLowerCase()} foot`);
+  const physical = physical_bits.length > 0 ? ` He ${physical_bits.join(", ")}.` : "";
+  const role_hint =
+    player.position === "GK"
+      ? " Operates as the team's last line of defence."
+      : player.position === "DF"
+        ? " A defensive presence trusted to mark and tackle."
+        : player.position === "MF"
+          ? " A midfielder relied on to dictate tempo and link the lines."
+          : " An attacking option tasked with creating and finishing chances.";
+  return intro + club_part + physical + role_hint;
+}
+
+// Synthetic top-skills by position. Until a real skills source (FBref / curated
+// scouting CMS) is wired in. We pick a deterministic subset using player.id so
+// the same player always shows the same chips, but two players in the same
+// position don't all show the identical list.
+const SKILL_POOLS: Record<Player["position"], readonly string[]> = {
+  GK: ["Shot Stopping", "Reflexes", "Aerial", "Distribution", "Command", "1v1", "Composure"],
+  DF: ["Tackling", "Marking", "Heading", "Positioning", "Strength", "Pace", "Composure"],
+  MF: ["Passing", "Vision", "Stamina", "Dribbling", "Long Shot", "Tackle", "Press Resistance"],
+  FW: ["Finishing", "Pace", "Dribbling", "Off-the-ball", "Heading", "Press", "Link-up"],
+};
+
+function pick_skills(player: Player, count = 5): string[] {
+  const pool = SKILL_POOLS[player.position];
+  const seed = player.id;
+  const out: string[] = [];
+  const used = new Set<number>();
+  for (let i = 0; i < count && out.length < pool.length; i++) {
+    let idx = (seed * 31 + i * 17 + i * i) % pool.length;
+    while (used.has(idx)) idx = (idx + 1) % pool.length;
+    used.add(idx);
+    out.push(pool[idx]);
+  }
+  return out;
+}
+
 function comment_icon(c: MatchComment): string {
   if (c.is_goal) return "⚽";
   const t = c.comment.toLowerCase();
@@ -91,58 +142,71 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
   }, [player.id]);
 
   const chart_points = useMemo(() => (price_history ?? []).map(p => p.price), [price_history]);
+  const [hover_idx, set_hover_idx] = useState<number | null>(null);
   const period_return =
     chart_points.length > 1
       ? ((chart_points[chart_points.length - 1] - chart_points[0]) / chart_points[0]) * 100
       : 0;
   const period_is_up = chart_points.length > 1 && chart_points[chart_points.length - 1] >= chart_points[0];
-  const period_color = period_is_up ? "#48ff43" : "#ff285d";
+  const period_color = period_is_up ? "#183C82" : "#F41258";
 
   return (
     <Sheet open={true} on_close={on_close} max_width={1080}>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.4fr) minmax(380px, 1fr)", minHeight: 600 }}>
-        {/* LEFT: hero + chart + activity feed */}
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.4fr) minmax(380px, 1fr)", gridTemplateRows: "1fr", height: "100%", maxHeight: "92vh" }}>
+        {/* LEFT: hero + chart (sticky) + activity feed (scrolls) */}
         <div
           style={{
-            padding: "20px 24px",
             borderRight: "1px solid rgba(255,255,255,.06)",
             display: "flex",
             flexDirection: "column",
+            overflow: "hidden",
+            minHeight: 0,
+            height: "100%",
+          }}
+        >
+        <div
+          style={{
+            padding: "20px 24px 12px",
+            display: "flex",
+            flexDirection: "column",
             gap: 16,
-            overflowY: "auto",
-            maxHeight: "92vh",
+            flexShrink: 0,
           }}
         >
           {/* Hero */}
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <PlayerChip jersey_number={player.jersey_number} team_color={team.color} size={56} />
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1, letterSpacing: -0.5 }}>
                 {player.full_name ?? player.name}
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
-                <PositionBadge position={player.position} />
-                <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "rgba(255,255,255,.45)" }}>
-                  <span style={{ fontSize: 14 }}>{team.flag}</span>
-                  <span>{team.name} · {player.club ?? "—"}</span>
-                </span>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  marginTop: 6,
+                  fontSize: 13,
+                  color: "rgba(255,255,255,.65)",
+                }}
+              >
+                {team.flag_url ? (
+                  <img
+                    src={team.flag_url}
+                    alt={team.name}
+                    style={{ width: 22, height: 22, objectFit: "contain", flexShrink: 0 }}
+                  />
+                ) : team.flag ? (
+                  <span style={{ fontSize: 18, lineHeight: 1 }}>{team.flag}</span>
+                ) : null}
+                <span style={{ fontWeight: 700 }}>{team.name}</span>
               </div>
             </div>
           </div>
 
-          {/* Chart header */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 800 }}>Valuation</div>
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", marginTop: 2 }}>
-                {price_history === null
-                  ? "loading…"
-                  : price_history.length === 0
-                    ? "No price ticks yet"
-                    : `Tournament — ${price_history.length} ticks`}
-              </div>
-            </div>
-            <span className="mono" style={{ fontSize: 18, fontWeight: 800, color: period_color }}>
+          {/* Chart header — period return only */}
+          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center" }}>
+            <span className="mono" style={{ fontSize: 18, fontWeight: 800, color: period_return >= 0 ? "#216c6e" : "#E41541" }}>
               {period_return >= 0 ? "+" : ""}{period_return.toFixed(1)}%
             </span>
           </div>
@@ -163,11 +227,38 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
               }));
               const polyline = points.map(p => `${p.x},${p.y}`).join(" ");
               const last = points[points.length - 1];
+              const active_idx =
+                hover_idx !== null && hover_idx >= 0 && hover_idx < points.length ? hover_idx : null;
+              const active_pt = active_idx !== null ? points[active_idx] : null;
+              const active_record =
+                active_idx !== null && price_history ? price_history[active_idx] : null;
+              const handle_move = (e: React.MouseEvent<SVGSVGElement>) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const ratio = (e.clientX - rect.left) / rect.width;
+                const svg_x = ratio * w;
+                let closest = 0;
+                let best = Infinity;
+                for (let i = 0; i < points.length; i++) {
+                  const d = Math.abs(points[i].x - svg_x);
+                  if (d < best) {
+                    best = d;
+                    closest = i;
+                  }
+                }
+                set_hover_idx(closest);
+              };
               return (
-                <svg width="100%" viewBox={`0 0 ${w} ${h}`} style={{ display: "block" }}>
+                <svg
+                  width="100%"
+                  viewBox={`0 0 ${w} ${h}`}
+                  style={{ display: "block", cursor: "crosshair" }}
+                  onMouseMove={handle_move}
+                  onMouseLeave={() => set_hover_idx(null)}
+                >
                   <defs>
                     <linearGradient id="player_chart_grad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={period_color} stopOpacity=".3" />
+                      <stop offset="0%" stopColor={period_color} stopOpacity="1" />
+                      <stop offset="10%" stopColor={period_color} stopOpacity="1" />
                       <stop offset="100%" stopColor={period_color} stopOpacity="0" />
                     </linearGradient>
                   </defs>
@@ -214,7 +305,64 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
                     />
                   ))}
                   <circle cx={last.x} cy={last.y} r="9" fill={period_color} opacity=".15" />
+                  {active_pt && (
+                    <>
+                      <line
+                        x1={active_pt.x}
+                        x2={active_pt.x}
+                        y1={pd}
+                        y2={h - pd}
+                        stroke="rgba(255,255,255,.35)"
+                        strokeWidth="1"
+                        strokeDasharray="3 3"
+                      />
+                      <circle
+                        cx={active_pt.x}
+                        cy={active_pt.y}
+                        r="6"
+                        fill="#fff"
+                        stroke={period_color}
+                        strokeWidth="2"
+                      />
+                    </>
+                  )}
                 </svg>
+              );
+            })()}
+            {(() => {
+              if (chart_points.length < 2) return null;
+              if (hover_idx === null || !price_history) return null;
+              const rec = price_history[hover_idx];
+              if (!rec) return null;
+              const ratio = hover_idx / (chart_points.length - 1);
+              const left_pct = `${(ratio * 100).toFixed(2)}%`;
+              const dt = new Date(rec.ts);
+              const date_label = dt.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
+              const time_label = dt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+              return (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: left_pct,
+                    transform: ratio < 0.15 ? "translateX(0)" : ratio > 0.85 ? "translateX(-100%)" : "translateX(-50%)",
+                    background: "rgba(7,8,29,.92)",
+                    border: "1px solid rgba(255,255,255,.08)",
+                    borderRadius: 8,
+                    padding: "8px 10px",
+                    pointerEvents: "none",
+                    minWidth: 130,
+                    boxShadow: "0 6px 20px rgba(0,0,0,.4)",
+                    backdropFilter: "blur(4px)",
+                  }}
+                >
+                  <div className="mono" style={{ fontSize: 14, fontWeight: 800, color: "#fff" }}>
+                    €{rec.price.toFixed(2)}M
+                  </div>
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,.5)", marginTop: 2 }}>
+                    {date_label} · {time_label}
+                  </div>
+                </div>
               );
             })()}
             {price_history !== null && price_history.length === 0 && (
@@ -223,18 +371,38 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
               </div>
             )}
           </div>
+        </div>
 
-          {/* Activity feed — real Sportmonks commentary */}
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,.55)", letterSpacing: 0.5, textTransform: "uppercase" }}>
-                Activity
-              </span>
-              <span style={{ fontSize: 11, color: "rgba(255,255,255,.25)" }}>
-                {comments === null ? "loading…" : `${comments.length} entries`}
-              </span>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column" }}>
+        {/* Activity feed — title sticky, only the entries scroll */}
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
+            padding: "0 24px 20px",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 8,
+              flexShrink: 0,
+            }}
+          >
+            <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,.55)", letterSpacing: 0.5, textTransform: "uppercase" }}>
+              Activity
+            </span>
+            <span style={{ fontSize: 11, color: "rgba(255,255,255,.25)" }}>
+              {comments === null ? "loading…" : `${comments.length} entries`}
+            </span>
+          </div>
+          <div
+            className="scroll-visible"
+            style={{ flex: 1, overflowY: "auto", minHeight: 0, display: "flex", flexDirection: "column" }}
+          >
               {comments === null && (
                 <div style={{ padding: "12px 8px", fontSize: 12, color: "rgba(255,255,255,.4)" }}>
                   loading commentary feed…
@@ -277,7 +445,7 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
                         style={{
                           fontSize: 9,
                           fontWeight: 800,
-                          color: "#48ff43",
+                          color: "#216c6e",
                           background: "rgba(72,255,67,.12)",
                           padding: "3px 8px",
                           borderRadius: 4,
@@ -324,53 +492,27 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
             {is_watched ? "★" : "☆"}
           </button>
 
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,.55)", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 6 }}>
+              About
+            </div>
+            <p style={{ fontSize: 13, color: "rgba(255,255,255,.7)", lineHeight: 1.6 }}>
+              {player.bio ?? synthesize_bio(player, team.name, team.confederation)}
+            </p>
+          </div>
+
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
             <SmallKpi label="Value" value={`€${current_price}M`} />
             <SmallKpi
               label="24h"
               value={`${change_24h >= 0 ? "+" : ""}${change_24h}%`}
-              color={change_24h >= 0 ? "#37ff63" : "#ff285d"}
+              color={change_24h >= 0 ? "#216c6e" : "#E41541"}
             />
             <SmallKpi label="Rating" value={String(performance_rating)} color="rgba(255,255,255,.7)" />
             <SmallKpi label="Position" value={POSITION_LABEL[player.position]} mono={false} />
             <SmallKpi label="Age" value={String(player.age ?? "—")} />
             <SmallKpi label="Foot" value={player.foot ?? "—"} mono={false} />
           </div>
-
-          {player.bio && (
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,.55)", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 6 }}>
-                Bio
-              </div>
-              <p style={{ fontSize: 13, color: "rgba(255,255,255,.65)", lineHeight: 1.6 }}>{player.bio}</p>
-            </div>
-          )}
-
-          {player.tags && player.tags.length > 0 && (
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,.55)", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 6 }}>
-                Skills
-              </div>
-              <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                {player.tags.map(t => (
-                  <span
-                    key={t}
-                    style={{
-                      padding: "4px 10px",
-                      borderRadius: 6,
-                      fontSize: 11,
-                      fontWeight: 600,
-                      background: "rgba(255,255,255,.04)",
-                      color: "rgba(255,255,255,.55)",
-                      border: "1px solid rgba(255,255,255,.06)",
-                    }}
-                  >
-                    {t}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
 
           <div style={{ display: "flex", gap: 6 }}>
             {[
@@ -396,6 +538,25 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
             ))}
           </div>
 
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+            {(player.tags && player.tags.length > 0 ? player.tags : pick_skills(player)).map(t => (
+              <span
+                key={t}
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: 6,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  background: "rgba(255,255,255,.04)",
+                  color: "rgba(255,255,255,.7)",
+                  border: "1px solid rgba(255,255,255,.06)",
+                }}
+              >
+                {t}
+              </span>
+            ))}
+          </div>
+
           <YourPositionCard player={player} current_price={current_price} />
 
           <div style={{ display: "flex", gap: 8 }}>
@@ -407,12 +568,12 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
                 fontSize: 14,
                 fontWeight: 800,
                 borderRadius: 10,
-                background: "linear-gradient(135deg,#22c55e,#16a34a)",
+                background: "#5CF26C",
                 color: "#fff",
                 border: "none",
                 cursor: "pointer",
                 fontFamily: "inherit",
-                boxShadow: "0 4px 16px rgba(34,197,94,.2)",
+                boxShadow: "0 4px 16px rgba(92,242,108,.25)",
               }}
             >
               Buy
@@ -425,11 +586,12 @@ export function PlayerSheet({ player, on_close, go_portfolio, watchlist, toggle_
                 fontSize: 14,
                 fontWeight: 800,
                 borderRadius: 10,
-                background: "rgba(255,40,93,.1)",
-                color: "#ff285d",
-                border: "1px solid rgba(255,40,93,.25)",
+                background: "#F41258",
+                color: "#fff",
+                border: "none",
                 cursor: "pointer",
                 fontFamily: "inherit",
+                boxShadow: "0 4px 16px rgba(244,18,88,.25)",
               }}
             >
               Sell
@@ -502,7 +664,7 @@ function YourPositionCard({ player, current_price }: { player: Player; current_p
   const return_pct = cost_basis === 0 ? 0 : (pnl / cost_basis) * 100;
   const portfolio_pct = totals.total_value === 0 ? 0 : (market_value / totals.total_value) * 100;
   const is_long = holding.shares > 0;
-  const accent = is_long ? "#37ff63" : "#ff285d";
+  const accent = is_long ? "#216c6e" : "#E41541";
 
   return (
     <div
@@ -554,12 +716,12 @@ function YourPositionCard({ player, current_price }: { player: Player; current_p
         <PositionStat
           label="P&L"
           value={fmt_eur_m_signed(pnl)}
-          color={pnl >= 0 ? "#37ff63" : "#ff285d"}
+          color={pnl >= 0 ? "#216c6e" : "#E41541"}
         />
         <PositionStat
           label="Return"
           value={`${return_pct >= 0 ? "+" : ""}${return_pct.toFixed(1)}%`}
-          color={return_pct >= 0 ? "#37ff63" : "#ff285d"}
+          color={return_pct >= 0 ? "#216c6e" : "#E41541"}
         />
         <PositionStat label="% portfolio" value={`${portfolio_pct.toFixed(1)}%`} />
       </div>

@@ -32,7 +32,7 @@ export function PortfolioBar({ totals, on_click }: PortfolioBarProps) {
             width: 5,
             height: 5,
             borderRadius: 3,
-            background: pnl >= 0 ? "#37ff63" : "#ff285d",
+            background: pnl >= 0 ? "#216c6e" : "#E41541",
             boxShadow: `0 0 6px ${pnl >= 0 ? "rgba(55,255,99,.4)" : "rgba(255,40,93,.4)"}`,
           }}
         />
@@ -47,7 +47,7 @@ export function PortfolioBar({ totals, on_click }: PortfolioBarProps) {
           style={{
             fontSize: 12,
             fontWeight: 700,
-            color: return_pct >= 0 ? "#37ff63" : "#ff285d",
+            color: return_pct >= 0 ? "#216c6e" : "#E41541",
           }}
         >
           {return_pct >= 0 ? "+" : ""}
@@ -59,7 +59,7 @@ export function PortfolioBar({ totals, on_click }: PortfolioBarProps) {
           className="mono"
           style={{
             fontSize: 12,
-            color: pnl >= 0 ? "#37ff63" : "#ff285d",
+            color: pnl >= 0 ? "#216c6e" : "#E41541",
             fontWeight: 600,
           }}
         >

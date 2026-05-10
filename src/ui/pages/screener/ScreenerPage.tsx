@@ -381,11 +381,11 @@ export function ScreenerPage({ on_open_player, watchlist, toggle_watch }: Screen
                   </span>
                   <PositionBadge position={p.position} />
                   <span className="mono" style={{ fontWeight: 700 }}>€{p.valuation.current_price}M</span>
-                  <span className="mono" style={{ fontWeight: 700, color: up ? "#37ff63" : "#ff285d" }}>
+                  <span className="mono" style={{ fontWeight: 700, color: up ? "#216c6e" : "#E41541" }}>
                     {up ? "+" : ""}{p.valuation.change_24h}%
                   </span>
                   <span className="mono" style={{ fontWeight: 700, color: "rgba(255,255,255,.65)" }}>{p.valuation.performance_rating}</span>
-                  <Spark data={spark_for_player(p.id)} color={up ? "#37ff63" : "#ff285d"} width={100} height={24} />
+                  <Spark data={spark_for_player(p.id)} color={up ? "#183C82" : "#F41258"} width={100} height={24} />
                   <span className="mono" style={{ color: "rgba(255,255,255,.45)" }}>{p.age ?? "—"}</span>
                 </div>
               );

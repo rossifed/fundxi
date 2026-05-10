@@ -22,6 +22,7 @@ function dto_to_domain(dto: TeamDTO): Team {
     id: dto.id,
     name: dto.name,
     flag: brand.flag,
+    flag_url: dto.flag || undefined,
     color: brand.color,
     kind: (dto.kind === "national" ? "national" : "club"),
     confederation: (dto.confederation ?? brand.confederation) as Team["confederation"],

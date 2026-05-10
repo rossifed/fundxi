@@ -77,7 +77,7 @@ export function TradeDialog({
       <Sheet open={true} on_close={on_close} max_width={460}>
         <div style={{ padding: "32px 24px 24px", textAlign: "center" }}>
           <div style={{ fontSize: 56, marginBottom: 8 }}>{c_is_buy ? "✅" : "🔴"}</div>
-          <div style={{ fontSize: 20, fontWeight: 800, color: c_is_buy ? "#37ff63" : "#ff285d", marginBottom: 4 }}>
+          <div style={{ fontSize: 20, fontWeight: 800, color: c_is_buy ? "#216c6e" : "#E41541", marginBottom: 4 }}>
             {c_is_buy ? "Bought" : "Sold"}!
           </div>
           <div style={{ fontSize: 13, color: "rgba(255,255,255,.55)", marginBottom: 22 }}>
@@ -96,7 +96,7 @@ export function TradeDialog({
             <SummaryCell
               label="Position"
               value={c_is_buy ? "📈 Long" : "📉 Short"}
-              color={c_is_buy ? "#37ff63" : "#ff285d"}
+              color={c_is_buy ? "#216c6e" : "#E41541"}
               mono={false}
             />
           </div>
@@ -228,8 +228,8 @@ export function TradeDialog({
               background: !can_confirm
                 ? "rgba(255,255,255,.04)"
                 : is_buy
-                  ? "linear-gradient(135deg,#22c55e,#16a34a)"
-                  : "linear-gradient(135deg,#ff285d,#dc2626)",
+                  ? "linear-gradient(135deg,#5CF26C,#0D9488)"
+                  : "linear-gradient(135deg,#F41258,#dc2626)",
               color: !can_confirm ? "rgba(255,255,255,.25)" : "#fff",
               border: !can_confirm ? "1px solid rgba(255,255,255,.06)" : "none",
               cursor: !can_confirm ? "not-allowed" : "pointer",
@@ -237,8 +237,8 @@ export function TradeDialog({
               boxShadow: !can_confirm
                 ? "none"
                 : is_buy
-                  ? "0 4px 16px rgba(34,197,94,.25)"
-                  : "0 4px 16px rgba(255,40,93,.25)",
+                  ? "0 4px 16px rgba(92,242,108,.25)"
+                  : "0 4px 16px rgba(244,18,88,.25)",
             }}
           >
             Confirm {is_buy ? "Buy" : "Sell"}
@@ -268,7 +268,7 @@ export function TradeDialog({
           </div>
           <div style={{ textAlign: "right" }}>
             <div className="mono" style={{ fontSize: 14, fontWeight: 800 }}>€{current_price}M</div>
-            <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: is_up ? "#37ff63" : "#ff285d" }}>
+            <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: is_up ? "#216c6e" : "#E41541" }}>
               {is_up ? "+" : ""}{change_24h}%
             </div>
           </div>
@@ -277,8 +277,8 @@ export function TradeDialog({
         {/* Buy/Sell tabs */}
         <div style={{ display: "flex", background: "rgba(255,255,255,.03)", borderRadius: 10, padding: 3 }}>
           {([
-            { k: "buy" as TradeKindLocal, label: "Buy", color: "#37ff63" },
-            { k: "sell" as TradeKindLocal, label: "Sell", color: "#ff285d" },
+            { k: "buy" as TradeKindLocal, label: "Buy", color: "#5CF26C" },
+            { k: "sell" as TradeKindLocal, label: "Sell", color: "#F41258" },
           ]).map(t => (
             <button
               key={t.k}
@@ -292,8 +292,13 @@ export function TradeDialog({
                 border: "none",
                 cursor: "pointer",
                 fontFamily: "inherit",
-                background: kind === t.k ? "rgba(255,255,255,.08)" : "transparent",
-                color: kind === t.k ? t.color : "rgba(255,255,255,.35)",
+                background:
+                  kind === t.k
+                    ? t.k === "buy"
+                      ? "#5CF26C"
+                      : "#F41258"
+                    : "transparent",
+                color: kind === t.k ? "#fff" : "rgba(255,255,255,.35)",
               }}
             >
               {t.label}
@@ -527,26 +532,26 @@ export function TradeDialog({
             <PreviewRow
               label="Total"
               value={fmt_eur_m(final_amount)}
-              accent={is_buy ? "#37ff63" : "#ff285d"}
+              accent={is_buy ? "#216c6e" : "#E41541"}
               bold
             />
             <PreviewRow
               label="Position"
               before={`${fmt_shares(held_shares)} shares`}
               after={`${fmt_shares(preview.shares_after)} shares`}
-              accent={is_buy ? "#37ff63" : "#ff285d"}
+              accent={is_buy ? "#216c6e" : "#E41541"}
             />
             <PreviewRow
               label="Cash"
               before={fmt_eur_m(preview.cash_before)}
               after={fmt_eur_m(preview.cash_after)}
-              accent={is_buy ? "#ff285d" : "#37ff63"}
+              accent={is_buy ? "#E41541" : "#216c6e"}
               warning={preview.cash_after < 0}
             />
             <PreviewRow
               label="Type"
               value={is_buy ? "📈 Long" : is_short ? `📉 Short (${short_qty} naked)` : "Close position"}
-              accent={is_buy ? "#37ff63" : is_short ? "rgba(255,255,255,.5)" : "#ff285d"}
+              accent={is_buy ? "#216c6e" : is_short ? "rgba(255,255,255,.5)" : "#E41541"}
             />
           </div>
         </div>
@@ -566,7 +571,7 @@ export function TradeDialog({
           >
             <span style={{ fontSize: 16, flexShrink: 0 }}>⛔</span>
             <span style={{ fontSize: 12, color: "rgba(255,255,255,.7)", lineHeight: 1.45 }}>
-              <strong style={{ color: "#ff285d" }}>Insufficient capital.</strong> You need{" "}
+              <strong style={{ color: "#E41541" }}>Insufficient capital.</strong> You need{" "}
               <span className="mono" style={{ fontWeight: 700 }}>€{preview.shortfall.toLocaleString()}</span> more.
               You have <span className="mono">€{preview.cash_before.toLocaleString()}</span> available.
             </span>
@@ -631,7 +636,7 @@ function PreviewRow({
               className="mono"
               style={{
                 fontWeight: 700,
-                color: warning ? "#ff285d" : accent ?? "#fff",
+                color: warning ? "#E41541" : accent ?? "#fff",
               }}
             >
               {after}
