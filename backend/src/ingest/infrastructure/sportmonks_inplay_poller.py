@@ -26,10 +26,14 @@ from typing import Any
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.infrastructure.db.repositories.fixture import SqlAlchemyFixtureRepository
+from src.infrastructure.db.repositories.lineup import SqlAlchemyLineupRepository
 from src.infrastructure.db.repositories.match_comment import SqlAlchemyMatchCommentRepository
 from src.infrastructure.db.repositories.match_event import SqlAlchemyMatchEventRepository
 from src.infrastructure.db.repositories.raw_sportmonks_event import SqlAlchemyRawSportmonksEventRepository
 from src.infrastructure.sportmonks.client import SportmonksClient, SportmonksError
+from src.infrastructure.sportmonks.projectors.fixture import project_fixture
+from src.infrastructure.sportmonks.projectors.lineup import project_lineup
 from src.infrastructure.sportmonks.projectors.match_comment import project_match_comment
 from src.infrastructure.sportmonks.projectors.match_event import project_match_event
 from src.ingest.application.commit_then_publish import commit_then_publish
@@ -38,7 +42,10 @@ from src.ingest.infrastructure.sportmonks_id_maps import SportmonksIdMaps
 
 log = structlog.get_logger(__name__)
 
-_INPLAY_INCLUDE = "events.type;comments"
+# State + scores + participants come back by default with /fixtures/{id}
+# in v3, but listing them explicitly makes the contract self-documenting
+# and lets us add fields without ambiguity later.
+_INPLAY_INCLUDE = "state;participants;scores;events.type;comments;lineups.position"
 
 
 @dataclass(slots=True)
@@ -105,6 +112,7 @@ class SportmonksInplayPoller:
         if not isinstance(data, dict):
             return
 
+        fixture_updated = await self._project_fixture(session=session, fixture_payload=data)
         events_count = await self._project_events(
             session=session,
             events_payload=_array(data.get("events")),
@@ -113,43 +121,56 @@ class SportmonksInplayPoller:
             session=session,
             comments_payload=_array(data.get("comments")),
         )
+        lineups_count = await self._project_lineups(
+            session=session,
+            lineups_payload=_array(data.get("lineups")),
+        )
 
+        fix_id = self.fixture_internal_id
         notifications: list[tuple[str, bytes]] = []
+        if fixture_updated:
+            notifications.append(self._notif("fixture_status", {"fixture_id": fix_id}))
         if events_count > 0:
-            notifications.append(
-                (
-                    f"fundxi.match_event.{self.fixture_internal_id}",
-                    json.dumps(
-                        {
-                            "kind": "match_event",
-                            "fixture_id": self.fixture_internal_id,
-                            "count": events_count,
-                        }
-                    ).encode(),
-                )
-            )
+            notifications.append(self._notif("match_event", {"fixture_id": fix_id, "count": events_count}))
         if comments_count > 0:
-            notifications.append(
-                (
-                    f"fundxi.match_comment.{self.fixture_internal_id}",
-                    json.dumps(
-                        {
-                            "kind": "match_comment",
-                            "fixture_id": self.fixture_internal_id,
-                            "count": comments_count,
-                        }
-                    ).encode(),
-                )
-            )
+            notifications.append(self._notif("match_comment", {"fixture_id": fix_id, "count": comments_count}))
+        if lineups_count > 0:
+            notifications.append(self._notif("lineup", {"fixture_id": fix_id, "count": lineups_count}))
 
         await commit_then_publish(session=session, publisher=self.publisher, notifications=notifications)
 
         log.info(
             "ingest.inplay.tick",
             fixture_internal_id=self.fixture_internal_id,
+            fixture_updated=fixture_updated,
             events=events_count,
             comments=comments_count,
+            lineups=lineups_count,
         )
+
+    def _notif(self, kind: str, body: dict[str, Any]) -> tuple[str, bytes]:
+        """Build a (subject, payload) tuple for ``commit_then_publish``."""
+        return (
+            f"fundxi.{kind}.{self.fixture_internal_id}",
+            json.dumps({"kind": kind, **body}).encode(),
+        )
+
+    async def _project_fixture(self, *, session: AsyncSession, fixture_payload: dict[str, Any]) -> bool:
+        """UPSERT the fixture itself (status, score, minute).
+
+        Returns True if the row was touched, False if the payload was
+        unprojectable (missing participants etc.) and was skipped."""
+        group = self.id_maps.fixture_group_for(self.fixture_internal_id)
+        if group is None:
+            log.debug("ingest.inplay.fixture_skip", reason="no group in id_maps")
+            return False
+        try:
+            fixture, smk_id = project_fixture(fixture_payload, group=group)
+        except (ValueError, TypeError, KeyError) as exc:
+            log.debug("ingest.inplay.fixture_skip", reason=str(exc))
+            return False
+        await SqlAlchemyFixtureRepository(session).upsert_by_sportmonks_id(fixture, sportmonks_id=smk_id)
+        return True
 
     async def _project_events(self, *, session: AsyncSession, events_payload: list[dict[str, Any]]) -> int:
         repo = SqlAlchemyMatchEventRepository(session)
@@ -179,6 +200,24 @@ class SportmonksInplayPoller:
                 log.debug("ingest.inplay.comment_skip", reason=str(exc))
                 continue
             await repo.upsert_by_sportmonks_id(comment, sportmonks_id=smk_id)
+            upserted += 1
+        return upserted
+
+    async def _project_lineups(self, *, session: AsyncSession, lineups_payload: list[dict[str, Any]]) -> int:
+        repo = SqlAlchemyLineupRepository(session)
+        upserted = 0
+        for payload in lineups_payload:
+            try:
+                lineup, smk_id = project_lineup(
+                    payload,
+                    fixture_id=self.fixture_internal_id,
+                    player_id_by_sportmonks=self.id_maps.player_id_by_sportmonks,
+                    team_id_by_sportmonks=self.id_maps.team_id_by_sportmonks,
+                )
+            except (ValueError, TypeError) as exc:
+                log.debug("ingest.inplay.lineup_skip", reason=str(exc))
+                continue
+            await repo.upsert_by_sportmonks_id(lineup, sportmonks_id=smk_id)
             upserted += 1
         return upserted
 

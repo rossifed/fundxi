@@ -22,21 +22,27 @@ from src.infrastructure.db.models.team import TeamORM
 
 @dataclass(frozen=True, slots=True)
 class SportmonksIdMaps:
-    """All three lookup tables the ingest pipeline needs."""
+    """All lookup tables the ingest pipeline needs at startup."""
 
     fixture_smk_by_internal: dict[int, int]
+    fixture_group_by_internal: dict[int, str]
     player_id_by_sportmonks: dict[int, int]
     team_id_by_sportmonks: dict[int, str]
 
     def fixture_smk_for(self, internal_id: int) -> int | None:
         return self.fixture_smk_by_internal.get(internal_id)
 
+    def fixture_group_for(self, internal_id: int) -> str | None:
+        return self.fixture_group_by_internal.get(internal_id)
+
 
 async def load_sportmonks_id_maps(session: AsyncSession) -> SportmonksIdMaps:
     """Read all mappings from the live DB in three short SELECTs."""
     fixtures = (
         await session.execute(
-            select(FixtureORM.id, FixtureORM.sportmonks_id).where(FixtureORM.sportmonks_id.is_not(None))
+            select(FixtureORM.id, FixtureORM.sportmonks_id, FixtureORM.group).where(
+                FixtureORM.sportmonks_id.is_not(None)
+            )
         )
     ).all()
     players = (
@@ -51,6 +57,7 @@ async def load_sportmonks_id_maps(session: AsyncSession) -> SportmonksIdMaps:
     ).all()
     return SportmonksIdMaps(
         fixture_smk_by_internal={row.id: row.sportmonks_id for row in fixtures if row.sportmonks_id is not None},
+        fixture_group_by_internal={row.id: row.group for row in fixtures if row.group is not None},
         player_id_by_sportmonks={row.sportmonks_id: row.id for row in players if row.sportmonks_id is not None},
         team_id_by_sportmonks={row.sportmonks_id: row.id for row in teams if row.sportmonks_id is not None},
     )

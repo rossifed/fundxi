@@ -80,13 +80,43 @@ def _fake_session_factory(write_log: list[tuple[str, Any]]) -> Any:
 def _id_maps() -> SportmonksIdMaps:
     return SportmonksIdMaps(
         fixture_smk_by_internal={42: 1000},
+        fixture_group_by_internal={42: "D"},
         player_id_by_sportmonks={500: 100, 501: 101},
         team_id_by_sportmonks={200: "FRA", 201: "ARG"},
     )
 
 
-def _envelope_with(events: list[dict[str, Any]], comments: list[dict[str, Any]]) -> dict[str, Any]:
-    return {"data": {"id": 1000, "events": events, "comments": comments}}
+def _envelope_with(
+    *,
+    events: list[dict[str, Any]] | None = None,
+    comments: list[dict[str, Any]] | None = None,
+    lineups: list[dict[str, Any]] | None = None,
+    include_fixture_envelope: bool = False,
+) -> dict[str, Any]:
+    data: dict[str, Any] = {
+        "id": 1000,
+        "events": events or [],
+        "comments": comments or [],
+        "lineups": lineups or [],
+    }
+    if include_fixture_envelope:
+        # Minimal fixture-projectable payload (participants + state + scores).
+        data.update(
+            {
+                "state": {"state": "INPLAY_1ST_HALF"},
+                "participants": [
+                    {"meta": {"location": "home"}, "short_code": "FRA"},
+                    {"meta": {"location": "away"}, "short_code": "ARG"},
+                ],
+                "scores": [
+                    {"description": "CURRENT", "score": {"participant": "home", "goals": 1}},
+                    {"description": "CURRENT", "score": {"participant": "away", "goals": 0}},
+                ],
+                "starting_at": "2022-12-18 15:00:00",
+                "minute": 45,
+            }
+        )
+    return {"data": data}
 
 
 def _event_payload(
@@ -115,6 +145,18 @@ def _comment_payload(*, smk_id: int, minute: int, text: str = "Goal!") -> dict[s
     }
 
 
+def _lineup_payload(*, smk_id: int, player_smk: int = 500, team_smk: int = 200) -> dict[str, Any]:
+    return {
+        "id": smk_id,
+        "player_id": player_smk,
+        "team_id": team_smk,
+        "type_id": 11,  # starter
+        "position_id": 25,  # defender
+        "jersey_number": 4,
+        "formation_position": 1,
+    }
+
+
 # --- tests ----------------------------------------------------------------
 
 
@@ -134,7 +176,9 @@ async def test_poll_uses_correct_endpoint_and_include() -> None:
     await poller.poll_once()
 
     assert client.captured_endpoint == "/fixtures/1000"
-    assert client.captured_params == {"include": "events.type;comments"}
+    assert client.captured_params == {
+        "include": "state;participants;scores;events.type;comments;lineups.position"
+    }
 
 
 @pytest.mark.anyio
@@ -211,6 +255,89 @@ async def test_http_failure_does_not_raise() -> None:
     await poller.poll_once()
 
     assert publisher.log == []
+
+
+@pytest.mark.anyio
+async def test_lineups_present_emit_one_notification_with_count() -> None:
+    client = _StubClient(
+        response=_envelope_with(
+            lineups=[
+                _lineup_payload(smk_id=900, player_smk=500),
+                _lineup_payload(smk_id=901, player_smk=501),
+            ]
+        )
+    )
+    publisher = _RecordingPublisher()
+    poller = SportmonksInplayPoller(
+        fixture_internal_id=42,
+        fixture_sportmonks_id=1000,
+        poll_seconds=10.0,
+        client=client,
+        publisher=publisher,
+        session_factory=_fake_session_factory(write_log=[]),
+        id_maps=_id_maps(),
+    )
+
+    await poller.poll_once()
+
+    subjects = sorted(s for s, _ in publisher.log)
+    assert subjects == ["fundxi.lineup.42"]
+    msg = json.loads(publisher.log[0][1])
+    assert msg == {"kind": "lineup", "fixture_id": 42, "count": 2}
+
+
+@pytest.mark.anyio
+async def test_fixture_envelope_emits_fixture_status_notification_and_upserts() -> None:
+    client = _StubClient(response=_envelope_with(include_fixture_envelope=True))
+    publisher = _RecordingPublisher()
+    poller = SportmonksInplayPoller(
+        fixture_internal_id=42,
+        fixture_sportmonks_id=1000,
+        poll_seconds=10.0,
+        client=client,
+        publisher=publisher,
+        session_factory=_fake_session_factory(write_log=[]),
+        id_maps=_id_maps(),
+    )
+
+    await poller.poll_once()
+
+    subjects = sorted(s for s, _ in publisher.log)
+    assert subjects == ["fundxi.fixture_status.42"]
+    msg = json.loads(publisher.log[0][1])
+    assert msg == {"kind": "fixture_status", "fixture_id": 42}
+
+
+@pytest.mark.anyio
+async def test_full_envelope_emits_four_notifications() -> None:
+    client = _StubClient(
+        response=_envelope_with(
+            events=[_event_payload(smk_id=1, minute=10, code="goal")],
+            comments=[_comment_payload(smk_id=10, minute=10)],
+            lineups=[_lineup_payload(smk_id=900)],
+            include_fixture_envelope=True,
+        )
+    )
+    publisher = _RecordingPublisher()
+    poller = SportmonksInplayPoller(
+        fixture_internal_id=42,
+        fixture_sportmonks_id=1000,
+        poll_seconds=10.0,
+        client=client,
+        publisher=publisher,
+        session_factory=_fake_session_factory(write_log=[]),
+        id_maps=_id_maps(),
+    )
+
+    await poller.poll_once()
+
+    subjects = sorted(s for s, _ in publisher.log)
+    assert subjects == [
+        "fundxi.fixture_status.42",
+        "fundxi.lineup.42",
+        "fundxi.match_comment.42",
+        "fundxi.match_event.42",
+    ]
 
 
 @pytest.mark.anyio
