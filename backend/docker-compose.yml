@@ -17,6 +17,25 @@ services:
       timeout: 5s
       retries: 10
 
+  # Pub/sub bus used by ingest, simulation and the streaming service for
+  # fan-out of live-update events. Single binary, ~10 MB RAM idle.
+  # JetStream (durable streams) is left disabled: our subscribers are
+  # browsers that always have the DB as fallback, so fire-and-forget is
+  # all we need.
+  nats:
+    image: nats:2.10-alpine
+    container_name: fundxi-nats
+    restart: unless-stopped
+    command: ["--http_port", "8222"]  # enables /healthz + monitoring
+    ports:
+      - "${NATS_CLIENT_PORT:-4222}:4222"
+      - "${NATS_MONITOR_PORT:-8222}:8222"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   postgres_data:
     name: fundxi_postgres_data

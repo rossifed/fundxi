@@ -19,7 +19,7 @@ def is_in_inplay_window(
 
     The envelope is:
 
-        [kickoff − pre_kickoff_min, kickoff + max_match_duration_min + post_ft_min]
+        [kickoff - pre_kickoff_min, kickoff + max_match_duration_min + post_ft_min]
 
     The supervisor does not need to know whether the fixture is actually
     finished yet — it just needs a deterministic open / close decision

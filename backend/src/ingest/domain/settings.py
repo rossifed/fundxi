@@ -51,3 +51,11 @@ class IngestionSettings(BaseSettings):
     # simultaneously; default of 8 is comfortable.
     max_concurrent_inplay_pollers: int = 8
     http_pool_size: int = 32
+
+    # ----- Pub/sub bus ---------------------------------------------------
+    # NATS server URL(s). Comma-separated for cluster mode (later).
+    nats_servers: str = "nats://localhost:4222"
+
+    @property
+    def nats_server_list(self) -> tuple[str, ...]:
+        return tuple(s.strip() for s in self.nats_servers.split(",") if s.strip())

@@ -11,6 +11,7 @@ Run with:
 """
 
 import asyncio
+import contextlib
 import logging
 import signal
 
@@ -21,6 +22,7 @@ from src.infrastructure.db.session import SessionLocal
 from src.ingest.application.supervisor import IngestSupervisor
 from src.ingest.domain.settings import IngestionSettings
 from src.ingest.infrastructure.mock_pollers import MockPollerFactory
+from src.ingest.infrastructure.nats_publisher import NatsPublisher
 from src.ingest.infrastructure.system_clock import SystemClock
 
 log = structlog.get_logger(__name__)
@@ -45,9 +47,16 @@ async def run() -> None:
         inplay_poll_seconds=settings.inplay_poll_seconds,
         scheduler_check_seconds=settings.scheduler_check_seconds,
         max_concurrent=settings.max_concurrent_inplay_pollers,
+        nats_servers=settings.nats_server_list,
     )
 
-    async with SessionLocal() as session:
+    async with (
+        SessionLocal() as session,
+        NatsPublisher(servers=settings.nats_server_list) as _publisher,
+    ):
+        # ``_publisher`` will be consumed by the real poller factory in
+        # étape B.2; for B.1 we only validate its lifecycle (connect on
+        # entry, drain on exit) is sound.
         fixtures_repo = SqlAlchemyFixtureRepository(session)
         supervisor = IngestSupervisor(
             settings=settings,
@@ -70,10 +79,8 @@ async def run() -> None:
         supervisor_task = asyncio.create_task(supervisor.run(), name="ingest-supervisor")
         await stop_signal.wait()
         supervisor_task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await supervisor_task
-        except asyncio.CancelledError:
-            pass
 
     log.info("ingest.daemon.stopped")
 

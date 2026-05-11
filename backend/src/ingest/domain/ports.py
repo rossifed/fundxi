@@ -10,6 +10,21 @@ from datetime import datetime
 from typing import Protocol
 
 
+class NotificationPublisher(Protocol):
+    """Fire-and-forget publish to the live pub/sub bus.
+
+    Implementations target NATS in production; tests inject a fake.
+
+    Callers MUST publish only after the originating DB transaction has
+    committed — otherwise a subscriber may invalidate its cache and
+    refetch a stale row that has not yet been persisted. The
+    ``application.commit_then_publish`` helper enforces this order at
+    call sites.
+    """
+
+    async def publish(self, subject: str, payload: bytes) -> None: ...
+
+
 class Clock(Protocol):
     """Wall-clock abstraction. Production wires the system clock; tests
     wire a controllable fake so the supervisor's window decisions are
