@@ -125,9 +125,11 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       {/* KPI row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12 }}>
         <KpiCard label="Total Value" value={fmt_eur_m(total_value)} />
         <KpiCard label="Cash" value={fmt_eur_m(totals.cash)} />
+        <KpiCard label="Invested" value={fmt_eur_m(totals.total_cost)} />
+        <KpiCard label="Positions" value={String(holdings.length)} />
         <KpiCard
           label="P&L"
           value={fmt_eur_m_signed(pnl)}
@@ -138,7 +140,6 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
           value={`${return_pct >= 0 ? "+" : ""}${return_pct.toFixed(1)}%`}
           color={return_pct >= 0 ? "#216c6e" : "#E41541"}
         />
-        <KpiCard label="Players" value={String(holdings.length)} />
       </div>
 
       {/* Performance chart */}
