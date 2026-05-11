@@ -16,12 +16,14 @@ from typing import Any
 class ReplayEventKind(Enum):
     """What the payload represents.
 
-    Slice 1 only handles ``MATCH_COMMENT``. Additional kinds
-    (match events, lineups, stat updates) are added in later slices
-    without breaking this enum's existing membership.
+    ``MATCH_COMMENT`` carries a Sportmonks per-minute commentary entry;
+    ``MATCH_EVENT`` carries a structured match event (goal, card,
+    substitution, etc.). Additional kinds (lineups, stat updates) are
+    added in later slices without breaking existing membership.
     """
 
     MATCH_COMMENT = "match_comment"
+    MATCH_EVENT = "match_event"
 
 
 @dataclass(frozen=True, slots=True)

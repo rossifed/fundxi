@@ -1,16 +1,22 @@
 """SQLAlchemy adapter for the ``ReplayArchiveReader`` port.
 
-DDD role: Adapter (driven). Reads the recorded Sportmonks response
-for a fixture out of ``raw.sportmonks_event``, then projects it into
-the provider-agnostic ``ReplayEvent`` shape consumed by the use case.
+DDD role: Adapter (driven). Reads the recorded Sportmonks responses
+for a fixture out of ``raw.sportmonks_event`` and projects each
+payload into the provider-agnostic ``ReplayEvent`` shape consumed by
+the use case.
 
-Slice 1 reads only the ``?include=comments`` row. Later slices add
-the ``?include=events.type;lineups.position`` row for match events
-and lineup-derived emissions, alongside in the same bundle.
+Two raw rows are consulted per fixture:
+  - ``?include=comments``                         → per-minute commentary
+  - ``?include=events.type;lineups.position``     → structured events (goals,
+                                                    cards, subs, ...)
+
+Both streams are merged into a single sorted timeline so the use case
+emits everything in canonical match order without caring about source.
 """
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from itertools import chain
 from typing import Any, cast
 
 from sqlalchemy import select
@@ -22,6 +28,9 @@ from src.simulation.domain.replay_event import ReplayEvent, ReplayEventKind
 from src.simulation.domain.replay_fixture_bundle import ReplayFixtureBundle
 from src.simulation.domain.replay_timeline import sort_timeline
 
+_COMMENTS_INCLUDE = "comments"
+_EVENTS_INCLUDE = "events.type;lineups.position"
+
 
 @dataclass(frozen=True, slots=True)
 class SqlAlchemyReplayArchiveReader:
@@ -30,8 +39,14 @@ class SqlAlchemyReplayArchiveReader:
 
     async def load_fixture_timeline(self, fixture_sportmonks_id: int) -> ReplayFixtureBundle:
         internal_id = await self._resolve_internal_id(fixture_sportmonks_id)
-        comments = await self._load_comments(fixture_sportmonks_id)
-        timeline = sort_timeline(_project_comments_to_events(comments))
+        comments = await self._load_array(fixture_sportmonks_id, include=_COMMENTS_INCLUDE, key="comments")
+        events = await self._load_array(fixture_sportmonks_id, include=_EVENTS_INCLUDE, key="events")
+        timeline = sort_timeline(
+            chain(
+                _project_comments_to_replay_events(comments),
+                _project_events_to_replay_events(events),
+            )
+        )
         return ReplayFixtureBundle(fixture_internal_id=internal_id, timeline=timeline)
 
     async def _resolve_internal_id(self, fixture_sportmonks_id: int) -> int:
@@ -43,32 +58,39 @@ class SqlAlchemyReplayArchiveReader:
             )
         return internal_id
 
-    async def _load_comments(self, fixture_sportmonks_id: int) -> list[dict[str, Any]]:
+    async def _load_array(
+        self, fixture_sportmonks_id: int, *, include: str, key: str
+    ) -> list[dict[str, Any]]:
+        """Return ``response.data[key]`` from the archived row matching ``include``.
+
+        Returns ``[]`` when the row exists but the array is empty or
+        absent. Raises ``LookupError`` when no archived row matches.
+        """
         endpoint = f"/fixtures/{fixture_sportmonks_id}"
         row = (
             await self.session.execute(
                 select(RawSportmonksEventORM.response)
                 .where(RawSportmonksEventORM.endpoint == endpoint)
-                .where(RawSportmonksEventORM.params["include"].astext == "comments")
+                .where(RawSportmonksEventORM.params["include"].astext == include)
                 .order_by(RawSportmonksEventORM.ingested_at.desc())
                 .limit(1)
             )
         ).first()
         if row is None:
             raise LookupError(
-                f"no raw archive for endpoint={endpoint} with include=comments"
+                f"no raw archive for endpoint={endpoint} with include={include!r}"
             )
         envelope = cast(dict[str, Any], row.response)
         data = envelope.get("data")
         if not isinstance(data, dict):
             return []
-        comments = data.get("comments")
-        if not isinstance(comments, list):
+        items = data.get(key)
+        if not isinstance(items, list):
             return []
-        return [c for c in comments if isinstance(c, dict)]
+        return [item for item in items if isinstance(item, dict)]
 
 
-def _project_comments_to_events(comments: Iterable[dict[str, Any]]) -> Iterable[ReplayEvent]:
+def _project_comments_to_replay_events(comments: Iterable[dict[str, Any]]) -> Iterable[ReplayEvent]:
     for c in comments:
         minute = c.get("minute")
         if not isinstance(minute, int):
@@ -81,4 +103,22 @@ def _project_comments_to_events(comments: Iterable[dict[str, Any]]) -> Iterable[
             extra_minute=extra if isinstance(extra, int) else None,
             sequence=sequence if isinstance(sequence, int) else 0,
             payload=c,
+        )
+
+
+def _project_events_to_replay_events(events: Iterable[dict[str, Any]]) -> Iterable[ReplayEvent]:
+    """Sportmonks events use ``sort_order`` as their tie-breaker (vs ``order``
+    for comments). Otherwise the mapping is identical."""
+    for e in events:
+        minute = e.get("minute")
+        if not isinstance(minute, int):
+            continue
+        extra = e.get("extra_minute")
+        sequence = e.get("sort_order")
+        yield ReplayEvent(
+            kind=ReplayEventKind.MATCH_EVENT,
+            minute=minute,
+            extra_minute=extra if isinstance(extra, int) else None,
+            sequence=sequence if isinstance(sequence, int) else 0,
+            payload=e,
         )

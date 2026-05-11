@@ -16,10 +16,14 @@ import logging
 from dataclasses import dataclass
 
 import structlog
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.infrastructure.db.models.player import PlayerORM
+from src.infrastructure.db.models.team import TeamORM
 from src.infrastructure.db.repositories.fixture import SqlAlchemyFixtureRepository
 from src.infrastructure.db.repositories.match_comment import SqlAlchemyMatchCommentRepository
+from src.infrastructure.db.repositories.match_event import SqlAlchemyMatchEventRepository
 from src.infrastructure.db.session import SessionLocal
 from src.simulation.application.replay_match import ReplayReport, replay_match
 from src.simulation.domain.replay_event import ReplayEvent
@@ -66,6 +70,32 @@ class _CliSink:
         self._last_minute = event.minute
 
 
+async def _load_sportmonks_id_maps(session: AsyncSession) -> tuple[dict[int, int], dict[int, str]]:
+    """Snapshot ``sportmonks_id → internal_id`` for players and teams.
+
+    These are needed by the match-event projector. Loaded once per
+    replay run; the simulation context never adds players or teams at
+    runtime, so a snapshot is sufficient.
+    """
+    players = (
+        await session.execute(
+            select(PlayerORM.id, PlayerORM.sportmonks_id).where(PlayerORM.sportmonks_id.is_not(None))
+        )
+    ).all()
+    player_id_by_smk: dict[int, int] = {
+        row.sportmonks_id: row.id for row in players if row.sportmonks_id is not None
+    }
+    teams = (
+        await session.execute(
+            select(TeamORM.id, TeamORM.sportmonks_id).where(TeamORM.sportmonks_id.is_not(None))
+        )
+    ).all()
+    team_id_by_smk: dict[int, str] = {
+        row.sportmonks_id: row.id for row in teams if row.sportmonks_id is not None
+    }
+    return player_id_by_smk, team_id_by_smk
+
+
 async def run(*, fixture_sportmonks_id: int, speed: float, from_minute: int) -> ReplayReport:
     _configure_logging()
     log.info(
@@ -77,8 +107,19 @@ async def run(*, fixture_sportmonks_id: int, speed: float, from_minute: int) -> 
     async with SessionLocal() as session:
         fixtures = SqlAlchemyFixtureRepository(session)
         archive = SqlAlchemyReplayArchiveReader(session=session, fixtures=fixtures)
+        player_id_by_smk, team_id_by_smk = await _load_sportmonks_id_maps(session)
+        log.info(
+            "simulation.replay.maps_loaded",
+            players=len(player_id_by_smk),
+            teams=len(team_id_by_smk),
+        )
         sink = _CliSink(
-            inner=ProjectorSink(comments=SqlAlchemyMatchCommentRepository(session)),
+            inner=ProjectorSink(
+                comments=SqlAlchemyMatchCommentRepository(session),
+                events=SqlAlchemyMatchEventRepository(session),
+                player_id_by_sportmonks=player_id_by_smk,
+                team_id_by_sportmonks=team_id_by_smk,
+            ),
             session=session,
         )
         report = await replay_match(
