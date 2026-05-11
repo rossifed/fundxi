@@ -14,20 +14,27 @@ import argparse
 import asyncio
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.infrastructure.db.models.fixture import FixtureORM
 from src.infrastructure.db.models.player import PlayerORM
 from src.infrastructure.db.models.team import TeamORM
 from src.infrastructure.db.repositories.fixture import SqlAlchemyFixtureRepository
 from src.infrastructure.db.repositories.match_comment import SqlAlchemyMatchCommentRepository
 from src.infrastructure.db.repositories.match_event import SqlAlchemyMatchEventRepository
 from src.infrastructure.db.session import SessionLocal
+from src.infrastructure.valuation.synthetic_valuation_provider import synthesize_valuation
 from src.simulation.application.replay_match import ReplayReport, replay_match
+from src.simulation.domain.ports import LiveDataSink
+from src.simulation.domain.price_state import PriceState
 from src.simulation.domain.replay_event import ReplayEvent
 from src.simulation.infrastructure.pg_archive_reader import SqlAlchemyReplayArchiveReader
+from src.simulation.infrastructure.pg_price_tick_writer import SqlAlchemyPlayerPriceTickWriter
+from src.simulation.infrastructure.price_tick_sink import PriceTickEmittingSink
 from src.simulation.infrastructure.projector_sink import ProjectorSink
 
 log = structlog.get_logger(__name__)
@@ -53,7 +60,7 @@ class _CliSink:
     real-time visibility is a wiring-layer concern, not domain.
     """
 
-    inner: ProjectorSink
+    inner: LiveDataSink
     session: AsyncSession
     _last_minute: int | None = None
 
@@ -96,6 +103,34 @@ async def _load_sportmonks_id_maps(session: AsyncSession) -> tuple[dict[int, int
     return player_id_by_smk, team_id_by_smk
 
 
+async def _load_initial_price_state(session: AsyncSession, *, as_of: datetime) -> PriceState:
+    """Seed a ``PriceState`` with the synthetic base value of every player.
+
+    Mirrors what ``wc_replay`` does at startup: the deterministic base
+    value (a function of player_id) is the price each player carries
+    into kick-off, before any event has moved it.
+    """
+    player_ids = (await session.execute(select(PlayerORM.id))).scalars().all()
+    return PriceState(
+        current_price_by_player={
+            pid: synthesize_valuation(pid, as_of=as_of).base_value for pid in player_ids
+        }
+    )
+
+
+async def _load_fixture_kickoff(session: AsyncSession, *, fixture_sportmonks_id: int) -> datetime:
+    row = (
+        await session.execute(
+            select(FixtureORM.kickoff_at).where(FixtureORM.sportmonks_id == fixture_sportmonks_id)
+        )
+    ).first()
+    if row is None or row.kickoff_at is None:
+        raise LookupError(
+            f"fixture sportmonks_id={fixture_sportmonks_id} has no kickoff_at in core.fixture"
+        )
+    return row.kickoff_at
+
+
 async def run(*, fixture_sportmonks_id: int, speed: float, from_minute: int) -> ReplayReport:
     _configure_logging()
     log.info(
@@ -105,23 +140,34 @@ async def run(*, fixture_sportmonks_id: int, speed: float, from_minute: int) -> 
         from_minute=from_minute,
     )
     async with SessionLocal() as session:
-        fixtures = SqlAlchemyFixtureRepository(session)
-        archive = SqlAlchemyReplayArchiveReader(session=session, fixtures=fixtures)
+        fixtures_repo = SqlAlchemyFixtureRepository(session)
+        archive = SqlAlchemyReplayArchiveReader(session=session, fixtures=fixtures_repo)
         player_id_by_smk, team_id_by_smk = await _load_sportmonks_id_maps(session)
+        kickoff = await _load_fixture_kickoff(session, fixture_sportmonks_id=fixture_sportmonks_id)
+        price_state = await _load_initial_price_state(session, as_of=kickoff)
         log.info(
-            "simulation.replay.maps_loaded",
+            "simulation.replay.context_loaded",
             players=len(player_id_by_smk),
             teams=len(team_id_by_smk),
+            kickoff=kickoff.isoformat(),
         )
-        sink = _CliSink(
-            inner=ProjectorSink(
-                comments=SqlAlchemyMatchCommentRepository(session),
-                events=SqlAlchemyMatchEventRepository(session),
-                player_id_by_sportmonks=player_id_by_smk,
-                team_id_by_sportmonks=team_id_by_smk,
-            ),
-            session=session,
+
+        projector_sink = ProjectorSink(
+            comments=SqlAlchemyMatchCommentRepository(session),
+            events=SqlAlchemyMatchEventRepository(session),
+            player_id_by_sportmonks=player_id_by_smk,
+            team_id_by_sportmonks=team_id_by_smk,
         )
+        pricing_sink = PriceTickEmittingSink(
+            inner=projector_sink,
+            price_ticks=SqlAlchemyPlayerPriceTickWriter(session=session),
+            price_state=price_state,
+            fixture_kickoff=kickoff,
+            player_id_by_sportmonks=player_id_by_smk,
+            team_id_by_sportmonks=team_id_by_smk,
+        )
+        sink = _CliSink(inner=pricing_sink, session=session)
+
         report = await replay_match(
             fixture_sportmonks_id=fixture_sportmonks_id,
             speed=speed,
