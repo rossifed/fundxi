@@ -1,10 +1,8 @@
 """Ingest daemon entry point.
 
-DDD role: Adapter (driving). Wires concrete adapters and runs the
-supervisor until interrupted. Étape A wires **mock pollers** so we
-can verify the orchestration end-to-end without yet hitting
-Sportmonks. Étape B will replace ``MockPollerFactory`` with the real
-HTTP-driven factory.
+DDD role: Adapter (driving). Wires concrete adapters (Sportmonks
+client, NATS publisher, real poller factory) and runs the supervisor
+until interrupted.
 
 Run with:
     uv run python -m src.ingest.workers.main
@@ -17,12 +15,15 @@ import signal
 
 import structlog
 
+from src.config import get_settings as get_app_settings
 from src.infrastructure.db.repositories.fixture import SqlAlchemyFixtureRepository
 from src.infrastructure.db.session import SessionLocal
+from src.infrastructure.sportmonks.client import HttpxSportmonksClient
 from src.ingest.application.supervisor import IngestSupervisor
 from src.ingest.domain.settings import IngestionSettings
-from src.ingest.infrastructure.mock_pollers import MockPollerFactory
 from src.ingest.infrastructure.nats_publisher import NatsPublisher
+from src.ingest.infrastructure.sportmonks_id_maps import load_sportmonks_id_maps
+from src.ingest.infrastructure.sportmonks_poller_factory import SportmonksPollerFactory
 from src.ingest.infrastructure.system_clock import SystemClock
 
 log = structlog.get_logger(__name__)
@@ -41,27 +42,47 @@ def _configure_logging() -> None:
 
 async def run() -> None:
     _configure_logging()
-    settings = IngestionSettings()
+    ingest_settings = IngestionSettings()
+    app_settings = get_app_settings()
+    if not app_settings.sportmonks_api_token:
+        raise SystemExit("SPORTMONKS_API_TOKEN not set in environment / .env")
+
     log.info(
         "ingest.daemon.start",
-        inplay_poll_seconds=settings.inplay_poll_seconds,
-        scheduler_check_seconds=settings.scheduler_check_seconds,
-        max_concurrent=settings.max_concurrent_inplay_pollers,
-        nats_servers=settings.nats_server_list,
+        inplay_poll_seconds=ingest_settings.inplay_poll_seconds,
+        scheduler_check_seconds=ingest_settings.scheduler_check_seconds,
+        max_concurrent=ingest_settings.max_concurrent_inplay_pollers,
+        nats_servers=ingest_settings.nats_server_list,
     )
 
     async with (
-        SessionLocal() as session,
-        NatsPublisher(servers=settings.nats_server_list) as _publisher,
+        HttpxSportmonksClient(
+            base_url=app_settings.sportmonks_base_url,
+            api_token=app_settings.sportmonks_api_token,
+        ) as sportmonks_client,
+        NatsPublisher(servers=ingest_settings.nats_server_list) as publisher,
+        SessionLocal() as supervisor_session,
     ):
-        # ``_publisher`` will be consumed by the real poller factory in
-        # étape B.2; for B.1 we only validate its lifecycle (connect on
-        # entry, drain on exit) is sound.
-        fixtures_repo = SqlAlchemyFixtureRepository(session)
+        id_maps = await load_sportmonks_id_maps(supervisor_session)
+        log.info(
+            "ingest.daemon.id_maps_loaded",
+            fixtures=len(id_maps.fixture_smk_by_internal),
+            players=len(id_maps.player_id_by_sportmonks),
+            teams=len(id_maps.team_id_by_sportmonks),
+        )
+
+        factory = SportmonksPollerFactory(
+            settings=ingest_settings,
+            client=sportmonks_client,
+            publisher=publisher,
+            session_factory=SessionLocal,
+            id_maps=id_maps,
+        )
+
         supervisor = IngestSupervisor(
-            settings=settings,
-            fixtures=fixtures_repo,
-            factory=MockPollerFactory(poll_seconds=settings.inplay_poll_seconds),
+            settings=ingest_settings,
+            fixtures=SqlAlchemyFixtureRepository(supervisor_session),
+            factory=factory,
             clock=SystemClock(),
             sleep=asyncio.sleep,
         )
