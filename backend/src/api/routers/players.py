@@ -1,5 +1,7 @@
 """/api/players router."""
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,6 +37,7 @@ from src.infrastructure.db.repositories.player import SqlAlchemyPlayerRepository
 from src.infrastructure.db.repositories.player_tournament_stat import (
     SqlAlchemyPlayerTournamentStatRepository,
 )
+from src.infrastructure.valuation.synthetic_valuation_provider import synthesize_valuation
 
 router = APIRouter(prefix="/api/players", tags=["players"])
 
@@ -199,20 +202,39 @@ async def players_screener_view(
               ON ts.player_id = p.id AND ts.season_id = :season_id
             LEFT JOIN app.holding h
               ON h.player_id = p.id AND h.portfolio_id = :portfolio_id
-            WHERE lt.current_price IS NOT NULL
-            ORDER BY lt.current_price DESC
+            ORDER BY lt.current_price DESC NULLS LAST, p.id
             """
         ),
         {"season_id": season_id, "portfolio_id": portfolio_id},
     )
 
+    # Players without any price tick (didn't play yet, or no pricing event)
+    # still appear — with their deterministic synthetic base value. The
+    # screener is keyed by core.player; live data only decorates it.
+    now = datetime.now(UTC)
+
     out: list[PlayerScreenerEntryResponse] = []
     for r in rows.mappings():
+        raw_price = r["current_price"]
+        if raw_price is not None:
+            current_price = float(raw_price)
+            performance_rating = float(r["performance_rating"])
+            change_24h = float(r["change_24h"])
+            valuation_as_of = r["valuation_as_of"]
+            valuation_source = r["valuation_source"]
+        else:
+            synth = synthesize_valuation(r["id"], as_of=now)
+            current_price = synth.base_value
+            performance_rating = 6.5
+            change_24h = 0.0
+            valuation_as_of = now
+            valuation_source = "synthetic"
+
         shares = float(r["held_shares"] or 0)
         avg_buy = float(r["average_buy_price"]) if r["average_buy_price"] is not None else None
         pnl: float | None = None
         if shares != 0 and avg_buy is not None:
-            pnl = shares * (float(r["current_price"]) - avg_buy)
+            pnl = shares * (current_price - avg_buy)
         since_start = r["since_start_pct"]
         apps = r["appearances"]
         avg_match: float | None = None
@@ -234,11 +256,11 @@ async def players_screener_view(
                 weight=r["weight"],
                 club=r["club"],
                 image_path=r["image_path"],
-                current_price=float(r["current_price"]),
-                performance_rating=float(r["performance_rating"]),
-                change_24h=float(r["change_24h"]),
-                valuation_as_of=r["valuation_as_of"],
-                valuation_source=r["valuation_source"],
+                current_price=current_price,
+                performance_rating=performance_rating,
+                change_24h=change_24h,
+                valuation_as_of=valuation_as_of,
+                valuation_source=valuation_source,
                 since_start_pct=float(since_start) if since_start is not None else None,
                 last_match_pct=float(r["last_match_pct"]) if r["last_match_pct"] is not None else None,
                 avg_match_pct=avg_match,
