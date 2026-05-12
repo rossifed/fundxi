@@ -145,8 +145,10 @@ def _comment_payload(*, smk_id: int, minute: int, text: str = "Goal!") -> dict[s
     }
 
 
-def _lineup_payload(*, smk_id: int, player_smk: int = 500, team_smk: int = 200) -> dict[str, Any]:
-    return {
+def _lineup_payload(
+    *, smk_id: int, player_smk: int = 500, team_smk: int = 200, with_details: bool = False
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
         "id": smk_id,
         "player_id": player_smk,
         "team_id": team_smk,
@@ -155,6 +157,16 @@ def _lineup_payload(*, smk_id: int, player_smk: int = 500, team_smk: int = 200) 
         "jersey_number": 4,
         "formation_position": 1,
     }
+    if with_details:
+        payload["details"] = [
+            {"type_id": 119, "data": {"value": 90}},   # minutes played
+            {"type_id": 118, "data": {"value": 7.5}},  # rating
+            {"type_id": 52, "data": {"value": 1}},     # goals
+            {"type_id": 42, "data": {"value": 3}},     # shots total
+            {"type_id": 80, "data": {"value": 40}},    # passes total
+            {"type_id": 1584, "data": {"value": 88}},  # passes accuracy %
+        ]
+    return payload
 
 
 # --- tests ----------------------------------------------------------------
@@ -177,7 +189,7 @@ async def test_poll_uses_correct_endpoint_and_include() -> None:
 
     assert client.captured_endpoint == "/fixtures/1000"
     assert client.captured_params == {
-        "include": "state;participants;scores;events.type;comments;lineups.position"
+        "include": "state;participants;scores;events.type;comments;lineups.position;lineups.details"
     }
 
 
@@ -284,6 +296,38 @@ async def test_lineups_present_emit_one_notification_with_count() -> None:
     assert subjects == ["fundxi.lineup.42"]
     msg = json.loads(publisher.log[0][1])
     assert msg == {"kind": "lineup", "fixture_id": 42, "count": 2}
+
+
+@pytest.mark.anyio
+async def test_player_match_stats_emit_one_notification_with_count() -> None:
+    client = _StubClient(
+        response=_envelope_with(
+            lineups=[
+                _lineup_payload(smk_id=900, player_smk=500, with_details=True),
+                _lineup_payload(smk_id=901, player_smk=501, with_details=True),
+                # bench player with no details → not counted
+                _lineup_payload(smk_id=902, player_smk=500, with_details=False),
+            ]
+        )
+    )
+    publisher = _RecordingPublisher()
+    poller = SportmonksInplayPoller(
+        fixture_internal_id=42,
+        fixture_sportmonks_id=1000,
+        poll_seconds=10.0,
+        client=client,
+        publisher=publisher,
+        session_factory=_fake_session_factory(write_log=[]),
+        id_maps=_id_maps(),
+    )
+
+    await poller.poll_once()
+
+    subjects = sorted(s for s, _ in publisher.log)
+    # lineups also emit a fundxi.lineup notification (3 lineups upserted).
+    assert "fundxi.player_match_stat.42" in subjects
+    stat_msg = next(json.loads(p) for s, p in publisher.log if s == "fundxi.player_match_stat.42")
+    assert stat_msg == {"kind": "player_match_stat", "fixture_id": 42, "count": 2}
 
 
 @pytest.mark.anyio

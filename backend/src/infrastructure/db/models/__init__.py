@@ -11,6 +11,7 @@ from src.infrastructure.db.models.match_event import MatchEventORM
 from src.infrastructure.db.models.news import NewsORM
 from src.infrastructure.db.models.player import PlayerORM
 from src.infrastructure.db.models.player_daily_snapshot import PlayerDailySnapshotORM
+from src.infrastructure.db.models.player_match_stat import PlayerMatchStatORM
 from src.infrastructure.db.models.player_price_tick import PlayerPriceTickORM
 from src.infrastructure.db.models.portfolio import HoldingORM, PortfolioORM, TradeORM
 from src.infrastructure.db.models.raw_sportmonks_event import RawSportmonksEventORM
@@ -26,6 +27,7 @@ __all__ = [
     "MatchEventORM",
     "NewsORM",
     "PlayerDailySnapshotORM",
+    "PlayerMatchStatORM",
     "PlayerORM",
     "PlayerPriceTickORM",
     "PortfolioORM",

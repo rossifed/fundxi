@@ -30,12 +30,14 @@ from src.infrastructure.db.repositories.fixture import SqlAlchemyFixtureReposito
 from src.infrastructure.db.repositories.lineup import SqlAlchemyLineupRepository
 from src.infrastructure.db.repositories.match_comment import SqlAlchemyMatchCommentRepository
 from src.infrastructure.db.repositories.match_event import SqlAlchemyMatchEventRepository
+from src.infrastructure.db.repositories.player_match_stat import SqlAlchemyPlayerMatchStatRepository
 from src.infrastructure.db.repositories.raw_sportmonks_event import SqlAlchemyRawSportmonksEventRepository
 from src.infrastructure.sportmonks.client import SportmonksClient, SportmonksError
 from src.infrastructure.sportmonks.projectors.fixture import project_fixture
 from src.infrastructure.sportmonks.projectors.lineup import project_lineup
 from src.infrastructure.sportmonks.projectors.match_comment import project_match_comment
 from src.infrastructure.sportmonks.projectors.match_event import project_match_event
+from src.infrastructure.sportmonks.projectors.player_match_stat import project_player_match_stat
 from src.ingest.application.commit_then_publish import commit_then_publish
 from src.ingest.domain.ports import NotificationPublisher
 from src.ingest.infrastructure.sportmonks_id_maps import SportmonksIdMaps
@@ -45,7 +47,9 @@ log = structlog.get_logger(__name__)
 # State + scores + participants come back by default with /fixtures/{id}
 # in v3, but listing them explicitly makes the contract self-documenting
 # and lets us add fields without ambiguity later.
-_INPLAY_INCLUDE = "state;participants;scores;events.type;comments;lineups.position"
+_INPLAY_INCLUDE = (
+    "state;participants;scores;events.type;comments;lineups.position;lineups.details"
+)
 
 
 @dataclass(slots=True)
@@ -112,6 +116,7 @@ class SportmonksInplayPoller:
         if not isinstance(data, dict):
             return
 
+        lineups_payload = _array(data.get("lineups"))
         fixture_updated = await self._project_fixture(session=session, fixture_payload=data)
         events_count = await self._project_events(
             session=session,
@@ -121,9 +126,9 @@ class SportmonksInplayPoller:
             session=session,
             comments_payload=_array(data.get("comments")),
         )
-        lineups_count = await self._project_lineups(
-            session=session,
-            lineups_payload=_array(data.get("lineups")),
+        lineups_count = await self._project_lineups(session=session, lineups_payload=lineups_payload)
+        player_stats_count = await self._project_player_match_stats(
+            session=session, lineups_payload=lineups_payload
         )
 
         fix_id = self.fixture_internal_id
@@ -136,6 +141,10 @@ class SportmonksInplayPoller:
             notifications.append(self._notif("match_comment", {"fixture_id": fix_id, "count": comments_count}))
         if lineups_count > 0:
             notifications.append(self._notif("lineup", {"fixture_id": fix_id, "count": lineups_count}))
+        if player_stats_count > 0:
+            notifications.append(
+                self._notif("player_match_stat", {"fixture_id": fix_id, "count": player_stats_count})
+            )
 
         await commit_then_publish(session=session, publisher=self.publisher, notifications=notifications)
 
@@ -146,6 +155,7 @@ class SportmonksInplayPoller:
             events=events_count,
             comments=comments_count,
             lineups=lineups_count,
+            player_stats=player_stats_count,
         )
 
     def _notif(self, kind: str, body: dict[str, Any]) -> tuple[str, bytes]:
@@ -218,6 +228,24 @@ class SportmonksInplayPoller:
                 log.debug("ingest.inplay.lineup_skip", reason=str(exc))
                 continue
             await repo.upsert_by_sportmonks_id(lineup, sportmonks_id=smk_id)
+            upserted += 1
+        return upserted
+
+    async def _project_player_match_stats(
+        self, *, session: AsyncSession, lineups_payload: list[dict[str, Any]]
+    ) -> int:
+        repo = SqlAlchemyPlayerMatchStatRepository(session)
+        upserted = 0
+        for payload in lineups_payload:
+            result = project_player_match_stat(
+                payload,
+                fixture_id=self.fixture_internal_id,
+                player_id_by_sportmonks=self.id_maps.player_id_by_sportmonks,
+            )
+            if result is None:
+                continue
+            stat, raw_details = result
+            await repo.upsert(stat, raw_details=raw_details)
             upserted += 1
         return upserted
 
