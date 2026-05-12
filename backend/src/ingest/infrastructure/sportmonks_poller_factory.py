@@ -32,6 +32,12 @@ class SportmonksPollerFactory:
     session_factory: Callable[[], AsyncSession]
     id_maps: SportmonksIdMaps
 
+    def set_id_maps(self, id_maps: SportmonksIdMaps) -> None:
+        """Swap the snapshot in. Called by the ReferenceRefresher after a
+        daily re-bootstrap so newly-created (knockout) fixtures become
+        spawnable without restarting the daemon."""
+        self.id_maps = id_maps
+
     def create_inplay(self, fixture_internal_id: int) -> Poller:
         smk_id = self.id_maps.fixture_smk_for(fixture_internal_id)
         if smk_id is None:
