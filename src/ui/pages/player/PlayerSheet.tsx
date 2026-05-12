@@ -13,6 +13,7 @@ import { Sheet } from "@/ui/components/Sheet";
 import { fmt_eur_m, fmt_eur_m_signed } from "@/ui/helpers/format";
 import { PlayerChip } from "@/ui/components/PlayerChip";
 import { PositionBadge } from "@/ui/components/PositionBadge";
+import { usePlayerLiveVersion, useLiveRefetch } from "@/ui/hooks/use_live_updates";
 import { TradeDialog } from "@/ui/components/TradeDialog";
 
 // Wikipedia-style synthetic bio composed from the data we have. Until a
@@ -142,6 +143,7 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
   // Real engine price-tick history. Single chart from the tournament baseline
   // through the latest tick. No period filtering in v0 — it would be honest
   // only once we have intra-match (M4 LiveWorker) ticks.
+  const player_live_version = usePlayerLiveVersion(player.id);
   const [price_history, set_price_history] = useState<PricePoint[] | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -158,6 +160,15 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
       cancelled = true;
     };
   }, [player.id]);
+  // Live refresh: a new price tick for this player extends the chart in place.
+  useLiveRefetch(player_live_version, () => {
+    valuations_api
+      .get_price_history(player.id)
+      .then(set_price_history)
+      .catch(() => {
+        /* keep the current curve on a transient error */
+      });
+  });
 
   const [tournament_stats, set_tournament_stats] = useState<PlayerTournamentStat | null | undefined>(undefined);
   useEffect(() => {

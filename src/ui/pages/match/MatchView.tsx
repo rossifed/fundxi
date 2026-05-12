@@ -10,6 +10,7 @@ import { lerp } from "@/ui/helpers/chart_utils";
 import { PlayerChip } from "@/ui/components/PlayerChip";
 import { PositionBadge } from "@/ui/components/PositionBadge";
 import { TradeDialog } from "@/ui/components/TradeDialog";
+import { useFixtureLiveVersion, useLiveRefetch } from "@/ui/hooks/use_live_updates";
 
 type RightTab = "home_lineup" | "away_lineup" | "commentary";
 
@@ -78,6 +79,7 @@ export function MatchView({ match, on_back, on_open_player_profile, go_portfolio
   const feed = match.events;
   const feed_chronological = [...feed].reverse();
 
+  const fixture_live_version = useFixtureLiveVersion(match.fixture_id);
   const [commentaries, set_commentaries] = useState<MatchComment[] | null>(null);
   useEffect(() => {
     if (!match.fixture_id) {
@@ -98,6 +100,17 @@ export function MatchView({ match, on_back, on_open_player_profile, go_portfolio
       cancelled = true;
     };
   }, [match.fixture_id]);
+  // Live refresh: a new commentary / event for this fixture re-fetches the
+  // feed in place (no loading flash). Driven by the SSE stream.
+  useLiveRefetch(fixture_live_version, () => {
+    if (!match.fixture_id) return;
+    comments_api
+      .for_fixture(match.fixture_id)
+      .then(set_commentaries)
+      .catch(() => {
+        /* keep the current feed on a transient error */
+      });
+  });
   const commentaries_chrono = useMemo(
     () => (commentaries ? [...commentaries].reverse() : []),
     [commentaries],
