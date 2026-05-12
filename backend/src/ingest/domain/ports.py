@@ -3,26 +3,19 @@
 DDD role: Protocols. The application layer (supervisor, side pollers)
 depends only on these; concrete implementations live in
 ``ingest/infrastructure/`` and are wired by the worker entry point.
+
+The publish-side ``NotificationPublisher`` port lives in the shared
+kernel (``src/domain/messaging.py``) — it is used by ``src/simulation``
+too — and is re-exported here for the ingest layer's convenience.
 """
 
 from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import Protocol
 
+from src.domain.messaging import NotificationPublisher
 
-class NotificationPublisher(Protocol):
-    """Fire-and-forget publish to the live pub/sub bus.
-
-    Implementations target NATS in production; tests inject a fake.
-
-    Callers MUST publish only after the originating DB transaction has
-    committed — otherwise a subscriber may invalidate its cache and
-    refetch a stale row that has not yet been persisted. The
-    ``application.commit_then_publish`` helper enforces this order at
-    call sites.
-    """
-
-    async def publish(self, subject: str, payload: bytes) -> None: ...
+__all__ = ["Clock", "NotificationPublisher", "Poller", "PollerFactory", "SleepFn"]
 
 
 class Clock(Protocol):

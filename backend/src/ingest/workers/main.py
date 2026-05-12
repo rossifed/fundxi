@@ -18,11 +18,11 @@ import structlog
 from src.config import get_settings as get_app_settings
 from src.infrastructure.db.repositories.fixture import SqlAlchemyFixtureRepository
 from src.infrastructure.db.session import SessionLocal
+from src.infrastructure.messaging.nats_publisher import NatsPublisher
 from src.infrastructure.sportmonks.client import HttpxSportmonksClient
 from src.ingest.application.supervisor import IngestSupervisor
 from src.ingest.domain.settings import IngestionSettings
 from src.ingest.infrastructure.live_pricing_poller import LivePricingPoller
-from src.ingest.infrastructure.nats_publisher import NatsPublisher
 from src.ingest.infrastructure.news_poller import NewsPoller
 from src.ingest.infrastructure.reference_refresher import ReferenceRefresher
 from src.ingest.infrastructure.sportmonks_id_maps import load_sportmonks_id_maps
@@ -64,7 +64,7 @@ async def run() -> None:
             base_url=app_settings.sportmonks_base_url,
             api_token=app_settings.sportmonks_api_token,
         ) as sportmonks_client,
-        NatsPublisher(servers=ingest_settings.nats_server_list) as publisher,
+        NatsPublisher(servers=ingest_settings.nats_server_list, name="fundxi-ingest") as publisher,
         SessionLocal() as supervisor_session,
     ):
         id_maps = await load_sportmonks_id_maps(supervisor_session)

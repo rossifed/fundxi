@@ -16,6 +16,7 @@ Run:
 """
 
 import asyncio
+import os
 import threading
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -29,11 +30,14 @@ from src.infrastructure.db.repositories.fixture import SqlAlchemyFixtureReposito
 from src.infrastructure.db.repositories.match_comment import SqlAlchemyMatchCommentRepository
 from src.infrastructure.db.repositories.match_event import SqlAlchemyMatchEventRepository
 from src.infrastructure.db.session import SessionLocal
+from src.infrastructure.messaging.nats_publisher import NatsPublisher
 from src.simulation.application.replay_match import replay_match
 from src.simulation.application.wipe_replay_state import wipe_replay_state
 from src.simulation.domain.ports import LiveDataSink, PlayerPriceTickWriter
 from src.simulation.domain.replay_event import ReplayEvent, ReplayEventKind
 from src.simulation.domain.wipe_scope import WipeScope
+from src.simulation.infrastructure.nats_publishing_sink import NatsPublishingSink
+from src.simulation.infrastructure.nats_publishing_tick_writer import NatsPublishingTickWriter
 from src.simulation.infrastructure.pg_archive_reader import SqlAlchemyReplayArchiveReader
 from src.simulation.infrastructure.pg_price_tick_writer import SqlAlchemyPlayerPriceTickWriter
 from src.simulation.infrastructure.pg_wipe_executor import SqlAlchemyWipeExecutor
@@ -44,6 +48,14 @@ from src.simulation.infrastructure.replay_context import (
     load_initial_price_state,
     load_sportmonks_id_maps,
 )
+
+_DEFAULT_NATS_SERVERS = "nats://localhost:4222"
+
+
+def _nats_server_list() -> tuple[str, ...]:
+    return tuple(
+        s.strip() for s in os.getenv("SIM_NATS_SERVERS", _DEFAULT_NATS_SERVERS).split(",") if s.strip()
+    )
 
 # ---------------------------------------------------------------------------
 # Process-wide progress state.
@@ -193,7 +205,10 @@ async def _run_wipe(scope: WipeScope) -> None:
 
 
 async def _run_replay(*, fixture_smk_id: int, speed: float, from_minute: int) -> None:
-    async with SessionLocal() as session:
+    async with (
+        SessionLocal() as session,
+        NatsPublisher(servers=_nats_server_list(), name="fundxi-simulation-gui") as publisher,
+    ):
         fixtures_repo = SqlAlchemyFixtureRepository(session)
         archive = SqlAlchemyReplayArchiveReader(session=session, fixtures=fixtures_repo)
         player_id_by_smk, team_id_by_smk = await load_sportmonks_id_maps(session)
@@ -208,13 +223,17 @@ async def _run_replay(*, fixture_smk_id: int, speed: float, from_minute: int) ->
         )
         pricing_sink = PriceTickEmittingSink(
             inner=projector_sink,
-            price_ticks=_CountingTickWriter(inner=SqlAlchemyPlayerPriceTickWriter(session=session)),
+            # write to DB → count for the progress panel → publish on NATS
+            price_ticks=NatsPublishingTickWriter(
+                inner=_CountingTickWriter(inner=SqlAlchemyPlayerPriceTickWriter(session=session)),
+                publisher=publisher,
+            ),
             price_state=price_state,
             fixture_kickoff=kickoff,
             player_id_by_sportmonks=player_id_by_smk,
             team_id_by_sportmonks=team_id_by_smk,
         )
-        sink = _GuiSink(inner=pricing_sink, session=session)
+        sink = _GuiSink(inner=NatsPublishingSink(inner=pricing_sink, publisher=publisher), session=session)
 
         await replay_match(
             fixture_sportmonks_id=fixture_smk_id,

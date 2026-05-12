@@ -13,18 +13,27 @@ Usage:
 import argparse
 import asyncio
 import logging
+import os
 from dataclasses import dataclass
+from datetime import datetime
+from types import TracebackType
+from typing import Self
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.domain.messaging import NotificationPublisher
 from src.infrastructure.db.repositories.fixture import SqlAlchemyFixtureRepository
 from src.infrastructure.db.repositories.match_comment import SqlAlchemyMatchCommentRepository
 from src.infrastructure.db.repositories.match_event import SqlAlchemyMatchEventRepository
 from src.infrastructure.db.session import SessionLocal
+from src.infrastructure.messaging.nats_publisher import NatsPublisher
 from src.simulation.application.replay_match import ReplayReport, replay_match
 from src.simulation.domain.ports import LiveDataSink
+from src.simulation.domain.price_state import PriceState
 from src.simulation.domain.replay_event import ReplayEvent
+from src.simulation.infrastructure.nats_publishing_sink import NatsPublishingSink
+from src.simulation.infrastructure.nats_publishing_tick_writer import NatsPublishingTickWriter
 from src.simulation.infrastructure.pg_archive_reader import SqlAlchemyReplayArchiveReader
 from src.simulation.infrastructure.pg_price_tick_writer import SqlAlchemyPlayerPriceTickWriter
 from src.simulation.infrastructure.price_tick_sink import PriceTickEmittingSink
@@ -36,6 +45,29 @@ from src.simulation.infrastructure.replay_context import (
 )
 
 log = structlog.get_logger(__name__)
+
+_DEFAULT_NATS_SERVERS = "nats://localhost:4222"
+
+
+class _NullPublisher:
+    """No-op publisher for ``--no-nats`` (offline DB-only replays).
+
+    Async-context-manager shaped so the wiring can ``async with`` it
+    interchangeably with ``NatsPublisher``."""
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        return None
+
+    async def publish(self, subject: str, payload: bytes) -> None:
+        return None
 
 
 def _configure_logging() -> None:
@@ -75,15 +107,23 @@ class _CliSink:
         self._last_minute = event.minute
 
 
-async def run(*, fixture_sportmonks_id: int, speed: float, from_minute: int) -> ReplayReport:
+def _make_publisher(*, no_nats: bool) -> _NullPublisher | NatsPublisher:
+    if no_nats:
+        return _NullPublisher()
+    servers = tuple(s.strip() for s in os.getenv("SIM_NATS_SERVERS", _DEFAULT_NATS_SERVERS).split(",") if s.strip())
+    return NatsPublisher(servers=servers, name="fundxi-simulation")
+
+
+async def run(*, fixture_sportmonks_id: int, speed: float, from_minute: int, no_nats: bool) -> ReplayReport:
     _configure_logging()
     log.info(
         "simulation.replay.start",
         fixture=fixture_sportmonks_id,
         speed=speed,
         from_minute=from_minute,
+        nats=not no_nats,
     )
-    async with SessionLocal() as session:
+    async with SessionLocal() as session, _make_publisher(no_nats=no_nats) as publisher:
         fixtures_repo = SqlAlchemyFixtureRepository(session)
         archive = SqlAlchemyReplayArchiveReader(session=session, fixtures=fixtures_repo)
         player_id_by_smk, team_id_by_smk = await load_sportmonks_id_maps(session)
@@ -96,22 +136,17 @@ async def run(*, fixture_sportmonks_id: int, speed: float, from_minute: int) -> 
             kickoff=kickoff.isoformat(),
         )
 
-        projector_sink = ProjectorSink(
-            comments=SqlAlchemyMatchCommentRepository(session),
-            events=SqlAlchemyMatchEventRepository(session),
-            player_id_by_sportmonks=player_id_by_smk,
-            team_id_by_sportmonks=team_id_by_smk,
+        sink = _CliSink(
+            inner=_build_replay_sink(
+                session=session,
+                player_id_by_smk=player_id_by_smk,
+                team_id_by_smk=team_id_by_smk,
+                price_state=price_state,
+                kickoff=kickoff,
+                publisher=publisher,
+            ),
+            session=session,
         )
-        pricing_sink = PriceTickEmittingSink(
-            inner=projector_sink,
-            price_ticks=SqlAlchemyPlayerPriceTickWriter(session=session),
-            price_state=price_state,
-            fixture_kickoff=kickoff,
-            player_id_by_sportmonks=player_id_by_smk,
-            team_id_by_sportmonks=team_id_by_smk,
-        )
-        sink = _CliSink(inner=pricing_sink, session=session)
-
         report = await replay_match(
             fixture_sportmonks_id=fixture_sportmonks_id,
             speed=speed,
@@ -130,6 +165,38 @@ async def run(*, fixture_sportmonks_id: int, speed: float, from_minute: int) -> 
     return report
 
 
+def _build_replay_sink(
+    *,
+    session: AsyncSession,
+    player_id_by_smk: dict[int, int],
+    team_id_by_smk: dict[int, str],
+    price_state: PriceState,
+    kickoff: datetime,
+    publisher: NotificationPublisher,
+) -> LiveDataSink:
+    """Assemble the inner sink chain shared by the CLI and the Streamlit GUI:
+    ProjectorSink → PriceTickEmittingSink → NatsPublishingSink. The outermost
+    decorator (commit-per-minute + logging/progress) is added by the caller."""
+    projector_sink = ProjectorSink(
+        comments=SqlAlchemyMatchCommentRepository(session),
+        events=SqlAlchemyMatchEventRepository(session),
+        player_id_by_sportmonks=player_id_by_smk,
+        team_id_by_sportmonks=team_id_by_smk,
+    )
+    pricing_sink = PriceTickEmittingSink(
+        inner=projector_sink,
+        price_ticks=NatsPublishingTickWriter(
+            inner=SqlAlchemyPlayerPriceTickWriter(session=session),
+            publisher=publisher,
+        ),
+        price_state=price_state,
+        fixture_kickoff=kickoff,
+        player_id_by_sportmonks=player_id_by_smk,
+        team_id_by_sportmonks=team_id_by_smk,
+    )
+    return NatsPublishingSink(inner=pricing_sink, publisher=publisher)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Replay a recorded fixture into the live store")
     parser.add_argument("--fixture-id", type=int, required=True, help="Sportmonks fixture id")
@@ -140,8 +207,20 @@ def main() -> int:
         help="Acceleration factor: 1=real time, 60=1 game minute per real second (default: 60)",
     )
     parser.add_argument("--from-minute", type=int, default=0, help="Start replay at this minute (default: 0)")
+    parser.add_argument(
+        "--no-nats",
+        action="store_true",
+        help="Skip NATS publishing (offline DB-only replay).",
+    )
     args = parser.parse_args()
-    asyncio.run(run(fixture_sportmonks_id=args.fixture_id, speed=args.speed, from_minute=args.from_minute))
+    asyncio.run(
+        run(
+            fixture_sportmonks_id=args.fixture_id,
+            speed=args.speed,
+            from_minute=args.from_minute,
+            no_nats=args.no_nats,
+        )
+    )
     return 0
 
 
