@@ -70,3 +70,12 @@ class SqlAlchemyMatchEventRepository:
             .order_by(FixtureORM.kickoff_at, MatchEventORM.sequence)
         )
         return [_to_domain(row) for row in result.scalars().all()]
+
+    async def list_since_id(self, last_id: int, *, limit: int = 1000) -> list[MatchEvent]:
+        result = await self._session.execute(
+            select(MatchEventORM)
+            .where(MatchEventORM.id > last_id)
+            .order_by(MatchEventORM.id)
+            .limit(limit)
+        )
+        return [_to_domain(row) for row in result.scalars().all()]

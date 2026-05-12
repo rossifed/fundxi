@@ -45,3 +45,9 @@ class MatchEventRepository(Protocol):
     async def list_by_fixture(self, fixture_id: int) -> list[MatchEvent]: ...
 
     async def list_chronological_by_season(self, season_id: int) -> list[MatchEvent]: ...
+
+    async def list_since_id(self, last_id: int, *, limit: int = 1000) -> list[MatchEvent]:
+        """Events with internal ``id`` strictly greater than ``last_id``,
+        ordered by ``(id)`` — i.e. in insert order. Used by the live
+        pricing worker to consume newly-ingested events incrementally."""
+        ...

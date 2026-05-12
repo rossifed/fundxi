@@ -21,6 +21,7 @@ from src.infrastructure.db.session import SessionLocal
 from src.infrastructure.sportmonks.client import HttpxSportmonksClient
 from src.ingest.application.supervisor import IngestSupervisor
 from src.ingest.domain.settings import IngestionSettings
+from src.ingest.infrastructure.live_pricing_poller import LivePricingPoller
 from src.ingest.infrastructure.nats_publisher import NatsPublisher
 from src.ingest.infrastructure.sportmonks_id_maps import load_sportmonks_id_maps
 from src.ingest.infrastructure.sportmonks_poller_factory import SportmonksPollerFactory
@@ -95,6 +96,11 @@ async def run() -> None:
             session_factory=SessionLocal,
             team_id_by_sportmonks=id_maps.team_id_by_sportmonks,
         )
+        pricing_poller = LivePricingPoller(
+            poll_seconds=ingest_settings.pricing_poll_seconds,
+            publisher=publisher,
+            session_factory=SessionLocal,
+        )
 
         stop_signal = asyncio.Event()
 
@@ -111,6 +117,7 @@ async def run() -> None:
         tasks = [
             asyncio.create_task(supervisor.run(), name="ingest-supervisor"),
             asyncio.create_task(standings_poller.run(), name="ingest-standings"),
+            asyncio.create_task(pricing_poller.run(), name="ingest-pricing"),
         ]
         await stop_signal.wait()
         for task in tasks:

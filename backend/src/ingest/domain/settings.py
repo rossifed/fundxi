@@ -40,6 +40,9 @@ class IngestionSettings(BaseSettings):
     standings_poll_seconds: float = 300.0  # 5 min
     news_poll_seconds: float = 900.0  # 15 min
     reference_refresh_seconds: float = 86400.0  # 24 h
+    # How often the live pricing worker drains newly-ingested match events
+    # into price ticks. Small (events arrive ~10s from the InplayPoller).
+    pricing_poll_seconds: float = 5.0
 
     # ----- Supervisor cadence --------------------------------------------
     # How often the supervisor checks the fixture list and decides which
