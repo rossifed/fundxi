@@ -16,6 +16,7 @@ Run (from the backend/ directory):
 """
 
 import asyncio
+import contextlib
 import os
 import sys
 import threading
@@ -33,7 +34,10 @@ if str(_BACKEND_ROOT) not in sys.path:
 
 import streamlit as st
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
+from src.config import get_settings
 from src.infrastructure.db.models.fixture import FixtureORM
 from src.infrastructure.db.repositories.fixture import SqlAlchemyFixtureRepository
 from src.infrastructure.db.repositories.match_comment import SqlAlchemyMatchCommentRepository
@@ -65,6 +69,35 @@ def _nats_server_list() -> tuple[str, ...]:
     return tuple(
         s.strip() for s in os.getenv("SIM_NATS_SERVERS", _DEFAULT_NATS_SERVERS).split(",") if s.strip()
     )
+
+
+# ---------------------------------------------------------------------------
+# Async plumbing for Streamlit.
+#
+# Streamlit re-executes the script on every interaction. Using
+# ``asyncio.run()`` per call would create a throw-away event loop each
+# time — and asyncpg connections (pooled or not) bound to a closed loop
+# blow up with "TCPTransport closed" / "Event loop is closed". So we
+# keep ONE persistent loop for the whole Streamlit process (cached as a
+# resource), and run short DB calls on it via ``_run_async``. The
+# shared ``SessionLocal`` (pooled) is then safe: every connection it
+# pools stays bound to that single loop.
+#
+# The replay runs in a *background thread* (so it doesn't block the UI):
+# that thread can't touch this loop's connections, so ``_run_replay``
+# uses its own NullPool engine, created and disposed within the thread.
+# ---------------------------------------------------------------------------
+
+
+@st.cache_resource
+def _persistent_loop() -> asyncio.AbstractEventLoop:
+    loop = asyncio.new_event_loop()
+    return loop
+
+
+def _run_async(coro: object) -> object:
+    return _persistent_loop().run_until_complete(coro)  # type: ignore[arg-type]
+
 
 # ---------------------------------------------------------------------------
 # Process-wide progress state.
@@ -214,45 +247,56 @@ async def _run_wipe(scope: WipeScope) -> None:
 
 
 async def _run_replay(*, fixture_smk_id: int, speed: float, from_minute: int) -> None:
-    async with (
-        SessionLocal() as session,
-        NatsPublisher(servers=_nats_server_list(), name="fundxi-simulation-gui") as publisher,
-    ):
-        fixtures_repo = SqlAlchemyFixtureRepository(session)
-        archive = SqlAlchemyReplayArchiveReader(session=session, fixtures=fixtures_repo)
-        player_id_by_smk, team_id_by_smk = await load_sportmonks_id_maps(session)
-        kickoff = await load_fixture_kickoff(session, fixture_sportmonks_id=fixture_smk_id)
-        price_state = await load_initial_price_state(session, as_of=kickoff)
+    # Runs in a background thread with its own event loop — must NOT touch
+    # the persistent loop's pooled connections. A self-contained NullPool
+    # engine, opened and disposed inside this thread, sidesteps that.
+    engine = create_async_engine(get_settings().database_url, poolclass=NullPool)
+    session_local = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+    try:
+        async with (
+            session_local() as session,
+            NatsPublisher(servers=_nats_server_list(), name="fundxi-simulation-gui") as publisher,
+        ):
+            fixtures_repo = SqlAlchemyFixtureRepository(session)
+            archive = SqlAlchemyReplayArchiveReader(session=session, fixtures=fixtures_repo)
+            player_id_by_smk, team_id_by_smk = await load_sportmonks_id_maps(session)
+            kickoff = await load_fixture_kickoff(session, fixture_sportmonks_id=fixture_smk_id)
+            price_state = await load_initial_price_state(session, as_of=kickoff)
 
-        projector_sink = ProjectorSink(
-            comments=SqlAlchemyMatchCommentRepository(session),
-            events=SqlAlchemyMatchEventRepository(session),
-            player_id_by_sportmonks=player_id_by_smk,
-            team_id_by_sportmonks=team_id_by_smk,
-        )
-        pricing_sink = PriceTickEmittingSink(
-            inner=projector_sink,
-            # write to DB → count for the progress panel → publish on NATS
-            price_ticks=NatsPublishingTickWriter(
-                inner=_CountingTickWriter(inner=SqlAlchemyPlayerPriceTickWriter(session=session)),
-                publisher=publisher,
-            ),
-            price_state=price_state,
-            fixture_kickoff=kickoff,
-            player_id_by_sportmonks=player_id_by_smk,
-            team_id_by_sportmonks=team_id_by_smk,
-        )
-        sink = _GuiSink(inner=NatsPublishingSink(inner=pricing_sink, publisher=publisher), session=session)
+            projector_sink = ProjectorSink(
+                comments=SqlAlchemyMatchCommentRepository(session),
+                events=SqlAlchemyMatchEventRepository(session),
+                player_id_by_sportmonks=player_id_by_smk,
+                team_id_by_sportmonks=team_id_by_smk,
+            )
+            pricing_sink = PriceTickEmittingSink(
+                inner=projector_sink,
+                # write to DB → count for the progress panel → publish on NATS
+                price_ticks=NatsPublishingTickWriter(
+                    inner=_CountingTickWriter(inner=SqlAlchemyPlayerPriceTickWriter(session=session)),
+                    publisher=publisher,
+                ),
+                price_state=price_state,
+                fixture_kickoff=kickoff,
+                player_id_by_sportmonks=player_id_by_smk,
+                team_id_by_sportmonks=team_id_by_smk,
+            )
+            sink = _GuiSink(
+                inner=NatsPublishingSink(inner=pricing_sink, publisher=publisher), session=session
+            )
 
-        await replay_match(
-            fixture_sportmonks_id=fixture_smk_id,
-            speed=speed,
-            from_minute=from_minute,
-            archive=archive,
-            sink=sink,
-            sleep=asyncio.sleep,
-        )
-        await session.commit()
+            await replay_match(
+                fixture_sportmonks_id=fixture_smk_id,
+                speed=speed,
+                from_minute=from_minute,
+                archive=archive,
+                sink=sink,
+                sleep=asyncio.sleep,
+            )
+            await session.commit()
+    finally:
+        with contextlib.suppress(Exception):
+            await engine.dispose()
 
 
 def _start_replay_in_thread(*, fixture_smk_id: int, fixture_label: str, speed: float, from_minute: int) -> None:
@@ -296,10 +340,10 @@ st.caption("Replay recorded fixtures into the live store at controlled speed.")
 st.subheader("Reset")
 col_left, col_right = st.columns(2)
 if col_left.button("Wipe simulation data", use_container_width=True):
-    asyncio.run(_run_wipe(WipeScope.DATA_ONLY))
+    _run_async(_run_wipe(WipeScope.DATA_ONLY))
     st.success("Simulation data wiped — events, comments, ticks, derived stats.")
 if col_right.button("Wipe + portfolio", use_container_width=True):
-    asyncio.run(_run_wipe(WipeScope.FULL))
+    _run_async(_run_wipe(WipeScope.FULL))
     st.success("Everything wiped including portfolio / holdings / trades.")
     st.info(
         "Run `uv run python -m src.infrastructure.workers.bootstrap_user` "
@@ -311,7 +355,7 @@ st.divider()
 # Replay
 st.subheader("Replay")
 try:
-    fixtures = asyncio.run(_load_fixture_choices())
+    fixtures = _run_async(_load_fixture_choices())
 except Exception as exc:
     st.error(f"Could not load fixtures from DB: {exc}")
     fixtures = []
