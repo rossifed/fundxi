@@ -1,6 +1,10 @@
 import type { PlayerValuation } from "@/domain/market/player_valuation";
 import { valuation_service, type MoverDirection } from "@/application/valuation_service";
-import { fetch_price_history, type PricePoint } from "@/infrastructure/repositories/valuations_repository";
+import {
+  fetch_price_history,
+  refresh_valuations,
+  type PricePoint,
+} from "@/infrastructure/repositories/valuations_repository";
 
 export const valuations_api = {
   get_for_player(player_id: number): PlayerValuation | undefined {
@@ -12,5 +16,9 @@ export const valuations_api = {
   /** Async — full price-tick history for the chart. */
   get_price_history(player_id: number): Promise<PricePoint[]> {
     return fetch_price_history(player_id);
+  },
+  /** Async — re-fetch all current prices after a live price tick. */
+  refresh(): Promise<void> {
+    return refresh_valuations();
   },
 };

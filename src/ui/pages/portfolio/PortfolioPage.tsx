@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { players_api } from "@/api/players_api";
 import { portfolio_api } from "@/api/portfolio_api";
 import { teams_api } from "@/api/teams_api";
+import { valuations_api } from "@/api/valuations_api";
 import { POSITION_LABEL } from "@/domain/player/player";
 import type { Player } from "@/domain/player/player";
 import { PlayerChip } from "@/ui/components/PlayerChip";
@@ -10,6 +11,7 @@ import { PerformanceChart } from "@/ui/components/PerformanceChart";
 import { Donut } from "@/ui/components/Donut";
 import { spark_market_index } from "@/infrastructure/repositories/valuations_repository";
 import { fmt_eur_m, fmt_eur_m_signed, fmt_shares } from "@/ui/helpers/format";
+import { usePricesLiveVersion, useLiveRefetch } from "@/ui/hooks/use_live_updates";
 
 type PositionsTab = "positions" | "trades";
 
@@ -29,9 +31,20 @@ interface PortfolioPageProps {
 }
 
 export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
-  const holdings = useMemo(() => portfolio_api.get_holdings(), []);
-  const trades = useMemo(() => portfolio_api.list_trades(), []);
-  const totals = useMemo(() => portfolio_api.get_totals(), []);
+  // Live refresh: a price tick anywhere re-fetches current prices, then bumps
+  // a local version so the memoised reads below recompute. A trade (any
+  // in-place portfolio mutation) bumps it too — the repo cache is already
+  // updated by the trade execution, so no re-fetch is needed there.
+  const prices_live_version = usePricesLiveVersion();
+  const [data_version, set_data_version] = useState(0);
+  useLiveRefetch(prices_live_version, () => {
+    void valuations_api.refresh().then(() => set_data_version(v => v + 1));
+  });
+  useEffect(() => portfolio_api.subscribe(() => set_data_version(v => v + 1)), []);
+
+  const holdings = useMemo(() => portfolio_api.get_holdings(), [data_version]);
+  const trades = useMemo(() => portfolio_api.list_trades(), [data_version]);
+  const totals = useMemo(() => portfolio_api.get_totals(), [data_version]);
   const total_value = totals.total_value;
   const pnl = totals.pnl;
   const return_pct = totals.return_pct;

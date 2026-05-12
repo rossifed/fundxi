@@ -3,6 +3,7 @@ import { simulate_trade, type TradePreview, type TradePreviewInput } from "@/app
 import type { Holding } from "@/domain/portfolio/holding";
 import type { Trade } from "@/domain/portfolio/trade";
 import type { PortfolioTotals } from "@/domain/portfolio/portfolio_metrics";
+import { refresh_portfolio, subscribe_portfolio } from "@/infrastructure/repositories/portfolio_repository";
 import { trades_repository } from "@/infrastructure/repositories/trades_repository";
 
 export const portfolio_api = {
@@ -23,5 +24,13 @@ export const portfolio_api = {
   },
   list_trades(): Trade[] {
     return trades_repository.find_all();
+  },
+  /** Async — re-fetch the portfolio (holdings + cash) from the BFF. */
+  refresh(): Promise<void> {
+    return refresh_portfolio();
+  },
+  /** Subscribe to in-place portfolio mutations (e.g. after a trade). Returns the unsubscribe fn. */
+  subscribe(listener: () => void): () => void {
+    return subscribe_portfolio(listener);
   },
 };

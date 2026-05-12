@@ -36,7 +36,7 @@ function dto_to_domain(dto: PlayerWithValuationDTO["valuation"]): PlayerValuatio
   };
 }
 
-export async function init_valuations_repository(): Promise<void> {
+async function _fetch_and_populate(): Promise<void> {
   const [dtos, sparklines] = await Promise.all([
     api_get<PlayerWithValuationDTO[]>("/api/players/search", { limit: 2000 }),
     api_get<Record<string, number[]>>("/api/valuations/sparklines", { length: SPARK_LENGTH }),
@@ -46,6 +46,15 @@ export async function init_valuations_repository(): Promise<void> {
   SPARKLINES_BY_PLAYER_ID = new Map(
     Object.entries(sparklines).map(([pid, points]) => [Number(pid), points]),
   );
+}
+
+export async function init_valuations_repository(): Promise<void> {
+  await _fetch_and_populate();
+}
+
+/** Re-fetch all current prices + sparklines (after a live price tick). */
+export async function refresh_valuations(): Promise<void> {
+  await _fetch_and_populate();
 }
 
 /** Real-prices sparkline for a player, resampled to a fixed length.
