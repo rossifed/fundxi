@@ -14,6 +14,7 @@ from src.infrastructure.db.repositories.fixture import SqlAlchemyFixtureReposito
 from src.infrastructure.db.repositories.match_comment import SqlAlchemyMatchCommentRepository
 from src.infrastructure.db.repositories.news import SqlAlchemyNewsRepository
 from src.infrastructure.db.repositories.player import SqlAlchemyPlayerRepository
+from src.infrastructure.db.repositories.standings import SqlAlchemyStandingRepository
 from src.infrastructure.db.repositories.team import SqlAlchemyTeamRepository
 from src.infrastructure.db.session import SessionLocal
 from src.infrastructure.valuation.engine_valuation_provider import EngineValuationProvider
@@ -49,3 +50,7 @@ def get_news_repo(session: AsyncSession = Depends(get_session)) -> SqlAlchemyNew
 
 def get_match_comment_repo(session: AsyncSession = Depends(get_session)) -> SqlAlchemyMatchCommentRepository:
     return SqlAlchemyMatchCommentRepository(session)
+
+
+def get_standing_repo(session: AsyncSession = Depends(get_session)) -> SqlAlchemyStandingRepository:
+    return SqlAlchemyStandingRepository(session)

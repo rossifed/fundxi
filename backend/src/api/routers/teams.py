@@ -2,13 +2,20 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from src.api.dependencies import get_match_comment_repo, get_news_repo, get_team_repo
+from src.api.dependencies import (
+    get_match_comment_repo,
+    get_news_repo,
+    get_standing_repo,
+    get_team_repo,
+)
 from src.api.dtos.match_comment import MatchCommentResponse
 from src.api.dtos.news import NewsResponse
+from src.api.dtos.standings import StandingRowResponse
 from src.api.dtos.team import TeamResponse
 from src.application.queries import get_team, list_teams
 from src.infrastructure.db.repositories.match_comment import SqlAlchemyMatchCommentRepository
 from src.infrastructure.db.repositories.news import SqlAlchemyNewsRepository
+from src.infrastructure.db.repositories.standings import SqlAlchemyStandingRepository
 from src.infrastructure.db.repositories.team import SqlAlchemyTeamRepository
 
 router = APIRouter(prefix="/api/teams", tags=["teams"])
@@ -46,3 +53,16 @@ async def teams_comments(
 ) -> list[MatchCommentResponse]:
     items = await comment_repo.list_by_team(team_id, limit=limit)
     return [MatchCommentResponse.from_domain(c) for c in items]
+
+
+@router.get("/{team_id}/standing", response_model=StandingRowResponse | None)
+async def teams_standing(
+    team_id: str,
+    standing_repo: SqlAlchemyStandingRepository = Depends(get_standing_repo),
+    team_repo: SqlAlchemyTeamRepository = Depends(get_team_repo),
+) -> StandingRowResponse | None:
+    standing = await standing_repo.get_for_team(team_id)
+    if standing is None:
+        return None
+    team = await get_team(team_repo, team_id)
+    return StandingRowResponse.from_domain(standing, team)

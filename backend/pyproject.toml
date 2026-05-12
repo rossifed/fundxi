@@ -54,6 +54,10 @@ ignore = []
 
 [tool.pyright]
 include = ["src", "tests"]
+# The Streamlit control panel depends on the optional `simulation-gui`
+# group, which is not installed in the default `uv sync`. Typecheck it
+# explicitly with `uv run --group simulation-gui pyright src/simulation/gui`.
+exclude = ["src/simulation/gui"]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
 reportMissingTypeStubs = false

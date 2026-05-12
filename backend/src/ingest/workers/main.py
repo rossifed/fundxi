@@ -24,6 +24,7 @@ from src.ingest.domain.settings import IngestionSettings
 from src.ingest.infrastructure.nats_publisher import NatsPublisher
 from src.ingest.infrastructure.sportmonks_id_maps import load_sportmonks_id_maps
 from src.ingest.infrastructure.sportmonks_poller_factory import SportmonksPollerFactory
+from src.ingest.infrastructure.standings_poller import StandingsPoller
 from src.ingest.infrastructure.system_clock import SystemClock
 
 log = structlog.get_logger(__name__)
@@ -86,6 +87,14 @@ async def run() -> None:
             clock=SystemClock(),
             sleep=asyncio.sleep,
         )
+        standings_poller = StandingsPoller(
+            season_id=app_settings.active_season_id,
+            poll_seconds=ingest_settings.standings_poll_seconds,
+            client=sportmonks_client,
+            publisher=publisher,
+            session_factory=SessionLocal,
+            team_id_by_sportmonks=id_maps.team_id_by_sportmonks,
+        )
 
         stop_signal = asyncio.Event()
 
@@ -97,11 +106,18 @@ async def run() -> None:
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, _request_stop)
 
-        supervisor_task = asyncio.create_task(supervisor.run(), name="ingest-supervisor")
+        # Top-level tasks: the per-fixture supervisor + each singleton side
+        # poller. They are independent — an error in one never blocks another.
+        tasks = [
+            asyncio.create_task(supervisor.run(), name="ingest-supervisor"),
+            asyncio.create_task(standings_poller.run(), name="ingest-standings"),
+        ]
         await stop_signal.wait()
-        supervisor_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await supervisor_task
+        for task in tasks:
+            task.cancel()
+        for task in tasks:
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
 
     log.info("ingest.daemon.stopped")
 
