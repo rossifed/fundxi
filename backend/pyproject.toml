@@ -51,6 +51,9 @@ ignore = []
 # FastAPI `Depends()` in argument defaults is the canonical DI pattern.
 "src/api/dependencies.py" = ["B008"]
 "src/api/routers/*" = ["B008"]
+# Streamlit entry point: must bootstrap sys.path before `import src.*`,
+# so the project imports unavoidably come after a few statements.
+"src/simulation/gui/streamlit_app.py" = ["E402"]
 
 [tool.pyright]
 include = ["src", "tests"]

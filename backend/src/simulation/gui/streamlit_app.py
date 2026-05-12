@@ -11,16 +11,25 @@ has no knowledge that this control panel exists.
 Install (one-shot):
     uv sync --group simulation-gui
 
-Run:
+Run (from the backend/ directory):
     uv run streamlit run src/simulation/gui/streamlit_app.py
 """
 
 import asyncio
 import os
+import sys
 import threading
 from dataclasses import dataclass, replace
 from datetime import datetime
+from pathlib import Path
 from time import sleep
+
+# `streamlit run` puts the *script's* directory on sys.path, not the project
+# root, so `import src.*` would fail. Add backend/ (this file is at
+# backend/src/simulation/gui/streamlit_app.py → parents[3]) to the path.
+_BACKEND_ROOT = Path(__file__).resolve().parents[3]
+if str(_BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_ROOT))
 
 import streamlit as st
 from sqlalchemy import select
