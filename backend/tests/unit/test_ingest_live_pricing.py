@@ -152,7 +152,7 @@ async def test_goal_with_assist_emits_two_ticks() -> None:
     assert subjects == ["fundxi.player_price_tick.777", "fundxi.player_price_tick.888"]
     assert poller._state is not None
     assert poller._state.current(777) != 100.0  # scorer moved
-    assert poller._state.current(888) != 80.0   # assister moved
+    assert poller._state.current(888) != 80.0  # assister moved
 
 
 @pytest.mark.anyio

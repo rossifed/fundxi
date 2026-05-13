@@ -27,7 +27,7 @@ def test_strictly_before_pre_kickoff_window_returns_false() -> None:
 
 
 def test_during_match_returns_true() -> None:
-    assert _check(offset_min=0) is True   # kickoff
+    assert _check(offset_min=0) is True  # kickoff
     assert _check(offset_min=45) is True  # half time
     assert _check(offset_min=90) is True  # full time
 

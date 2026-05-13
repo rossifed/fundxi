@@ -13,14 +13,14 @@ def test_projects_known_stats_into_typed_fields() -> None:
     lineup = _lineup(
         96611,
         [
-            {"type_id": 119, "data": {"value": 120}},   # minutes
-            {"type_id": 118, "data": {"value": 8.5}},   # rating
-            {"type_id": 52, "data": {"value": 3}},      # goals
-            {"type_id": 42, "data": {"value": 6}},      # shots total
-            {"type_id": 86, "data": {"value": 3}},      # shots on target
-            {"type_id": 80, "data": {"value": 21}},     # passes total
-            {"type_id": 1584, "data": {"value": 76}},   # passes accuracy %
-            {"type_id": 999, "data": {"value": 42}},    # unknown code → ignored
+            {"type_id": 119, "data": {"value": 120}},  # minutes
+            {"type_id": 118, "data": {"value": 8.5}},  # rating
+            {"type_id": 52, "data": {"value": 3}},  # goals
+            {"type_id": 42, "data": {"value": 6}},  # shots total
+            {"type_id": 86, "data": {"value": 3}},  # shots on target
+            {"type_id": 80, "data": {"value": 21}},  # passes total
+            {"type_id": 1584, "data": {"value": 76}},  # passes accuracy %
+            {"type_id": 999, "data": {"value": 42}},  # unknown code → ignored
         ],
     )
 
@@ -45,13 +45,9 @@ def test_projects_known_stats_into_typed_fields() -> None:
 
 
 def test_returns_none_when_no_details() -> None:
-    assert project_player_match_stat(
-        _lineup(96611, []), fixture_id=65, player_id_by_sportmonks=_MAPS
-    ) is None
+    assert project_player_match_stat(_lineup(96611, []), fixture_id=65, player_id_by_sportmonks=_MAPS) is None
     lineup_no_details_key = {"id": 1, "player_id": 96611, "team_id": 1, "type_id": 11}
-    assert project_player_match_stat(
-        lineup_no_details_key, fixture_id=65, player_id_by_sportmonks=_MAPS
-    ) is None
+    assert project_player_match_stat(lineup_no_details_key, fixture_id=65, player_id_by_sportmonks=_MAPS) is None
 
 
 def test_returns_none_when_player_unknown() -> None:
@@ -68,8 +64,8 @@ def test_int_codes_truncate_floats_and_reject_bools() -> None:
     lineup = _lineup(
         188444,
         [
-            {"type_id": 80, "data": {"value": 44.9}},   # passes → 44
-            {"type_id": 52, "data": {"value": True}},   # goals → None (bool guard)
+            {"type_id": 80, "data": {"value": 44.9}},  # passes → 44
+            {"type_id": 52, "data": {"value": True}},  # goals → None (bool guard)
         ],
     )
     result = project_player_match_stat(lineup, fixture_id=65, player_id_by_sportmonks=_MAPS)

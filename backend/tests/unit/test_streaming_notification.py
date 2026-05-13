@@ -27,11 +27,11 @@ def test_known_subjects_map_to_topics(subject: str, expected: tuple[str, ...]) -
     "subject",
     [
         "",
-        "other.match_event.42",     # wrong prefix
-        "fundxi",                    # no kind
-        "fundxi.match_event",        # fixture kind but no id
+        "other.match_event.42",  # wrong prefix
+        "fundxi",  # no kind
+        "fundxi.match_event",  # fixture kind but no id
         "fundxi.player_price_tick",  # tick kind but no id
-        "fundxi.unknown_kind.1",     # unrecognised kind
+        "fundxi.unknown_kind.1",  # unrecognised kind
     ],
 )
 def test_unknown_or_malformed_subjects_map_to_nothing(subject: str) -> None:

@@ -18,6 +18,7 @@ def _to_domain(orm: LineupORM) -> Lineup:
         position=orm.position,
         jersey_number=orm.jersey_number,
         formation_position=orm.formation_position,
+        formation_field=orm.formation_field,
     )
 
 
@@ -35,6 +36,7 @@ class SqlAlchemyLineupRepository:
             position=lineup.position,
             jersey_number=lineup.jersey_number,
             formation_position=lineup.formation_position,
+            formation_field=lineup.formation_field,
         )
         update_payload = {
             "fixture_id": stmt.excluded.fixture_id,
@@ -44,6 +46,7 @@ class SqlAlchemyLineupRepository:
             "position": stmt.excluded.position,
             "jersey_number": stmt.excluded.jersey_number,
             "formation_position": stmt.excluded.formation_position,
+            "formation_field": stmt.excluded.formation_field,
         }
         stmt = stmt.on_conflict_do_update(index_elements=["sportmonks_id"], set_=update_payload)
         await self._session.execute(stmt)

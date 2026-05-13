@@ -35,6 +35,12 @@ def _fixture_orm_to_domain(orm: FixtureORM) -> Fixture:
         kickoff_at=orm.kickoff_at,
         minute=orm.minute,
         note=orm.note,
+        home_kit_color=orm.home_kit_color,
+        away_kit_color=orm.away_kit_color,
+        home_kit_palette=orm.home_kit_palette,
+        away_kit_palette=orm.away_kit_palette,
+        home_formation=orm.home_formation,
+        away_formation=orm.away_formation,
     )
 
 
@@ -84,6 +90,7 @@ def _orm_lineup_to_domain(orm: LineupORM) -> Lineup:
         position=orm.position,
         jersey_number=orm.jersey_number,
         formation_position=orm.formation_position,
+        formation_field=orm.formation_field,
     )
 
 

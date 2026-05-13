@@ -47,9 +47,7 @@ log = structlog.get_logger(__name__)
 # State + scores + participants come back by default with /fixtures/{id}
 # in v3, but listing them explicitly makes the contract self-documenting
 # and lets us add fields without ambiguity later.
-_INPLAY_INCLUDE = (
-    "state;participants;scores;events.type;comments;lineups.position;lineups.details"
-)
+_INPLAY_INCLUDE = "state;participants;scores;events.type;comments;lineups.position;lineups.details"
 
 
 @dataclass(slots=True)
@@ -127,9 +125,7 @@ class SportmonksInplayPoller:
             comments_payload=_array(data.get("comments")),
         )
         lineups_count = await self._project_lineups(session=session, lineups_payload=lineups_payload)
-        player_stats_count = await self._project_player_match_stats(
-            session=session, lineups_payload=lineups_payload
-        )
+        player_stats_count = await self._project_player_match_stats(session=session, lineups_payload=lineups_payload)
 
         fix_id = self.fixture_internal_id
         notifications: list[tuple[str, bytes]] = []
@@ -142,9 +138,7 @@ class SportmonksInplayPoller:
         if lineups_count > 0:
             notifications.append(self._notif("lineup", {"fixture_id": fix_id, "count": lineups_count}))
         if player_stats_count > 0:
-            notifications.append(
-                self._notif("player_match_stat", {"fixture_id": fix_id, "count": player_stats_count})
-            )
+            notifications.append(self._notif("player_match_stat", {"fixture_id": fix_id, "count": player_stats_count}))
 
         await commit_then_publish(session=session, publisher=self.publisher, notifications=notifications)
 

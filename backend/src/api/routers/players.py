@@ -405,9 +405,7 @@ async def players_matches(
     for r in rows.mappings():
         pre = r["pre_match_price"]
         post = r["post_match_price"]
-        in_match_pct = (
-            float((post - pre) / pre * 100) if pre and post and pre > 0 else None
-        )
+        in_match_pct = float((post - pre) / pre * 100) if pre and post and pre > 0 else None
         out.append(
             PlayerMatchEntryResponse(
                 fixture_id=r["fixture_id"],

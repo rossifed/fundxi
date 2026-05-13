@@ -88,10 +88,12 @@ async def test_comment_emit_is_forwarded_without_tick() -> None:
     inner = _RecordingInnerSink()
     writer = _RecordingTickWriter()
     sink = PriceTickEmittingSink(
-        inner=inner, price_ticks=writer,
+        inner=inner,
+        price_ticks=writer,
         price_state=PriceState({1: 100.0}),
         fixture_kickoff=_KICKOFF,
-        player_id_by_sportmonks={}, team_id_by_sportmonks={},
+        player_id_by_sportmonks={},
+        team_id_by_sportmonks={},
     )
 
     await sink.emit(_comment_event(), fixture_internal_id=42)
@@ -107,7 +109,8 @@ async def test_goal_event_emits_tick_and_updates_price() -> None:
     writer = _RecordingTickWriter()
     state = PriceState({777: 100.0})
     sink = PriceTickEmittingSink(
-        inner=inner, price_ticks=writer,
+        inner=inner,
+        price_ticks=writer,
         price_state=state,
         fixture_kickoff=_KICKOFF,
         player_id_by_sportmonks={96611: 777},
@@ -133,7 +136,8 @@ async def test_unknown_actor_skips_tick_without_crashing() -> None:
     inner = _RecordingInnerSink()
     writer = _RecordingTickWriter()
     sink = PriceTickEmittingSink(
-        inner=inner, price_ticks=writer,
+        inner=inner,
+        price_ticks=writer,
         price_state=PriceState({}),  # no players seeded
         fixture_kickoff=_KICKOFF,
         player_id_by_sportmonks={96611: 777},
@@ -150,7 +154,8 @@ async def test_malformed_event_payload_is_silently_dropped() -> None:
     inner = _RecordingInnerSink()
     writer = _RecordingTickWriter()
     sink = PriceTickEmittingSink(
-        inner=inner, price_ticks=writer,
+        inner=inner,
+        price_ticks=writer,
         price_state=PriceState({777: 100.0}),
         fixture_kickoff=_KICKOFF,
         player_id_by_sportmonks={},

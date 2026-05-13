@@ -28,3 +28,13 @@ class Fixture:
     kickoff_at: datetime | None = None
     minute: int | None = None
     note: str | None = None
+    # Per-match kit colors (hex). ``*_kit_color`` is the primary kit color
+    # the team wore in this match; ``*_kit_palette`` is the raw CSV palette
+    # for the full strip (Sportmonks metadata type_id 161 / 162).
+    home_kit_color: str | None = None
+    away_kit_color: str | None = None
+    home_kit_palette: str | None = None
+    away_kit_palette: str | None = None
+    # Tactical formation each team played in this fixture (e.g. "4-3-3").
+    home_formation: str | None = None
+    away_formation: str | None = None

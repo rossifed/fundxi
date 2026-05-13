@@ -69,14 +69,10 @@ class SqlAlchemyPlayerTournamentStatRepository:
             "rating_avg": stmt.excluded.rating_avg,
             "raw_stats": stmt.excluded.raw_stats,
         }
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["sportmonks_statistic_id"], set_=update_payload
-        )
+        stmt = stmt.on_conflict_do_update(index_elements=["sportmonks_statistic_id"], set_=update_payload)
         await self._session.execute(stmt)
 
-    async def get_for_player_season(
-        self, *, player_id: int, season_id: int
-    ) -> PlayerTournamentStat | None:
+    async def get_for_player_season(self, *, player_id: int, season_id: int) -> PlayerTournamentStat | None:
         result = await self._session.execute(
             select(PlayerTournamentStatORM).where(
                 PlayerTournamentStatORM.player_id == player_id,

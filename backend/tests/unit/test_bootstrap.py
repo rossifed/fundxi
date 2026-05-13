@@ -98,9 +98,7 @@ class _FakeStatRepo:
     def __init__(self) -> None:
         self.upserts: list[tuple[object, int]] = []
 
-    async def upsert_by_sportmonks_id(
-        self, stat: object, *, sportmonks_statistic_id: int, raw_stats: object
-    ) -> None:
+    async def upsert_by_sportmonks_id(self, stat: object, *, sportmonks_statistic_id: int, raw_stats: object) -> None:
         self.upserts.append((stat, sportmonks_statistic_id))
 
 
@@ -125,6 +123,26 @@ class _FakeFixtureRepo:
 
     async def map_sportmonks_to_internal_id(self) -> dict[int, int]:
         return dict(self._fixture_id_map)
+
+    async def set_kit_colors(
+        self,
+        *,
+        sportmonks_id: int,
+        home_kit_color: str | None,
+        away_kit_color: str | None,
+        home_kit_palette: str | None,
+        away_kit_palette: str | None,
+    ) -> None:
+        _ = (sportmonks_id, home_kit_color, away_kit_color, home_kit_palette, away_kit_palette)
+
+    async def set_formations(
+        self,
+        *,
+        sportmonks_id: int,
+        home_formation: str | None,
+        away_formation: str | None,
+    ) -> None:
+        _ = (sportmonks_id, home_formation, away_formation)
 
 
 class _FakeNewsRepo:
@@ -279,6 +297,7 @@ async def test_bootstrap_squads_iterates_teams() -> None:
                 {
                     "data": [
                         {
+                            "has_values": True,
                             "jersey_number": 10,
                             "player": {
                                 "id": 200,
@@ -297,6 +316,7 @@ async def test_bootstrap_squads_iterates_teams() -> None:
                 {
                     "data": [
                         {
+                            "has_values": True,
                             "jersey_number": 7,
                             "player": {
                                 "id": 201,
@@ -337,11 +357,24 @@ async def test_bootstrap_squads_skips_malformed_entries() -> None:
             "/squads/seasons/100/teams/17": [
                 {
                     "data": [
-                        {"jersey_number": "not-an-int", "player": {"id": 1}},  # bad jersey
-                        {"player": {"id": 2}},  # missing jersey
-                        {"jersey_number": 10},  # missing player
+                        {"has_values": True, "jersey_number": "not-an-int", "player": {"id": 1}},  # bad jersey
+                        {"has_values": True, "player": {"id": 2}},  # missing jersey
+                        {"has_values": True, "jersey_number": 10},  # missing player
+                        # non-active squad entry (pre-tournament call-up etc.) — must be skipped
+                        {
+                            "has_values": False,
+                            "jersey_number": 22,
+                            "player": {
+                                "id": 998,
+                                "common_name": "Ghost",
+                                "display_name": "Ghost",
+                                "name": "Ghost",
+                                "position": {"id": 27, "name": "Attacker"},
+                            },
+                        },
                         # OK entry
                         {
+                            "has_values": True,
                             "jersey_number": 9,
                             "player": {
                                 "id": 999,
@@ -402,6 +435,7 @@ async def test_bootstrap_for_season_orchestrates_three_steps() -> None:
                 {
                     "data": [
                         {
+                            "has_values": True,
                             "jersey_number": 10,
                             "player": {
                                 "id": 200,

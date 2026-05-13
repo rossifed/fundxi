@@ -51,9 +51,7 @@ async def load_sportmonks_id_maps(session: AsyncSession) -> SportmonksIdMaps:
         )
     ).all()
     teams = (
-        await session.execute(
-            select(TeamORM.id, TeamORM.sportmonks_id).where(TeamORM.sportmonks_id.is_not(None))
-        )
+        await session.execute(select(TeamORM.id, TeamORM.sportmonks_id).where(TeamORM.sportmonks_id.is_not(None)))
     ).all()
     return SportmonksIdMaps(
         fixture_smk_by_internal={row.id: row.sportmonks_id for row in fixtures if row.sportmonks_id is not None},

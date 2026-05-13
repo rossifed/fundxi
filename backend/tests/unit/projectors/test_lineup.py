@@ -23,6 +23,7 @@ def test_starter_lineup_with_position_include() -> None:
         "type_id": 11,
         "formation_position": 5,
         "jersey_number": 3,
+        "formation_field": "2:3",
         "position": {"id": 25, "name": "Defender", "code": "defender"},
     }
     p, t = _resolvers()
@@ -35,6 +36,7 @@ def test_starter_lineup_with_position_include() -> None:
     assert lineup.position == "DF"
     assert lineup.jersey_number == 3
     assert lineup.formation_position == 5
+    assert lineup.formation_field == "2:3"
 
 
 def test_bench_lineup_no_formation_position() -> None:
@@ -45,12 +47,14 @@ def test_bench_lineup_no_formation_position() -> None:
         "position_id": 24,
         "type_id": 12,
         "formation_position": None,
+        "formation_field": None,
         "jersey_number": 1,
     }
     p, t = _resolvers()
     lineup, _ = project_lineup(payload, fixture_id=65, player_id_by_sportmonks=p, team_id_by_sportmonks=t)
     assert lineup.role is LineupRole.BENCH
     assert lineup.formation_position is None
+    assert lineup.formation_field is None
     assert lineup.position == "GK"
 
 

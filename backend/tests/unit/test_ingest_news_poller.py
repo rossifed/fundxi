@@ -110,14 +110,18 @@ async def test_projects_items_and_emits_one_notification_with_count(monkeypatch:
     )
     poller, publisher, _ = _poller(
         by_endpoint={
-            _PRE: {"data": [
-                _news_item(smk_id=1, title="Preview: France vs Argentina", type_="prematch", fixture_id=1000),
-                _news_item(smk_id=2, title="Group D round-up", type_="prematch"),
-            ]},
-            _POST: {"data": [
-                _news_item(smk_id=3, title="Report: France 2-2 Argentina", type_="postmatch", fixture_id=1000),
-                {"id": 4},  # missing title → skipped
-            ]},
+            _PRE: {
+                "data": [
+                    _news_item(smk_id=1, title="Preview: France vs Argentina", type_="prematch", fixture_id=1000),
+                    _news_item(smk_id=2, title="Group D round-up", type_="prematch"),
+                ]
+            },
+            _POST: {
+                "data": [
+                    _news_item(smk_id=3, title="Report: France 2-2 Argentina", type_="postmatch", fixture_id=1000),
+                    {"id": 4},  # missing title → skipped
+                ]
+            },
         }
     )
 

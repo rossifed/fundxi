@@ -99,8 +99,6 @@ class StandingsPoller:
 
         notifications: list[tuple[str, bytes]] = []
         if upserted > 0:
-            notifications.append(
-                ("fundxi.standings", json.dumps({"kind": "standings", "count": upserted}).encode())
-            )
+            notifications.append(("fundxi.standings", json.dumps({"kind": "standings", "count": upserted}).encode()))
         await commit_then_publish(session=session, publisher=self.publisher, notifications=notifications)
         log.info("ingest.standings.tick", season_id=self.season_id, upserted=upserted)

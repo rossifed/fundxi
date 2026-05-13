@@ -18,9 +18,7 @@ Topic vocabulary:
   - ``reference``     — reference data (teams/fixtures/players) refreshed.
 """
 
-_FIXTURE_KINDS = frozenset(
-    {"match_event", "match_comment", "fixture_status", "lineup", "player_match_stat"}
-)
+_FIXTURE_KINDS = frozenset({"match_event", "match_comment", "fixture_status", "lineup", "player_match_stat"})
 _GLOBAL_KIND_TO_TOPIC: dict[str, str] = {
     "news": "news",
     "standings": "standings",

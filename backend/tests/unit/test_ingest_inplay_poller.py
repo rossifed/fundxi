@@ -159,11 +159,11 @@ def _lineup_payload(
     }
     if with_details:
         payload["details"] = [
-            {"type_id": 119, "data": {"value": 90}},   # minutes played
+            {"type_id": 119, "data": {"value": 90}},  # minutes played
             {"type_id": 118, "data": {"value": 7.5}},  # rating
-            {"type_id": 52, "data": {"value": 1}},     # goals
-            {"type_id": 42, "data": {"value": 3}},     # shots total
-            {"type_id": 80, "data": {"value": 40}},    # passes total
+            {"type_id": 52, "data": {"value": 1}},  # goals
+            {"type_id": 42, "data": {"value": 3}},  # shots total
+            {"type_id": 80, "data": {"value": 40}},  # passes total
             {"type_id": 1584, "data": {"value": 88}},  # passes accuracy %
         ]
     return payload

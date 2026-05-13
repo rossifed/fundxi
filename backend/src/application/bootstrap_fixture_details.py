@@ -1,10 +1,12 @@
 """Bootstrap fixture details — Application Service.
 
 DDD role: Application Service. Walks every fixture in the DB and ingests
-its lineups + structured events from Sportmonks. Idempotent on
-(sportmonks_id) for both projections.
+its lineups + structured events + per-match kit colors from Sportmonks.
+Idempotent on (sportmonks_id) for both lineup and event projections;
+kit colors are an UPDATE on the existing fixture row.
 
-One call per fixture: `/fixtures/{sportmonks_id}?include=events.type;lineups.position`.
+One call per fixture:
+    /fixtures/{sportmonks_id}?include=events.type;lineups.position;metadata
 ~64 API calls for the WC2022 dataset.
 """
 
@@ -22,6 +24,8 @@ from src.domain.match.match_event import MatchEvent, MatchEventRepository
 from src.infrastructure.db.models.player import PlayerORM
 from src.infrastructure.db.models.team import TeamORM
 from src.infrastructure.sportmonks.client import SportmonksClient
+from src.infrastructure.sportmonks.projectors.fixture_formation import project_fixture_formations
+from src.infrastructure.sportmonks.projectors.fixture_kit import project_fixture_kit_colors
 from src.infrastructure.sportmonks.projectors.lineup import project_lineup
 from src.infrastructure.sportmonks.projectors.match_event import project_match_event
 
@@ -84,10 +88,29 @@ async def bootstrap_fixture_details(
 
     for smk_fixture_id, internal_fixture_id in fixture_id_by_smk.items():
         endpoint = f"/fixtures/{smk_fixture_id}"
-        params = {"include": "events.type;lineups.position"}
+        params = {"include": "events.type;lineups.position;metadata"}
         envelope = await client.get(endpoint, params=params)
         await raw_archive.insert_if_new(endpoint=endpoint, params=params, response=envelope)
         fixtures_count += 1
+
+        # Per-match kit colors (Sportmonks metadata type_id 161 / 162).
+        metadata_items = list(_items(envelope, "metadata"))
+        kit = project_fixture_kit_colors(metadata_items)
+        await fixture_repo.set_kit_colors(
+            sportmonks_id=smk_fixture_id,
+            home_kit_color=kit.home_color,
+            away_kit_color=kit.away_color,
+            home_kit_palette=kit.home_palette,
+            away_kit_palette=kit.away_palette,
+        )
+
+        # Per-match tactical formation (Sportmonks metadata type_id 159).
+        formations = project_fixture_formations(metadata_items)
+        await fixture_repo.set_formations(
+            sportmonks_id=smk_fixture_id,
+            home_formation=formations.home,
+            away_formation=formations.away,
+        )
 
         # Lineups
         for lineup_payload in _items(envelope, "lineups"):

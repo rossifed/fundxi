@@ -8,6 +8,10 @@ import { players_api } from "@/api/players_api";
 import { teams_api } from "@/api/teams_api";
 import { valuations_api } from "@/api/valuations_api";
 import { useFixtureLiveVersion, useLiveRefetch, usePricesLiveVersion } from "@/ui/hooks/use_live_updates";
+import { PitchView } from "@/ui/pages/match/PitchView";
+
+const LINEUP_VIEW_STORAGE_KEY = "fundxi.lineup_view";
+type LineupView = "list" | "pitch";
 
 interface MatchViewProps {
   match: Match;
@@ -50,11 +54,11 @@ function ScorerColumn({ goals, align }: { goals: MatchEvent[]; align: "left" | "
   return (
     <div
       style={{
-        marginTop: 10,
+        marginTop: 12,
         display: "flex",
         flexDirection: "column",
-        gap: 3,
-        fontSize: 12,
+        gap: 2,
+        fontSize: 11,
         textAlign: align,
         color: "#fff",
         fontWeight: 600,
@@ -84,6 +88,16 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
   const home_team = teams_api.get(match.home_team_id);
   const away_team = teams_api.get(match.away_team_id);
   const is_live = match.status === "live";
+
+  // Toggle between the roster list and the tactical pitch view. Persisted in
+  // localStorage so the user's choice survives reloads.
+  const [view_mode, set_view_mode] = useState<LineupView>(() => {
+    if (typeof window === "undefined") return "list";
+    return window.localStorage.getItem(LINEUP_VIEW_STORAGE_KEY) === "pitch" ? "pitch" : "list";
+  });
+  useEffect(() => {
+    if (typeof window !== "undefined") window.localStorage.setItem(LINEUP_VIEW_STORAGE_KEY, view_mode);
+  }, [view_mode]);
 
   const goals = useMemo(
     () =>
@@ -196,40 +210,92 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
         </div>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "center", gap: 24, marginTop: 14 }}>
           <div style={{ flex: 1, textAlign: "right" }}>
-            <div style={{ fontSize: 36, lineHeight: 1 }}>{home_team?.flag}</div>
-            <div style={{ fontSize: 16, fontWeight: 700, marginTop: 6 }}>{home_team?.name ?? match.home_team_id}</div>
+            <div style={{ fontSize: 48, lineHeight: 1 }}>{home_team?.flag}</div>
+            <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8, letterSpacing: -0.2 }}>{home_team?.name ?? match.home_team_id}</div>
             <ScorerColumn goals={goals.filter(g => g.team_id === match.home_team_id)} align="right" />
           </div>
-          <div className="mono" style={{ fontSize: 36, fontWeight: 900, letterSpacing: -1.5, paddingTop: 4, flexShrink: 0 }}>
+          <div className="mono" style={{ fontSize: 42, fontWeight: 900, letterSpacing: -1.5, paddingTop: 8, flexShrink: 0 }}>
             {match.home_score} : {match.away_score}
           </div>
           <div style={{ flex: 1, textAlign: "left" }}>
-            <div style={{ fontSize: 36, lineHeight: 1 }}>{away_team?.flag}</div>
-            <div style={{ fontSize: 16, fontWeight: 700, marginTop: 6 }}>{away_team?.name ?? match.away_team_id}</div>
+            <div style={{ fontSize: 48, lineHeight: 1 }}>{away_team?.flag}</div>
+            <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8, letterSpacing: -0.2 }}>{away_team?.name ?? match.away_team_id}</div>
             <ScorerColumn goals={goals.filter(g => g.team_id === match.away_team_id)} align="left" />
           </div>
         </div>
       </div>
 
-      {/* Rosters — the two line-ups, side by side */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, alignItems: "start" }}>
-        <TeamRoster
-          title={`${home_team?.flag ?? ""} ${home_team?.name ?? match.home_team_id}`.trim()}
-          team_color={home_team?.color}
-          xi={only_match_players(match.home_xi)}
-          bench={match.home_bench ?? []}
-          card={card}
-          on_open_player={on_open_player_profile}
-        />
-        <TeamRoster
-          title={`${away_team?.flag ?? ""} ${away_team?.name ?? match.away_team_id}`.trim()}
-          team_color={away_team?.color}
-          xi={match.away_xi}
-          bench={match.away_bench ?? []}
-          card={card}
-          on_open_player={on_open_player_profile}
-        />
+      {/* Line-up view toggle — Liste / Terrain. */}
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <div
+          role="tablist"
+          style={{
+            display: "inline-flex",
+            background: "rgba(255,255,255,.03)",
+            border: "1px solid rgba(255,255,255,.06)",
+            borderRadius: 8,
+            padding: 3,
+            gap: 2,
+          }}
+        >
+          {(["list", "pitch"] as const).map(m => {
+            const active = view_mode === m;
+            return (
+              <button
+                key={m}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => set_view_mode(m)}
+                style={{
+                  padding: "5px 12px",
+                  border: "none",
+                  background: active ? "rgba(255,255,255,.08)" : "transparent",
+                  color: active ? "#fff" : "rgba(255,255,255,.5)",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: 0.3,
+                  borderRadius: 6,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                {m === "list" ? "List" : "Pitch"}
+              </button>
+            );
+          })}
+        </div>
       </div>
+
+      {view_mode === "list" ? (
+        /* Rosters — the two line-ups, grouped by position. Section labels are
+           centered and span both columns so the home / away grids stay aligned
+           even when teams have different counts per position. */
+        <DualRoster
+          home_xi={only_match_players(match.home_xi)}
+          away_xi={match.away_xi}
+          home_bench={match.home_bench ?? []}
+          away_bench={match.away_bench ?? []}
+          home_title={`${home_team?.flag ?? ""} ${home_team?.name ?? match.home_team_id}`.trim()}
+          away_title={`${away_team?.flag ?? ""} ${away_team?.name ?? match.away_team_id}`.trim()}
+          home_color={match.home_kit_color ?? home_team?.color}
+          away_color={match.away_kit_color ?? away_team?.color}
+          card={card}
+          on_open_player={on_open_player_profile}
+        />
+      ) : (
+        // Stay within the 820-wide content column — any breakout was
+        // forcing horizontal scroll once the App sidebar + browser chrome
+        // were accounted for. The trapezoid still reads cleanly at 820 px.
+        <div>
+          <PitchView
+            match={match}
+            home_color={match.home_kit_color ?? home_team?.color}
+            away_color={match.away_kit_color ?? away_team?.color}
+            on_open_player={on_open_player_profile}
+          />
+        </div>
+      )}
 
       {/* Commentary */}
       <div style={card}>
@@ -242,93 +308,167 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
   );
 }
 
-function TeamRoster({
-  title,
-  team_color,
-  xi,
-  bench,
-  card,
-  on_open_player,
-}: {
-  title: string;
-  team_color?: string;
-  xi: MatchPlayer[];
-  bench: MatchPlayer[];
-  card: CSSProperties;
-  on_open_player: (player_id: number) => void;
-}) {
-  const starters_by_pos = useMemo(() => {
-    const grouped: Record<Position, MatchPlayer[]> = { GK: [], DF: [], MF: [], FW: [] };
-    for (const p of xi) grouped[p.position].push(p);
-    for (const k of Object.keys(grouped) as Position[]) {
-      grouped[k].sort((a, b) => (a.jersey_number || 99) - (b.jersey_number || 99));
-    }
-    return grouped;
-  }, [xi]);
-  const subs = useMemo(
-    () => [...bench].sort((a, b) => (a.jersey_number || 99) - (b.jersey_number || 99)),
-    [bench],
-  );
+function _group_by_position(xi: MatchPlayer[]): Record<Position, MatchPlayer[]> {
+  const grouped: Record<Position, MatchPlayer[]> = { GK: [], DF: [], MF: [], FW: [] };
+  for (const p of xi) grouped[p.position].push(p);
+  for (const k of Object.keys(grouped) as Position[]) {
+    grouped[k].sort((a, b) => (a.jersey_number || 99) - (b.jersey_number || 99));
+  }
+  return grouped;
+}
 
-  const section_header = (label: string, opts?: { strong?: boolean }) => (
+function SectionDivider({ label }: { label: string }) {
+  return (
     <div
       style={{
-        padding: "9px 14px 4px",
+        padding: "14px 0 10px",
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
         fontSize: 10,
         fontWeight: 700,
-        color: opts?.strong ? "rgba(255,255,255,.5)" : "rgba(255,255,255,.32)",
-        letterSpacing: 0.6,
+        color: "rgba(255,255,255,.5)",
+        letterSpacing: 1.2,
         textTransform: "uppercase",
-        background: "rgba(255,255,255,.018)",
       }}
     >
-      {label}
-    </div>
-  );
-
-  return (
-    <div style={card}>
-      <div
-        style={{
-          padding: "11px 14px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 8,
-          borderBottom: "1px solid rgba(255,255,255,.05)",
-          borderLeft: team_color ? `3px solid ${team_color}` : undefined,
-        }}
-      >
-        <span style={{ fontSize: 13, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</span>
-        <span style={{ fontSize: 8.5, fontWeight: 700, color: "rgba(255,255,255,.3)", letterSpacing: 0.4, textTransform: "uppercase", whiteSpace: "nowrap" }}>
-          € · Δm · Δtot
-        </span>
-      </div>
-      {POSITION_GROUPS.map(g => {
-        const ps = starters_by_pos[g.key];
-        if (ps.length === 0) return null;
-        return (
-          <div key={g.key}>
-            {section_header(g.label)}
-            {ps.map(p => (
-              <RosterRow key={p.id} p={p} on_open={on_open_player} />
-            ))}
-          </div>
-        );
-      })}
-      {subs.length > 0 && (
-        <div style={{ marginTop: 10, borderTop: "1px solid rgba(255,255,255,.08)" }}>
-          {section_header("Substitutes", { strong: true })}
-          {subs.map(p => (
-            <RosterRow key={p.id} p={p} on_open={on_open_player} sub />
-          ))}
-        </div>
-      )}
+      <span style={{ flex: 1, height: 1, background: "rgba(255,255,255,.07)" }} />
+      <span>{label}</span>
+      <span style={{ flex: 1, height: 1, background: "rgba(255,255,255,.07)" }} />
     </div>
   );
 }
 
-function RosterRow({ p, on_open, sub }: { p: MatchPlayer; on_open: (player_id: number) => void; sub?: boolean }) {
+function DualRoster({
+  home_xi,
+  away_xi,
+  home_bench,
+  away_bench,
+  home_title,
+  away_title,
+  home_color,
+  away_color,
+  card,
+  on_open_player,
+}: {
+  home_xi: MatchPlayer[];
+  away_xi: MatchPlayer[];
+  home_bench: MatchPlayer[];
+  away_bench: MatchPlayer[];
+  home_title: string;
+  away_title: string;
+  home_color?: string;
+  away_color?: string;
+  card: CSSProperties;
+  on_open_player: (player_id: number) => void;
+}) {
+  const home_by_pos = useMemo(() => _group_by_position(home_xi), [home_xi]);
+  const away_by_pos = useMemo(() => _group_by_position(away_xi), [away_xi]);
+  const home_subs = useMemo(
+    () => [...home_bench].sort((a, b) => (a.jersey_number || 99) - (b.jersey_number || 99)),
+    [home_bench],
+  );
+  const away_subs = useMemo(
+    () => [...away_bench].sort((a, b) => (a.jersey_number || 99) - (b.jersey_number || 99)),
+    [away_bench],
+  );
+
+  const grid_2col: CSSProperties = {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 10,
+    alignItems: "start",
+  };
+  const col_stack: CSSProperties = { display: "flex", flexDirection: "column", gap: 6 };
+
+  return (
+    <div style={card}>
+      {/* Team header bars, one per column, aligned. */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderBottom: "1px solid rgba(255,255,255,.05)" }}>
+        <div
+          style={{
+            padding: "12px 14px",
+            fontSize: 13,
+            fontWeight: 800,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            borderLeft: home_color ? `3px solid ${home_color}` : undefined,
+          }}
+        >
+          {home_title}
+        </div>
+        <div
+          style={{
+            padding: "12px 14px",
+            fontSize: 13,
+            fontWeight: 800,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            borderLeft: away_color ? `3px solid ${away_color}` : undefined,
+          }}
+        >
+          {away_title}
+        </div>
+      </div>
+
+      <div style={{ padding: "0 12px 12px" }}>
+        {POSITION_GROUPS.map(g => {
+          const home_ps = home_by_pos[g.key];
+          const away_ps = away_by_pos[g.key];
+          if (home_ps.length === 0 && away_ps.length === 0) return null;
+          return (
+            <div key={g.key}>
+              <SectionDivider label={g.label} />
+              <div style={grid_2col}>
+                <div style={col_stack}>
+                  {home_ps.map(p => (
+                    <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={home_color} />
+                  ))}
+                </div>
+                <div style={col_stack}>
+                  {away_ps.map(p => (
+                    <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={away_color} />
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        {(home_subs.length > 0 || away_subs.length > 0) && (
+          <>
+            <SectionDivider label="Substitutes" />
+            <div style={grid_2col}>
+              <div style={col_stack}>
+                {home_subs.map(p => (
+                  <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={home_color} sub />
+                ))}
+              </div>
+              <div style={col_stack}>
+                {away_subs.map(p => (
+                  <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={away_color} sub />
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RosterCard({
+  p,
+  on_open,
+  team_color,
+  sub,
+}: {
+  p: MatchPlayer;
+  on_open: (player_id: number) => void;
+  team_color?: string;
+  sub?: boolean;
+}) {
   const ref_player = players_api.get(p.id);
   const valuation = valuations_api.get_for_player(p.id);
   const total_change = valuation?.change_since_inception ?? 0;
@@ -342,52 +482,99 @@ function RosterRow({ p, on_open, sub }: { p: MatchPlayer; on_open: (player_id: n
       style={{
         display: "flex",
         alignItems: "center",
-        gap: 10,
-        padding: "9px 14px",
-        borderTop: "1px solid rgba(255,255,255,.03)",
+        gap: 12,
+        padding: "10px 12px",
+        // Same card shape for starters and subs; subs are simply dimmed —
+        // subtle but clearly secondary to the eye.
+        background: sub ? "rgba(255,255,255,.012)" : "rgba(255,255,255,.035)",
+        border: sub ? "1px solid rgba(255,255,255,.035)" : "1px solid rgba(255,255,255,.05)",
+        // Thin team-color accent on the left so the two line-ups are
+        // distinguishable at a glance — same color as the team header strip.
+        borderLeft: team_color ? `3px solid ${team_color}` : undefined,
+        borderRadius: 10,
         cursor: "pointer",
-        opacity: sub ? 0.82 : 1,
+        transition: "background .15s ease, border-color .15s ease",
+        opacity: sub ? 0.62 : 1,
       }}
     >
-      <div
-        style={{
-          width: 30,
-          height: 30,
-          borderRadius: "50%",
-          overflow: "hidden",
-          flexShrink: 0,
-          background: "rgba(255,255,255,.06)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        {photo ? (
-          <img src={photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-        ) : (
-          <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,.5)" }}>
-            {p.jersey_number}
-          </span>
-        )}
+      {/* Avatar with jersey badge overlay */}
+      <div style={{ position: "relative", width: 40, height: 40, flexShrink: 0 }}>
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: "50%",
+            overflow: "hidden",
+            background: "rgba(255,255,255,.06)",
+            border: "1px solid rgba(255,255,255,.08)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {photo ? (
+            <img src={photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          ) : (
+            <span className="mono" style={{ fontSize: 12, fontWeight: 800, color: "rgba(255,255,255,.55)" }}>
+              {p.jersey_number}
+            </span>
+          )}
+        </div>
+        <span
+          className="mono"
+          style={{
+            position: "absolute",
+            bottom: -3,
+            right: -4,
+            fontSize: 9,
+            fontWeight: 800,
+            background: "#0b0f14",
+            color: "rgba(255,255,255,.85)",
+            borderRadius: 8,
+            padding: "1px 5px",
+            lineHeight: 1.2,
+            border: "1px solid rgba(255,255,255,.12)",
+          }}
+        >
+          {p.jersey_number}
+        </span>
       </div>
+
+      {/* Name + position */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.3 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.25 }}>
           {p.name}
         </div>
-        <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.3 }}>
-          #{p.jersey_number} · {exact_position}
+        <div style={{ fontSize: 11, color: "rgba(255,255,255,.4)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.3, marginTop: 2 }}>
+          {exact_position}
         </div>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, flexShrink: 0 }}>
-        <span className="mono" style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.3 }}>€{p.value}M</span>
-        <span style={{ display: "flex", gap: 7, fontSize: 11, fontWeight: 700, lineHeight: 1.3 }}>
-          <span className="mono" style={{ color: pct_color(match_change) }}>{fmt_pct(match_change)}</span>
-          <span className="mono" style={{ color: pct_color(total_change), opacity: 0.75 }}>{fmt_pct(total_change)}</span>
-        </span>
+
+      {/* Stats: price + two labelled deltas, all right-aligned */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
+        <span className="mono" style={{ fontSize: 14, fontWeight: 800, lineHeight: 1, color: "#fff" }}>€{p.value}M</span>
+        <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
+          <Stat label="match" value={match_change} hint="Variation depuis le coup d'envoi de ce match" />
+          <Stat label="total" value={total_change} hint="Variation cumulée depuis le début du tournoi" dim />
+        </div>
       </div>
     </div>
   );
 }
+
+function Stat({ label, value, hint, dim }: { label: string; value: number; hint: string; dim?: boolean }) {
+  return (
+    <div title={hint} style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", lineHeight: 1.1, opacity: dim ? 0.82 : 1 }}>
+      <span style={{ fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,.35)", letterSpacing: 0.5, textTransform: "uppercase" }}>
+        {label}
+      </span>
+      <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: pct_color(value), marginTop: 1 }}>
+        {fmt_pct(value)}
+      </span>
+    </div>
+  );
+}
+
 
 function Commentary({ comments, loading }: { comments: MatchComment[]; loading: boolean }) {
   if (loading) {

@@ -61,8 +61,9 @@ async def valuations_sparklines(
     serves both the screener and the home movers."""
     rows = (
         await session.execute(
-            select(PlayerPriceTickORM.player_id, PlayerPriceTickORM.current_price)
-            .order_by(PlayerPriceTickORM.player_id, PlayerPriceTickORM.ts)
+            select(PlayerPriceTickORM.player_id, PlayerPriceTickORM.current_price).order_by(
+                PlayerPriceTickORM.player_id, PlayerPriceTickORM.ts
+            )
         )
     ).all()
     by_player: dict[int, list[float]] = defaultdict(list)

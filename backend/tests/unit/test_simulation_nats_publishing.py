@@ -104,8 +104,12 @@ async def test_tick_writer_forwards_then_publishes() -> None:
     ts = datetime(2022, 12, 18, 15, 30, 4, tzinfo=UTC)
 
     await writer.insert(
-        player_id=777, ts=ts, fixture_id=65, current_price=15.5,
-        performance_rating=7.75, change_since_open=5.0,
+        player_id=777,
+        ts=ts,
+        fixture_id=65,
+        current_price=15.5,
+        performance_rating=7.75,
+        change_since_open=5.0,
     )
 
     assert len(inner.inserts) == 1
@@ -130,8 +134,12 @@ async def test_tick_writer_publish_failure_does_not_break_insert() -> None:
     ts = datetime(2022, 12, 18, 15, 0, 0, tzinfo=UTC)
 
     await writer.insert(
-        player_id=1, ts=ts, fixture_id=65, current_price=10.0,
-        performance_rating=6.5, change_since_open=0.0,
+        player_id=1,
+        ts=ts,
+        fixture_id=65,
+        current_price=10.0,
+        performance_rating=6.5,
+        change_since_open=0.0,
     )  # must not raise
 
     assert len(inner.inserts) == 1

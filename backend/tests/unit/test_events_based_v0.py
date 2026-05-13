@@ -113,9 +113,7 @@ def test_clamp_max() -> None:
         _event(99, MatchEventType.GOAL, related=42, minute=70),
         _event(99, MatchEventType.GOAL, related=42, minute=80),
     ]
-    delta = compute_player_match_delta(
-        player_id=42, events_in_fixture=events, was_starter=True
-    )
+    delta = compute_player_match_delta(player_id=42, events_in_fixture=events, was_starter=True)
     raw = 5 * C.w_goal_pct + 3 * C.w_assist_pct + C.w_starter_clean_pct
     assert raw > C.max_delta_pct_per_match
     assert delta == C.max_delta_pct_per_match

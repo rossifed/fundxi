@@ -134,9 +134,7 @@ async def bootstrap_squads(
     season_id: int,
     today: date,
 ) -> int:
-    base_params = {
-        "include": "player.position;player.detailedPosition;player.nationality;player.city;player.metadata"
-    }
+    base_params = {"include": "player.position;player.detailedPosition;player.nationality;player.city;player.metadata"}
     count = 0
     skipped = 0
     for sportmonks_team_id, internal_team_id in teams:
@@ -144,6 +142,14 @@ async def bootstrap_squads(
         async for params, envelope in _paginate_pages(client, endpoint, base_params=base_params):
             await raw_archive.insert_if_new(endpoint=endpoint, params=params, response=envelope)
             for squad_entry in _data_items(envelope):
+                # Sportmonks ``/squads/seasons/{s}/teams/{t}`` returns every
+                # player registered for the team across the whole season
+                # (incl. pre-tournament call-ups). The active final-tournament
+                # squad is the subset where ``has_values=true`` — that's the
+                # 26-man (FIFA 2022) or 23-man (FIFA 2018) roster.
+                if squad_entry.get("has_values") is not True:
+                    skipped += 1
+                    continue
                 jersey = squad_entry.get("jersey_number")
                 if not isinstance(jersey, int):
                     skipped += 1
@@ -204,6 +210,13 @@ async def bootstrap_player_stats(
         async for params, envelope in _paginate_pages(client, endpoint, base_params=base_params):
             await raw_archive.insert_if_new(endpoint=endpoint, params=params, response=envelope)
             for squad_entry in _data_items(envelope):
+                # Match the bootstrap_squads filter: only the active final
+                # tournament squad (has_values=true). Otherwise we'd materialise
+                # player_tournament_stat rows for pre-tournament call-ups that
+                # never played the final tournament.
+                if squad_entry.get("has_values") is not True:
+                    skipped += 1
+                    continue
                 player_payload = squad_entry.get("player")
                 if not isinstance(player_payload, dict):
                     skipped += 1
@@ -225,9 +238,7 @@ async def bootstrap_player_stats(
                     if block.get("season_id") != season_id:
                         continue
                     try:
-                        stat, smk_stat_id, raw = project_player_stat(
-                            block, internal_player_id=internal_player_id
-                        )
+                        stat, smk_stat_id, raw = project_player_stat(block, internal_player_id=internal_player_id)
                     except (ValueError, TypeError) as exc:
                         log.warning(
                             "bootstrap.player_stats.skip",
@@ -236,9 +247,7 @@ async def bootstrap_player_stats(
                         )
                         skipped += 1
                         continue
-                    await stat_repo.upsert_by_sportmonks_id(
-                        stat, sportmonks_statistic_id=smk_stat_id, raw_stats=raw
-                    )
+                    await stat_repo.upsert_by_sportmonks_id(stat, sportmonks_statistic_id=smk_stat_id, raw_stats=raw)
                     count += 1
     log.info("bootstrap.player_stats.done", count=count, skipped=skipped, season_id=season_id)
     return count

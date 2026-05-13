@@ -14,6 +14,7 @@ interface MatchPlayerDTO {
   rating: number;
   change_last_match: number;
   formation_position: number | null;
+  formation_field: string | null;
 }
 
 interface MatchEventDTO {
@@ -36,6 +37,10 @@ interface MatchResponseDTO {
   home_score: number | null;
   away_score: number | null;
   minute: number | null;
+  home_kit_color: string | null;
+  away_kit_color: string | null;
+  home_formation: string | null;
+  away_formation: string | null;
   home_xi: MatchPlayerDTO[];
   away_xi: MatchPlayerDTO[];
   home_bench: MatchPlayerDTO[];
@@ -55,6 +60,7 @@ function dto_player(p: MatchPlayerDTO): MatchPlayer {
     rating: p.rating,
     team_id: p.team_id,
     change_last_match: p.change_last_match,
+    formation_field: p.formation_field,
   };
 }
 
@@ -84,6 +90,10 @@ function dto_to_match(dto: MatchResponseDTO): Match {
     minute: dto.minute ?? 0,
     group: dto.group ?? "",
     status: dto.status as MatchStatus,
+    home_kit_color: dto.home_kit_color ?? undefined,
+    away_kit_color: dto.away_kit_color ?? undefined,
+    home_formation: dto.home_formation ?? undefined,
+    away_formation: dto.away_formation ?? undefined,
     home_xi: dto.home_xi.map(dto_player),
     away_xi: dto.away_xi.map(dto_player),
     home_bench: dto.home_bench.map(dto_player),

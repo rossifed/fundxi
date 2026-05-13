@@ -12,6 +12,9 @@ export interface MatchPlayer {
   rating: number;
   team_id?: string;
   change_last_match?: number; // %, net price change over the latest fixture — moves live during play
+  // Sportmonks tactical grid coordinate "row:col" (e.g. "2:3"). Authoritative
+  // source for pitch placement; absent for bench and pre-ingestion fixtures.
+  formation_field?: string | null;
   tags?: string[];
 }
 
@@ -34,6 +37,13 @@ export interface Match {
   fixture_id?: number;
   home_bench?: MatchPlayer[];
   away_bench?: MatchPlayer[];
+  // Hex of the primary kit color each team wore in this match (Sportmonks
+  // fixture metadata type_id 161 / 162). Null when not yet ingested.
+  home_kit_color?: string | null;
+  away_kit_color?: string | null;
+  // Tactical formation each team played (e.g. "4-3-3"). Null when not ingested.
+  home_formation?: string | null;
+  away_formation?: string | null;
   home_team_id: string;
   away_team_id: string;
   home_score: number;

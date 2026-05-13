@@ -74,6 +74,7 @@ def project_lineup(
 
     jersey = payload.get("jersey_number")
     formation_position = payload.get("formation_position")
+    formation_field = payload.get("formation_field")
 
     lineup = Lineup(
         id=0,
@@ -84,5 +85,6 @@ def project_lineup(
         position=position.value,
         jersey_number=jersey if isinstance(jersey, int) else None,
         formation_position=formation_position if isinstance(formation_position, int) else None,
+        formation_field=formation_field if isinstance(formation_field, str) else None,
     )
     return lineup, sportmonks_id

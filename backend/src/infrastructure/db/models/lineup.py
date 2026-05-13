@@ -20,3 +20,6 @@ class LineupORM(Base, AuditMixin):
     position: Mapped[str] = mapped_column(String(4))
     jersey_number: Mapped[int | None]
     formation_position: Mapped[int | None]
+    # Sportmonks "row:col" tactical grid coordinate (e.g. "2:3"). Null for
+    # bench players or fixtures where the source did not provide it.
+    formation_field: Mapped[str | None] = mapped_column(String(8), nullable=True)

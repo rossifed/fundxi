@@ -61,9 +61,7 @@ class SqlAlchemyStandingRepository:
         await self._session.execute(stmt)
 
     async def list_all(self) -> list[Standing]:
-        result = await self._session.execute(
-            select(StandingORM).order_by(StandingORM.group, StandingORM.position)
-        )
+        result = await self._session.execute(select(StandingORM).order_by(StandingORM.group, StandingORM.position))
         return [_to_domain(o) for o in result.scalars().all()]
 
     async def list_by_group(self, group: str) -> list[Standing]:

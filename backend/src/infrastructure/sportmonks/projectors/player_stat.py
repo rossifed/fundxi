@@ -78,9 +78,7 @@ def project_player_stat(
     """
     sportmonks_statistic_id = block["id"]
     if not isinstance(sportmonks_statistic_id, int):
-        raise TypeError(
-            f"statistic.id must be int, got {type(sportmonks_statistic_id).__name__}"
-        )
+        raise TypeError(f"statistic.id must be int, got {type(sportmonks_statistic_id).__name__}")
     season_id = block.get("season_id")
     if not isinstance(season_id, int):
         raise ValueError(f"statistic block missing season_id: {block!r}")

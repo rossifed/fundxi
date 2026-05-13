@@ -40,9 +40,7 @@ class TradeOutcome:
     holding: Holding | None  # None if the position was fully closed
 
 
-def _compute_new_avg(
-    *, prev_shares: float, prev_avg: float, kind: TradeKind, qty: float, price: float
-) -> float:
+def _compute_new_avg(*, prev_shares: float, prev_avg: float, kind: TradeKind, qty: float, price: float) -> float:
     """Weighted "open price" of the position after the trade. Pure function.
 
     Convention: `average_buy_price` (Holding) carries the cost basis of the

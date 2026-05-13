@@ -7,8 +7,14 @@ _MAPS = {18551: "MAR", 18647: "FRA"}
 
 def _details(**kw: int) -> list[dict[str, object]]:
     code = {
-        "played": 129, "won": 130, "drawn": 131, "lost": 132,
-        "goals_for": 133, "goals_against": 134, "goal_difference": 179, "points": 187,
+        "played": 129,
+        "won": 130,
+        "drawn": 131,
+        "lost": 132,
+        "goals_for": 133,
+        "goals_against": 134,
+        "goal_difference": 179,
+        "points": 187,
     }
     return [{"type_id": code[k], "value": v} for k, v in kw.items()]
 
@@ -29,8 +35,17 @@ def _row(
 
 def test_projects_group_stage_row() -> None:
     row = _row(
-        smk_team=18551, group_name="Group F", position=1, points=7,
-        played=3, won=2, drawn=1, lost=0, goals_for=4, goals_against=1, goal_difference=3,
+        smk_team=18551,
+        group_name="Group F",
+        position=1,
+        points=7,
+        played=3,
+        won=2,
+        drawn=1,
+        lost=0,
+        goals_for=4,
+        goals_against=1,
+        goal_difference=3,
     )
 
     s = project_standing(row, team_id_by_sportmonks=_MAPS)

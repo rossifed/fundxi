@@ -51,6 +51,7 @@ def _player_view_to_dto(view: MatchPlayerView) -> MatchPlayerResponse:
         rating=view.valuation.performance_rating,
         change_last_match=view.valuation.change_last_match,
         formation_position=view.lineup.formation_position,
+        formation_field=view.lineup.formation_field,
     )
 
 
@@ -111,6 +112,10 @@ async def fixtures_match(
         home_score=view.fixture.home_score,
         away_score=view.fixture.away_score,
         minute=view.fixture.minute,
+        home_kit_color=view.fixture.home_kit_color,
+        away_kit_color=view.fixture.away_kit_color,
+        home_formation=view.fixture.home_formation,
+        away_formation=view.fixture.away_formation,
         home_xi=[_player_view_to_dto(v) for v in view.home_xi],
         away_xi=[_player_view_to_dto(v) for v in view.away_xi],
         home_bench=[_player_view_to_dto(v) for v in view.home_bench],

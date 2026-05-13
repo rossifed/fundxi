@@ -23,6 +23,12 @@ def _to_domain(orm: FixtureORM) -> Fixture:
         kickoff_at=orm.kickoff_at,
         minute=orm.minute,
         note=orm.note,
+        home_kit_color=orm.home_kit_color,
+        away_kit_color=orm.away_kit_color,
+        home_kit_palette=orm.home_kit_palette,
+        away_kit_palette=orm.away_kit_palette,
+        home_formation=orm.home_formation,
+        away_formation=orm.away_formation,
     )
 
 
@@ -77,3 +83,44 @@ class SqlAlchemyFixtureRepository:
             select(FixtureORM.id, FixtureORM.sportmonks_id).where(FixtureORM.sportmonks_id.is_not(None))
         )
         return {smk: internal for internal, smk in result.all() if smk is not None}
+
+    async def set_kit_colors(
+        self,
+        *,
+        sportmonks_id: int,
+        home_kit_color: str | None,
+        away_kit_color: str | None,
+        home_kit_palette: str | None,
+        away_kit_palette: str | None,
+    ) -> None:
+        """Update the four kit-color columns for the fixture identified by
+        ``sportmonks_id``. No-op when the fixture row doesn't exist yet."""
+        from sqlalchemy import update as sql_update
+
+        await self._session.execute(
+            sql_update(FixtureORM)
+            .where(FixtureORM.sportmonks_id == sportmonks_id)
+            .values(
+                home_kit_color=home_kit_color,
+                away_kit_color=away_kit_color,
+                home_kit_palette=home_kit_palette,
+                away_kit_palette=away_kit_palette,
+            )
+        )
+
+    async def set_formations(
+        self,
+        *,
+        sportmonks_id: int,
+        home_formation: str | None,
+        away_formation: str | None,
+    ) -> None:
+        """Update the tactical formation strings for the fixture. No-op when
+        the fixture row doesn't exist yet."""
+        from sqlalchemy import update as sql_update
+
+        await self._session.execute(
+            sql_update(FixtureORM)
+            .where(FixtureORM.sportmonks_id == sportmonks_id)
+            .values(home_formation=home_formation, away_formation=away_formation)
+        )

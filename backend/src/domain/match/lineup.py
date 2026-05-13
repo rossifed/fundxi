@@ -25,6 +25,7 @@ class Lineup:
     position: str  # GK / DF / MF / FW (matches Position enum value)
     jersey_number: int | None
     formation_position: int | None  # 1..11 slot or None for bench
+    formation_field: str | None  # Sportmonks "row:col" tactical grid (e.g. "2:3")
 
 
 class LineupRepository(Protocol):

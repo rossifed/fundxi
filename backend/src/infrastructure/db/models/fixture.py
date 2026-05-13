@@ -27,3 +27,16 @@ class FixtureORM(Base, AuditMixin):
     kickoff_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     minute: Mapped[int | None]
     note: Mapped[str | None] = mapped_column(Text)
+    # Per-match kit colors (hex), from Sportmonks fixture metadata type_id
+    # 161 (home) / 162 (away). Nullable: only set once the fixture has been
+    # ingested via bootstrap_fixture_details. ``*_color`` is the primary
+    # ``values.participant`` hex; ``*_palette`` is the raw CSV
+    # ``values.kit`` string (shirt/shorts/socks/GK/variants, undocumented).
+    home_kit_color: Mapped[str | None] = mapped_column(String(7))
+    away_kit_color: Mapped[str | None] = mapped_column(String(7))
+    home_kit_palette: Mapped[str | None] = mapped_column(String(255))
+    away_kit_palette: Mapped[str | None] = mapped_column(String(255))
+    # Tactical formation each team played in this fixture (e.g. "4-3-3").
+    # From Sportmonks fixture metadata (type_id 159) or the formations include.
+    home_formation: Mapped[str | None] = mapped_column(String(16))
+    away_formation: Mapped[str | None] = mapped_column(String(16))

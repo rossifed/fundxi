@@ -56,6 +56,26 @@ class _FakeFixtureRepo:
     async def map_sportmonks_to_internal_id(self) -> dict[int, int]:
         return {}
 
+    async def set_kit_colors(
+        self,
+        *,
+        sportmonks_id: int,
+        home_kit_color: str | None,
+        away_kit_color: str | None,
+        home_kit_palette: str | None,
+        away_kit_palette: str | None,
+    ) -> None:
+        _ = (sportmonks_id, home_kit_color, away_kit_color, home_kit_palette, away_kit_palette)
+
+    async def set_formations(
+        self,
+        *,
+        sportmonks_id: int,
+        home_formation: str | None,
+        away_formation: str | None,
+    ) -> None:
+        _ = (sportmonks_id, home_formation, away_formation)
+
 
 @dataclass(slots=True)
 class _IdlePoller:
