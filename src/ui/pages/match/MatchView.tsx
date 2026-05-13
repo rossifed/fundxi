@@ -1,4 +1,4 @@
-import { type CSSProperties, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import type { Match, MatchEvent, MatchPlayer } from "@/domain/match/match";
 import type { MatchComment } from "@/domain/match/match_comment";
 import type { Position } from "@/domain/player/player";
@@ -224,6 +224,10 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
           </div>
         </div>
       </div>
+
+      {/* Live commentary ticker — keeps the most recent events in view above
+          the fold. Scrolls right-to-left continuously, pauses on hover. */}
+      <LiveTicker comments={commentaries ?? []} card_style={card} />
 
       {/* Line-up view toggle — Liste / Terrain. */}
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -614,6 +618,149 @@ function Commentary({ comments, loading }: { comments: MatchComment[]; loading: 
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// Horizontal scrolling ticker — sits above the line-up so the latest live
+// commentary stays visible without scrolling the page. The track holds two
+// back-to-back copies of the same comment list and animates by -50% so the
+// loop is seamless; pause-on-hover gives the user time to read.
+//
+// Speed scales with content width so a long list doesn't blast past and a
+// short list doesn't crawl — ~70 px/s feels right for live updates.
+function LiveTicker({ comments, card_style }: { comments: MatchComment[]; card_style: CSSProperties }) {
+  // Newest first — the user expects the freshest event to appear first as
+  // it slides in from the right.
+  const items = useMemo(() => comments.slice(0, 30), [comments]);
+  const [paused, set_paused] = useState(false);
+  const [track_w, set_track_w] = useState(0);
+  const track_ref = useRef<HTMLDivElement>(null);
+
+  // Measure one copy's width (the track holds two copies). Re-measure on
+  // resize so the animation speed stays consistent across viewport sizes.
+  useEffect(() => {
+    if (!track_ref.current) return;
+    const measure = () => {
+      const el = track_ref.current;
+      if (!el) return;
+      // scrollWidth is the full width of both copies; we want one copy.
+      set_track_w(el.scrollWidth / 2);
+    };
+    measure();
+    const obs = new ResizeObserver(measure);
+    obs.observe(track_ref.current);
+    return () => obs.disconnect();
+  }, [items]);
+
+  if (items.length === 0) return null;
+
+  const duration_s = Math.max(20, Math.round(track_w / 70));
+
+  const render_one = (c: MatchComment, key_prefix: string) => {
+    const minute_label = c.extra_minute ? `${c.minute}+${c.extra_minute}'` : `${c.minute}'`;
+    const accent = c.is_goal ? GREEN : c.is_important ? "rgba(255,255,255,.6)" : "rgba(255,255,255,.3)";
+    return (
+      <span
+        key={`${key_prefix}-${c.id}`}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "0 18px",
+          borderRight: "1px solid rgba(255,255,255,.05)",
+          flexShrink: 0,
+        }}
+      >
+        <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: accent }}>
+          {minute_label}
+        </span>
+        {c.is_goal ? <span style={{ fontSize: 13 }}>⚽</span> : null}
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: c.is_goal ? 700 : 500,
+            color: c.is_goal ? "#fff" : "rgba(255,255,255,.8)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {c.comment}
+        </span>
+      </span>
+    );
+  };
+
+  return (
+    <div
+      onMouseEnter={() => set_paused(true)}
+      onMouseLeave={() => set_paused(false)}
+      style={{
+        ...card_style,
+        display: "flex",
+        alignItems: "stretch",
+        height: 38,
+        overflow: "hidden",
+        position: "relative",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "0 12px",
+          background: "rgba(72,255,67,.08)",
+          borderRight: "1px solid rgba(72,255,67,.18)",
+          flexShrink: 0,
+          fontSize: 10,
+          fontWeight: 800,
+          letterSpacing: 1.4,
+          color: GREEN,
+        }}
+      >
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            background: GREEN,
+            display: "inline-block",
+            animation: "pulse 1.5s infinite",
+          }}
+        />
+        LIVE
+      </div>
+      <div
+        style={{
+          flex: 1,
+          overflow: "hidden",
+          position: "relative",
+          // Soft fade at the right edge so the upcoming item appears to drift
+          // in rather than pop in mid-text. Same trick on the left edge for
+          // the trailing item.
+          maskImage:
+            "linear-gradient(to right, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%)",
+          WebkitMaskImage:
+            "linear-gradient(to right, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%)",
+        }}
+      >
+        <div
+          ref={track_ref}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            height: "100%",
+            animation: `marquee ${duration_s}s linear infinite`,
+            animationPlayState: paused ? "paused" : "running",
+            willChange: "transform",
+          }}
+        >
+          {items.map(c => render_one(c, "a"))}
+          {/* Second copy — the seamless loop relies on the track being
+              exactly 2x one copy's width and the keyframe ending at -50%. */}
+          {items.map(c => render_one(c, "b"))}
+        </div>
+      </div>
     </div>
   );
 }

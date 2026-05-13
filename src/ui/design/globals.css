@@ -77,6 +77,17 @@ body,
   }
 }
 
+/* Live commentary ticker — content is rendered twice back-to-back inside the
+   track so animating from 0 to -50% loops seamlessly with no jump. */
+@keyframes marquee {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
 .mono {
   font-family: "JetBrains Mono", monospace;
 }

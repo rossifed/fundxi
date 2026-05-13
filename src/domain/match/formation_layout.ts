@@ -36,7 +36,8 @@ export interface PitchPosition {
 // - Single-team layout: the team owns the full pitch length, GK at near
 //   baseline, forwards stretched up toward the far goal. This is the mode
 //   the PitchView uses; it gives tokens room to breathe vertically.
-const Y_GK_NEAR = 94;
+const Y_GK_NEAR = 87; // a few units off the goal line so the GK token's
+// name + photo don't overlap the bottom touchline / goal line of the pitch
 const Y_LAST_NEAR_DUAL = 52; // shared layout: forwards stop at midfield
 const Y_LAST_NEAR_SINGLE = 14; // single-team: forwards reach the far box
 
