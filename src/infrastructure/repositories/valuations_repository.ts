@@ -12,7 +12,9 @@ interface PlayerWithValuationDTO {
     player_id: number;
     base_value: number;
     current_price: number;
-    change_24h: number;
+    change_since_inception: number;
+    change_avg_per_match: number;
+    change_last_match: number;
     performance_rating: number;
     as_of: string;
     source: string;
@@ -29,7 +31,9 @@ function dto_to_domain(dto: PlayerWithValuationDTO["valuation"]): PlayerValuatio
     player_id: dto.player_id,
     base_value: dto.base_value,
     current_price: dto.current_price,
-    change_24h: dto.change_24h,
+    change_since_inception: dto.change_since_inception,
+    change_avg_per_match: dto.change_avg_per_match,
+    change_last_match: dto.change_last_match,
     performance_rating: dto.performance_rating,
     as_of: dto.as_of,
     source: dto.source as ValuationSource,
@@ -107,6 +111,13 @@ export function fetch_price_history(player_id: number): Promise<PricePoint[]> {
     p = api_get<PriceHistoryDTO>(`/api/players/${player_id}/price-history`).then(d => d.points);
     _price_history_cache.set(player_id, p);
   }
+  return p;
+}
+
+/** Cache-busting refetch of a player's price history — call on a live tick. */
+export function refresh_price_history(player_id: number): Promise<PricePoint[]> {
+  const p = api_get<PriceHistoryDTO>(`/api/players/${player_id}/price-history`).then(d => d.points);
+  _price_history_cache.set(player_id, p);
   return p;
 }
 

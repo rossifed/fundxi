@@ -49,7 +49,7 @@ def _player_view_to_dto(view: MatchPlayerView) -> MatchPlayerResponse:
         team_id=view.lineup.team_id,
         value=view.valuation.current_price,
         rating=view.valuation.performance_rating,
-        change_24h=view.valuation.change_24h,
+        change_last_match=view.valuation.change_last_match,
         formation_position=view.lineup.formation_position,
     )
 

@@ -8,11 +8,11 @@ from src.streaming.domain.notification import topics_for_subject
 @pytest.mark.parametrize(
     ("subject", "expected"),
     [
-        ("fundxi.match_event.42", ("fixture:42",)),
-        ("fundxi.match_comment.42", ("fixture:42",)),
-        ("fundxi.fixture_status.42", ("fixture:42",)),
-        ("fundxi.lineup.42", ("fixture:42",)),
-        ("fundxi.player_match_stat.42", ("fixture:42",)),
+        ("fundxi.match_event.42", ("fixture:42", "matches")),
+        ("fundxi.match_comment.42", ("fixture:42", "matches")),
+        ("fundxi.fixture_status.42", ("fixture:42", "matches")),
+        ("fundxi.lineup.42", ("fixture:42", "matches")),
+        ("fundxi.player_match_stat.42", ("fixture:42", "matches")),
         ("fundxi.player_price_tick.777", ("player:777", "prices")),
         ("fundxi.news", ("news",)),
         ("fundxi.standings", ("standings",)),

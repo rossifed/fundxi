@@ -8,6 +8,9 @@ Endpoints (all ``text/event-stream``):
   GET /streams/fixture/{fixture_id}
       events + comments + status + lineup + per-player stats for one
       fixture — drives the MatchView.
+  GET /streams/matches
+      any fixture had activity — the Home "Match Center" card uses it
+      to notice a match going live (or ending) without knowing the id.
   GET /streams/player/{player_id}
       that player's price ticks — drives the PlayerSheet chart.
   GET /streams/prices
@@ -119,6 +122,11 @@ async def _topic_stream(request: Request, *, topic: str) -> StreamingResponse:
 @app.get("/streams/fixture/{fixture_id}")
 async def stream_fixture(fixture_id: int, request: Request) -> StreamingResponse:
     return await _topic_stream(request, topic=f"fixture:{fixture_id}")
+
+
+@app.get("/streams/matches")
+async def stream_matches(request: Request) -> StreamingResponse:
+    return await _topic_stream(request, topic="matches")
 
 
 @app.get("/streams/player/{player_id}")

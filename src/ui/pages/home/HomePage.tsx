@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { matches_api } from "@/api/matches_api";
 import { players_api } from "@/api/players_api";
 import { teams_api } from "@/api/teams_api";
@@ -12,6 +12,13 @@ import { SectionHeader } from "@/ui/components/SectionHeader";
 import { Spark } from "@/ui/components/Spark";
 import { spark_for_player } from "@/infrastructure/repositories/valuations_repository";
 import { news_api } from "@/api/news_api";
+import { valuations_api } from "@/api/valuations_api";
+import {
+  useFixtureLiveVersion,
+  useLiveRefetch,
+  useMatchesLiveVersion,
+  usePricesLiveVersion,
+} from "@/ui/hooks/use_live_updates";
 
 function news_icon(type: "prematch" | "postmatch"): string {
   return type === "postmatch" ? "🏁" : "📰";
@@ -31,12 +38,47 @@ interface HomePageProps {
 }
 
 export function HomePage({ on_open_player, on_navigate_tab, on_open_match }: HomePageProps) {
-  const live = matches_api.get_live_match();
+  // The Match Center card mirrors the in-play match. Seeded from the boot-time
+  // snapshot; kept in step (clock / score / scorers) by the fixture SSE stream,
+  // and the global "matches" stream lets it appear when a match goes live mid-
+  // session (and clears it when there's no live match).
+  const [live, set_live] = useState<Match | null>(() => matches_api.get_live_match() ?? null);
+  const live_version = useFixtureLiveVersion(live?.fixture_id);
+  useLiveRefetch(live_version, () => {
+    if (!live?.fixture_id) return;
+    matches_api
+      .refresh_match_by_fixture_id(live.fixture_id)
+      .then(m => set_live(m && m.status === "live" ? m : null))
+      .catch(() => {
+        /* keep the current card on a transient error */
+      });
+  });
+  const matches_version = useMatchesLiveVersion();
+  useLiveRefetch(matches_version, () => {
+    if (live) return; // already showing one; the per-fixture stream handles updates
+    matches_api
+      .refresh_fixtures()
+      .then(fixtures => {
+        const live_fixture = fixtures.find(f => f.status === "live");
+        if (!live_fixture) return;
+        matches_api
+          .refresh_match_by_fixture_id(live_fixture.id)
+          .then(m => set_live(m && m.status === "live" ? m : null))
+          .catch(() => {});
+      })
+      .catch(() => {});
+  });
   const upcoming = matches_api.list_fixtures().filter(f => f.status === "upcoming").slice(0, 3);
   const my_leagues = leagues_api.list();
 
-  const top_up = useMemo(() => players_api.top_movers(5, "up"), []);
-  const top_down = useMemo(() => players_api.top_movers(5, "down"), []);
+  // Top gainers / losers: re-read after every live price tick.
+  const prices_version = usePricesLiveVersion();
+  const [valuations_version, set_valuations_version] = useState(0);
+  useLiveRefetch(prices_version, () => {
+    void valuations_api.refresh().then(() => set_valuations_version(v => v + 1));
+  });
+  const top_up = useMemo(() => players_api.top_movers(5, "up"), [valuations_version]);
+  const top_down = useMemo(() => players_api.top_movers(5, "down"), [valuations_version]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24, animation: "fu .3s ease" }}>
@@ -236,17 +278,23 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match }: Hom
   );
 }
 
+// MatchEvent.type comes from the BFF as the display glyph: "⚽" for a goal
+// (and own-goal — the BFF collapses both), "🎯" for a scored penalty.
+const _GOAL_GLYPHS = new Set(["⚽", "🎯"]);
+
 function LiveMatchCard({ match, on_open }: { match: Match; on_open: () => void }) {
   const home = teams_api.get(match.home_team_id);
   const away = teams_api.get(match.away_team_id);
 
-  // Top movers in the match
-  const movers = useMemo(() => {
-    return Object.entries(match.player_changes)
-      .map(([id, change]) => ({ id: Number(id), change }))
-      .sort((a, b) => Math.abs(b.change) - Math.abs(a.change))
-      .slice(0, 4);
-  }, [match.player_changes]);
+  // Scorers, in chronological order — name + minute.
+  const goals = useMemo(
+    () =>
+      match.events
+        .filter(e => _GOAL_GLYPHS.has(e.type))
+        .slice()
+        .sort((a, b) => a.minute - b.minute),
+    [match.events],
+  );
 
   return (
     <div
@@ -287,16 +335,16 @@ function LiveMatchCard({ match, on_open }: { match: Match; on_open: () => void }
           <div style={{ fontSize: 13, fontWeight: 700, marginTop: 2 }}>{away?.name}</div>
         </div>
       </div>
-      {movers.length > 0 && (
+      {goals.length > 0 && (
         <div style={{ display: "flex", justifyContent: "center", gap: 16, marginTop: 12, fontSize: 11, color: "rgba(255,255,255,.45)", flexWrap: "wrap" }}>
-          {movers.map(m => {
-            const p = players_api.get(m.id);
+          {goals.map((g, i) => {
+            const color = g.team_id === match.home_team_id ? home?.color : away?.color;
             return (
-              <span key={m.id}>
-                {p?.name ?? `#${m.id}`}{" "}
-                <span style={{ color: m.change >= 0 ? "#216c6e" : "#E41541", fontWeight: 700 }}>
-                  {m.change >= 0 ? "+" : ""}{m.change}%
-                </span>
+              <span key={`${g.minute}-${g.player_name ?? "?"}-${i}`}>
+                ⚽{" "}
+                <span style={{ color: color ?? "rgba(255,255,255,.8)", fontWeight: 700 }}>{g.player_name ?? "?"}</span>
+                {g.type === "🎯" ? " (p)" : ""}{" "}
+                <span className="mono" style={{ fontWeight: 700 }}>{g.minute}'</span>
               </span>
             );
           })}

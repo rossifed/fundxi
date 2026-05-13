@@ -9,7 +9,7 @@ the sink owns those.
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from src.simulation.domain.ports import LiveDataSink, ReplayArchiveReader, SleepFn
+from src.simulation.domain.ports import LiveDataSink, ReplayArchiveReader, ReplayController, SleepFn
 from src.simulation.domain.replay_event import ReplayEvent
 
 
@@ -18,6 +18,7 @@ class ReplayReport:
     fixture_internal_id: int
     minutes_played: int
     events_emitted: int
+    aborted: bool = False
 
 
 async def replay_match(
@@ -28,6 +29,7 @@ async def replay_match(
     archive: ReplayArchiveReader,
     sink: LiveDataSink,
     sleep: SleepFn,
+    controller: ReplayController | None = None,
 ) -> ReplayReport:
     """Stream the fixture's timeline into the sink at simulated cadence.
 
@@ -38,6 +40,11 @@ async def replay_match(
 
     ``from_minute`` lets the caller skip the early part of the match;
     events strictly before that minute are dropped and never emitted.
+
+    An optional ``controller`` can pause or stop the run from outside:
+    it is consulted at each game-minute boundary, before the inter-minute
+    wait. A stop unwinds cleanly and the returned report carries
+    ``aborted=True``.
     """
     if speed <= 0:
         raise ValueError(f"speed must be > 0, got {speed!r}")
@@ -52,8 +59,14 @@ async def replay_match(
     seconds_per_minute = 60.0 / speed
     events_emitted = 0
     last_minute_emitted = from_minute - 1
+    aborted = False
 
     for minute, batch in _group_by_minute(timeline):
+        if controller is not None:
+            await controller.wait_while_paused()
+            if controller.stop_requested():
+                aborted = True
+                break
         # Sleep for every game minute crossed since the previous emit, including empty ones.
         # This preserves the perceived pacing of the match (a quiet minute still takes time).
         gap = minute - last_minute_emitted
@@ -66,8 +79,9 @@ async def replay_match(
 
     return ReplayReport(
         fixture_internal_id=bundle.fixture_internal_id,
-        minutes_played=last_minute_emitted - from_minute + 1,
+        minutes_played=max(0, last_minute_emitted - from_minute + 1),
         events_emitted=events_emitted,
+        aborted=aborted,
     )
 
 

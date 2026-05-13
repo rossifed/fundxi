@@ -92,8 +92,8 @@ export function RightRail({ watchlist, on_open_player, on_open_match }: RightRai
               const team = teams_api.get(p.team_id);
               const v = valuations_api.get_for_player(p.id);
               const current_price = v?.current_price ?? 0;
-              const change_24h = v?.change_24h ?? 0;
-              const up = change_24h >= 0;
+              const change_pct = v?.change_since_inception ?? 0;
+              const up = change_pct >= 0;
               return (
                 <div
                   key={p.id}
@@ -143,7 +143,7 @@ export function RightRail({ watchlist, on_open_player, on_open_match }: RightRai
                   <div style={{ textAlign: "right" }}>
                     <div className="mono" style={{ fontSize: 12, fontWeight: 700 }}>€{current_price}M</div>
                     <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: up ? "#216c6e" : "#E41541" }}>
-                      {up ? "+" : ""}{change_24h}%
+                      {up ? "+" : ""}{change_pct}%
                     </div>
                   </div>
                 </div>

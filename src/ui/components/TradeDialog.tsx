@@ -26,7 +26,9 @@ interface TradeDialogProps {
   // Optional snapshot overrides — used when caller already holds price data
   // (e.g. MatchView passing a MatchPlayer's value for an inline-only sub).
   current_price?: number;
-  change_24h?: number;
+  // % change to display next to the price (caller picks the relevant window;
+  // defaults to the player's since-inception change).
+  change_pct?: number;
 }
 
 export function TradeDialog({
@@ -36,12 +38,12 @@ export function TradeDialog({
   on_close,
   go_portfolio,
   current_price: current_price_override,
-  change_24h: change_24h_override,
+  change_pct: change_pct_override,
 }: TradeDialogProps) {
   const team = teams_api.get(player.team_id);
   const valuation = valuations_api.get_for_player(player.id);
   const current_price = current_price_override ?? valuation?.current_price ?? 0;
-  const change_24h = change_24h_override ?? valuation?.change_24h ?? 0;
+  const change_pct = change_pct_override ?? valuation?.change_since_inception ?? 0;
 
   const [kind, set_kind] = useState<TradeKindLocal>(initial_kind);
   const [mode, set_mode] = useState<TradeMode>("percentage");
@@ -67,7 +69,7 @@ export function TradeDialog({
   if (!open) return null;
 
   const is_buy = kind === "buy";
-  const is_up = change_24h >= 0;
+  const is_up = change_pct >= 0;
 
   // ── Confirmed view ──
   if (confirmed) {
@@ -269,7 +271,7 @@ export function TradeDialog({
           <div style={{ textAlign: "right" }}>
             <div className="mono" style={{ fontSize: 14, fontWeight: 800 }}>€{current_price}M</div>
             <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: is_up ? "#216c6e" : "#E41541" }}>
-              {is_up ? "+" : ""}{change_24h}%
+              {is_up ? "+" : ""}{change_pct}%
             </div>
           </div>
         </div>

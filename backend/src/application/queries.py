@@ -63,7 +63,7 @@ def _sort_pairs_by_valuation(
     if key is SortKey.VALUE:
         return sorted(pairs, key=lambda p: p.valuation.current_price, reverse=descending)
     if key is SortKey.CHANGE:
-        return sorted(pairs, key=lambda p: p.valuation.change_24h, reverse=descending)
+        return sorted(pairs, key=lambda p: p.valuation.change_since_inception, reverse=descending)
     if key is SortKey.RATING:
         return sorted(pairs, key=lambda p: p.valuation.performance_rating, reverse=descending)
     return pairs

@@ -101,7 +101,6 @@ export function App() {
 
   const current_tab_label = tab === "profile" ? "Profile" : NAV_TABS.find(t => t.id === tab)?.label ?? "";
   const show_rail = !selected_match && PAGES_WITH_RAIL.includes(tab);
-  const is_full_bleed = !!selected_match;
 
   return (
     <div
@@ -110,11 +109,7 @@ export function App() {
         color: "#fff",
         fontFamily: "'Inter',sans-serif",
         position: "relative",
-        // Match view = strict viewport height (no page scroll, the pitch fits).
-        // Other pages = grow naturally with content.
-        ...(is_full_bleed
-          ? { height: "100vh", overflow: "hidden" }
-          : { minHeight: "100vh" }),
+        minHeight: "100vh",
       }}
     >
       <div
@@ -135,7 +130,7 @@ export function App() {
           margin: "0 auto",
           display: "flex",
           flexDirection: "column",
-          ...(is_full_bleed ? { height: "100vh" } : { minHeight: "100vh" }),
+          minHeight: "100vh",
         }}
       >
         <Header on_logo_click={() => navigate("home")} />
@@ -153,10 +148,8 @@ export function App() {
               minHeight: 0,
             }}
           >
-            {is_full_bleed ? (
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>{content}</div>
-            ) : (
-              <div style={{ padding: "24px 32px 64px", maxWidth: 1200, width: "100%" }}>
+            <div style={{ padding: "24px 32px 64px", maxWidth: 1200, width: "100%" }}>
+              {!selected_match && (
                 <div
                   style={{
                     display: "flex",
@@ -175,9 +168,9 @@ export function App() {
                     {current_tab_label}
                   </h1>
                 </div>
-                {content}
-              </div>
-            )}
+              )}
+              {content}
+            </div>
           </main>
 
           {show_rail && (

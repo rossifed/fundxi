@@ -1,8 +1,16 @@
-"""EngineValuationProvider — reads the latest tick from valuation.player_price_tick.
+"""EngineValuationProvider — reads valuation.player_price_tick for live prices.
 
 DDD role: Adapter implementing ValuationProvider. Drop-in replacement for
-SyntheticValuationProvider. Falls back to the synthetic seed if a player
-has no tick yet (e.g. before any replay run).
+SyntheticValuationProvider. Falls back to the synthetic seed for a player
+with no tick yet (e.g. before any replay run).
+
+Three change metrics, all in percent:
+- ``change_since_inception``: (current_price / base_value - 1) * 100 — the
+  canonical "% change" used by screeners / top-movers.
+- ``change_avg_per_match``: mean, over each fixture the player has ticks in,
+  of that fixture's net change (its latest tick's ``change_since_open``).
+- ``change_last_match``: the latest tick's ``change_since_open`` — moves live
+  during a match, then holds until the next match's first tick.
 """
 
 from datetime import UTC, datetime
@@ -11,7 +19,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.valuation.player_valuation import PlayerValuation, ValuationSource
-from src.infrastructure.db.models.player_daily_snapshot import PlayerDailySnapshotORM
 from src.infrastructure.db.models.player_price_tick import PlayerPriceTickORM
 from src.infrastructure.valuation.synthetic_valuation_provider import synthesize_valuation
 
@@ -31,14 +38,37 @@ class EngineValuationProvider:
         )
         return result.scalar_one_or_none()
 
-    async def _latest_snapshot(self, player_id: int) -> PlayerDailySnapshotORM | None:
+    async def _first_tick_price(self, player_id: int) -> float | None:
+        # FIXME: anchors base_value at the first *tick* price, which already
+        # includes that event's jump. The true "tournament-open" anchor is yet
+        # to be decided — until then ``change_since_inception`` is understated.
         result = await self._session.execute(
-            select(PlayerDailySnapshotORM)
-            .where(PlayerDailySnapshotORM.player_id == player_id)
-            .order_by(PlayerDailySnapshotORM.date.desc())
+            select(PlayerPriceTickORM.current_price)
+            .where(PlayerPriceTickORM.player_id == player_id)
+            .order_by(PlayerPriceTickORM.ts.asc())
             .limit(1)
         )
-        return result.scalar_one_or_none()
+        price = result.scalar_one_or_none()
+        return float(price) if price is not None else None
+
+    async def _avg_change_per_match(self, player_id: int) -> float:
+        # Per fixture (NULL fixture_id excluded), the latest tick's change_since_open
+        # is that fixture's net change; average those. Few ticks per player → the
+        # last-per-fixture reduction is cheap to do in Python.
+        rows = (
+            await self._session.execute(
+                select(PlayerPriceTickORM.fixture_id, PlayerPriceTickORM.change_since_open)
+                .where(PlayerPriceTickORM.player_id == player_id, PlayerPriceTickORM.fixture_id.is_not(None))
+                .order_by(PlayerPriceTickORM.ts.asc())
+            )
+        ).all()
+        last_by_fixture: dict[int, float] = {}
+        for fixture_id, change in rows:
+            if fixture_id is not None:
+                last_by_fixture[fixture_id] = float(change)
+        if not last_by_fixture:
+            return 0.0
+        return round(sum(last_by_fixture.values()) / len(last_by_fixture), 2)
 
     async def get_for_player(self, player_id: int) -> PlayerValuation:
         tick = await self._latest_tick(player_id)
@@ -46,23 +76,18 @@ class EngineValuationProvider:
             # No tick yet → fall back to deterministic synthetic seed.
             return synthesize_valuation(player_id, as_of=datetime.now(UTC))
 
-        snapshot = await self._latest_snapshot(player_id)
-        change_24h = float(snapshot.change_24h) if snapshot is not None else float(tick.change_since_open)
-        # Base value is the very-first tick (the seed).
-        first_tick_result = await self._session.execute(
-            select(PlayerPriceTickORM.current_price)
-            .where(PlayerPriceTickORM.player_id == player_id)
-            .order_by(PlayerPriceTickORM.ts.asc())
-            .limit(1)
-        )
-        first_price = first_tick_result.scalar_one_or_none()
-        base_value = float(first_price) if first_price is not None else float(tick.current_price)
+        first_price = await self._first_tick_price(player_id)
+        base_value = first_price if first_price is not None else float(tick.current_price)
+        current_price = float(tick.current_price)
+        change_since_inception = round((current_price / base_value - 1.0) * 100.0, 2) if base_value > 0 else 0.0
 
         return PlayerValuation(
             player_id=player_id,
             base_value=base_value,
-            current_price=float(tick.current_price),
-            change_24h=round(change_24h, 2),
+            current_price=current_price,
+            change_since_inception=change_since_inception,
+            change_avg_per_match=await self._avg_change_per_match(player_id),
+            change_last_match=round(float(tick.change_since_open), 2),
             performance_rating=float(tick.performance_rating),
             as_of=tick.ts,
             source=ValuationSource.ENGINE,
@@ -71,9 +96,8 @@ class EngineValuationProvider:
     async def get_for_players(self, player_ids: list[int]) -> dict[int, PlayerValuation]:
         if not player_ids:
             return {}
-        # Single round-trip: fetch the latest tick + first tick + latest snapshot
-        # for every requested player. Done as a Python sequential loop here for
-        # simplicity; M6 can swap to a window-function batch query if needed.
+        # Python sequential loop for simplicity; players with no tick short-
+        # circuit to the synthetic seed (no extra queries).
         result: dict[int, PlayerValuation] = {}
         for pid in player_ids:
             result[pid] = await self.get_for_player(pid)

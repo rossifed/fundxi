@@ -8,8 +8,10 @@ Protocol, so the use cases need zero changes.
 
 Pseudo-random recipe (deterministic, seeded by player_id):
 - base_value: €5M..€120M
-- current_price: base_value * (1 + change_24h)
-- change_24h: -8% .. +8%
+- change_since_inception: -8% .. +8% (the player's whole-tournament drift)
+- current_price: base_value * (1 + change_since_inception / 100)
+- change_avg_per_match / change_last_match: 0.0 — a stub player has no match
+  history; these become meaningful once the engine prices the player.
 - performance_rating: 5.0 .. 9.0
 """
 
@@ -29,14 +31,16 @@ def _hashed_unit(player_id: int, salt: str) -> float:
 def synthesize_valuation(player_id: int, *, as_of: datetime) -> PlayerValuation:
     """Pure function: deterministic synthetic valuation for a player_id."""
     base_value = round(5.0 + _hashed_unit(player_id, "base") * 115.0, 2)
-    change_24h = round((_hashed_unit(player_id, "change") - 0.5) * 16.0, 2)
-    current_price = round(base_value * (1.0 + change_24h / 100.0), 2)
+    change_since_inception = round((_hashed_unit(player_id, "change") - 0.5) * 16.0, 2)
+    current_price = round(base_value * (1.0 + change_since_inception / 100.0), 2)
     performance_rating = round(5.0 + _hashed_unit(player_id, "rating") * 4.0, 2)
     return PlayerValuation(
         player_id=player_id,
         base_value=base_value,
         current_price=current_price,
-        change_24h=change_24h,
+        change_since_inception=change_since_inception,
+        change_avg_per_match=0.0,
+        change_last_match=0.0,
         performance_rating=performance_rating,
         as_of=as_of,
         source=ValuationSource.SYNTHETIC,

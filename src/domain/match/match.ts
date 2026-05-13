@@ -11,7 +11,7 @@ export interface MatchPlayer {
   value: number;
   rating: number;
   team_id?: string;
-  change_24h?: number;
+  change_last_match?: number; // %, net price change over the latest fixture — moves live during play
   tags?: string[];
 }
 
@@ -32,6 +32,8 @@ export interface PlayerCurvePoint {
 
 export interface Match {
   fixture_id?: number;
+  home_bench?: MatchPlayer[];
+  away_bench?: MatchPlayer[];
   home_team_id: string;
   away_team_id: string;
   home_score: number;

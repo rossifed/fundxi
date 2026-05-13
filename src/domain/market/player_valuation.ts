@@ -8,9 +8,11 @@ export type ValuationSource = "mock" | "sportmonks" | "synthetic" | "engine";
 
 export interface PlayerValuation {
   player_id: number;
-  base_value: number; // €M, reference value
+  base_value: number; // €M, reference value (tournament-open anchor)
   current_price: number; // €M, latest tradable price
-  change_24h: number; // %, vs price 24h ago
+  change_since_inception: number; // %, current vs base — the canonical "% change" (screeners / movers)
+  change_avg_per_match: number; // %, mean net change per fixture priced
+  change_last_match: number; // %, net change over the latest fixture — moves live during play
   performance_rating: number; // 0-10, latest match rating
   as_of: string; // ISO timestamp of the snapshot
   source: ValuationSource;

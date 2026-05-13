@@ -91,7 +91,6 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
   };
   const valuation = valuations_api.get_for_player(player.id);
   const current_price = valuation?.current_price ?? 0;
-  const change_24h = valuation?.change_24h ?? 0;
   const performance_rating = valuation?.performance_rating ?? 0;
 
   const [trade_dialog_kind, set_trade_dialog_kind] = useState<"buy" | "sell" | null>(null);
@@ -160,13 +159,17 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
       cancelled = true;
     };
   }, [player.id]);
-  // Live refresh: a new price tick for this player extends the chart in place.
+  // Live refresh: a new price tick for this player refreshes the universe-wide
+  // valuations (current price / rating) and then re-fetches this player's tick
+  // history — setting which triggers the re-render, so the KPIs read the fresh
+  // valuation. Chained so the order is deterministic.
   useLiveRefetch(player_live_version, () => {
     valuations_api
-      .get_price_history(player.id)
+      .refresh()
+      .then(() => valuations_api.refresh_price_history(player.id))
       .then(set_price_history)
       .catch(() => {
-        /* keep the current curve on a transient error */
+        /* keep the current curve / valuation on a transient error */
       });
   });
 

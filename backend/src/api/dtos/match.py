@@ -17,7 +17,7 @@ class MatchPlayerResponse(BaseModel):
     team_id: str
     value: float
     rating: float
-    change_24h: float
+    change_last_match: float  # %, net price change over the latest fixture — moves live during play
     formation_position: int | None = None
 
 

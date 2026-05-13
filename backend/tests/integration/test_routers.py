@@ -156,9 +156,9 @@ async def test_top_movers_up_and_down(client: httpx.AsyncClient) -> None:
     down = (await client.get("/api/players/top-movers", params={"direction": "down", "limit": 3})).json()
     assert len(up) == 3
     assert len(down) == 3
-    assert up[0]["valuation"]["change_24h"] >= up[-1]["valuation"]["change_24h"]
-    assert down[0]["valuation"]["change_24h"] <= down[-1]["valuation"]["change_24h"]
-    assert up[0]["valuation"]["change_24h"] > down[0]["valuation"]["change_24h"]
+    assert up[0]["valuation"]["change_since_inception"] >= up[-1]["valuation"]["change_since_inception"]
+    assert down[0]["valuation"]["change_since_inception"] <= down[-1]["valuation"]["change_since_inception"]
+    assert up[0]["valuation"]["change_since_inception"] > down[0]["valuation"]["change_since_inception"]
 
 
 @pytest.mark.anyio

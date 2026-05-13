@@ -32,6 +32,24 @@ _USER_SESSION_TABLES: tuple[str, ...] = (
     "app.portfolio",
 )
 
+# Replayable tables that carry a ``fixture_id`` column, deletable in
+# place for a single fixture. ``match_comment_player_mention`` is not
+# listed: its FK to ``match_comment`` is ``ON DELETE CASCADE``, so it
+# is cleared automatically when the parent comments go.
+_FIXTURE_SCOPED_TABLES: tuple[str, ...] = (
+    "core.match_comment",
+    "core.match_event",
+    "valuation.player_price_tick",
+)
+
+# After wiping a fixture's replayable rows, return the fixture row itself
+# to its pre-replay (idle) state: not in play, no clock, no score. A
+# fresh replay re-derives all of these.
+_RESET_FIXTURE_SQL = text(
+    "UPDATE core.fixture SET status = 'finished', minute = NULL, home_score = NULL, away_score = NULL "
+    "WHERE id = :fixture_id"
+)
+
 
 @dataclass(frozen=True, slots=True)
 class SqlAlchemyWipeExecutor:
@@ -49,6 +67,16 @@ class SqlAlchemyWipeExecutor:
 
     async def wipe_user_session(self) -> None:
         await self._truncate(_USER_SESSION_TABLES)
+
+    async def wipe_fixture_data(self, fixture_internal_id: int) -> None:
+        # Table names come from the fixed ``_FIXTURE_SCOPED_TABLES`` allowlist;
+        # the fixture id is bound as a parameter.
+        for table in _FIXTURE_SCOPED_TABLES:
+            await self.session.execute(
+                text(f"DELETE FROM {table} WHERE fixture_id = :fixture_id"),
+                {"fixture_id": fixture_internal_id},
+            )
+        await self.session.execute(_RESET_FIXTURE_SQL, {"fixture_id": fixture_internal_id})
 
     async def _truncate(self, tables: Sequence[str]) -> None:
         joined = ", ".join(tables)

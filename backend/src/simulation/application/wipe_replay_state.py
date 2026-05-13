@@ -20,3 +20,14 @@ async def wipe_replay_state(executor: WipeExecutor, scope: WipeScope) -> None:
     await executor.wipe_simulation_data()
     if scope is WipeScope.FULL:
         await executor.wipe_user_session()
+
+
+async def wipe_fixture_replay_state(executor: WipeExecutor, fixture_internal_id: int) -> None:
+    """Wipe one fixture's replayable data, leaving every other fixture intact.
+
+    The narrow counterpart of ``wipe_replay_state(DATA_ONLY)``: use it
+    to re-run a single match without disturbing the rest of the live
+    store. Tournament-level aggregates with no per-fixture key are not
+    cleared — see ``WipeExecutor.wipe_fixture_data``.
+    """
+    await executor.wipe_fixture_data(fixture_internal_id)

@@ -16,10 +16,21 @@ class ValuationSource(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class PlayerValuation:
+    """All ``change_*`` values are percentages (e.g. ``5.0`` means +5%)."""
+
     player_id: int
     base_value: float
     current_price: float
-    change_24h: float
+    # Cumulative return vs the tournament-open price. The canonical "% change"
+    # for screeners / top-movers. ((current_price / base_value) - 1) * 100.
+    change_since_inception: float
+    # Mean, over every fixture the player has been priced in, of that fixture's
+    # net price change. 0.0 if the player has not been priced in any fixture.
+    change_avg_per_match: float
+    # Net price change over the most recent fixture the player was priced in —
+    # i.e. the latest tick's "change since that fixture's kickoff". Moves live
+    # while a match is in progress, then holds until the next match's first tick.
+    change_last_match: float
     performance_rating: float
     as_of: datetime
     source: ValuationSource

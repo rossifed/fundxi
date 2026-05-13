@@ -51,4 +51,21 @@ export const comments_repository = {
     }
     return p;
   },
+  // Cache-busting refetch — used by the live-update path when a new
+  // commentary lands. Replaces the cache entry with the fresh in-flight
+  // request so later `fetch_*` calls see it too.
+  refresh_by_fixture(fixture_id: number): Promise<MatchComment[]> {
+    const p = api_get<MatchCommentDTO[]>(`/api/fixtures/${fixture_id}/comments`).then(arr =>
+      arr.map(dto_to_domain),
+    );
+    _by_fixture_cache.set(fixture_id, p);
+    return p;
+  },
+  refresh_by_player(player_id: number, limit = 100): Promise<MatchComment[]> {
+    const p = api_get<MatchCommentDTO[]>(`/api/players/${player_id}/comments`, { limit }).then(arr =>
+      arr.map(dto_to_domain),
+    );
+    _by_player_cache.set(player_id, p);
+    return p;
+  },
 };

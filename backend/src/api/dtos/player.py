@@ -62,7 +62,9 @@ class PlayerValuationResponse(BaseModel):
     player_id: int
     base_value: float
     current_price: float
-    change_24h: float
+    change_since_inception: float  # %, vs tournament-open price — the canonical "% change"
+    change_avg_per_match: float  # %, mean net change per fixture priced
+    change_last_match: float  # %, net change over the latest fixture — moves live
     performance_rating: float
     as_of: datetime
     source: str
@@ -73,7 +75,9 @@ class PlayerValuationResponse(BaseModel):
             player_id=valuation.player_id,
             base_value=valuation.base_value,
             current_price=valuation.current_price,
-            change_24h=valuation.change_24h,
+            change_since_inception=valuation.change_since_inception,
+            change_avg_per_match=valuation.change_avg_per_match,
+            change_last_match=valuation.change_last_match,
             performance_rating=valuation.performance_rating,
             as_of=valuation.as_of,
             source=valuation.source.value,

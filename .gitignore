@@ -6,6 +6,7 @@ dist
 .vite
 *.tsbuildinfo
 SESSION.md
+.claude/
 .env
 .env.*
 .envrc

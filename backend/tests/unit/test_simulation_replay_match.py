@@ -50,6 +50,47 @@ class _RecordingSleep:
         self.durations.append(seconds)
 
 
+@dataclass(slots=True)
+class _StopAfterController:
+    """Fake ReplayController: stop once ``emitted`` reaches a threshold.
+
+    ``emitted`` is the sink's tally — passed in by reference so the
+    controller sees real-time progress. Never pauses.
+    """
+
+    emitted: list[tuple[int, str]]
+    stop_after: int
+
+    def stop_requested(self) -> bool:
+        return len(self.emitted) >= self.stop_after
+
+    async def wait_while_paused(self) -> None:
+        return None
+
+
+@pytest.mark.anyio
+async def test_controller_stop_aborts_the_replay_early() -> None:
+    timeline = (_event(0, marker="a"), _event(5, marker="b"), _event(10, marker="c"))
+    archive = _StubArchive(ReplayFixtureBundle(fixture_internal_id=3, timeline=timeline))
+    sink = _RecordingSink()
+    sleep = _RecordingSleep()
+    controller = _StopAfterController(emitted=sink.emitted, stop_after=2)
+
+    report = await replay_match(
+        fixture_sportmonks_id=1,
+        speed=60.0,
+        from_minute=0,
+        archive=archive,
+        sink=sink,
+        sleep=sleep,
+        controller=controller,
+    )
+
+    assert [m for m, _ in sink.emitted] == [0, 5]
+    assert report.aborted is True
+    assert report.events_emitted == 2
+
+
 @pytest.mark.anyio
 async def test_emits_events_in_canonical_order() -> None:
     timeline = (
@@ -62,8 +103,12 @@ async def test_emits_events_in_canonical_order() -> None:
     sleep = _RecordingSleep()
 
     report = await replay_match(
-        fixture_sportmonks_id=1, speed=60.0, from_minute=0,
-        archive=archive, sink=sink, sleep=sleep,
+        fixture_sportmonks_id=1,
+        speed=60.0,
+        from_minute=0,
+        archive=archive,
+        sink=sink,
+        sleep=sleep,
     )
 
     assert sink.emitted == [(5, "a"), (12, "b"), (12, "c")]
@@ -80,8 +125,12 @@ async def test_sleeps_proportionally_to_minutes_crossed_including_silent_gaps() 
 
     # speed=60 → 1 second per game minute.
     await replay_match(
-        fixture_sportmonks_id=1, speed=60.0, from_minute=0,
-        archive=archive, sink=sink, sleep=sleep,
+        fixture_sportmonks_id=1,
+        speed=60.0,
+        from_minute=0,
+        archive=archive,
+        sink=sink,
+        sleep=sleep,
     )
 
     # 0 → 1s gap (minute 0 from baseline -1), then 5 → 5s gap (minutes 1..5).
@@ -97,8 +146,12 @@ async def test_from_minute_skips_earlier_events_and_anchors_the_gap() -> None:
 
     # speed=60 → 1s per minute. Start at minute 25 → first sleep covers minutes 25..30 → 6s.
     await replay_match(
-        fixture_sportmonks_id=1, speed=60.0, from_minute=25,
-        archive=archive, sink=sink, sleep=sleep,
+        fixture_sportmonks_id=1,
+        speed=60.0,
+        from_minute=25,
+        archive=archive,
+        sink=sink,
+        sleep=sleep,
     )
 
     assert [m for m, _ in sink.emitted] == [30]
@@ -112,8 +165,12 @@ async def test_empty_timeline_returns_zero_report_without_sleeping() -> None:
     sleep = _RecordingSleep()
 
     report = await replay_match(
-        fixture_sportmonks_id=1, speed=60.0, from_minute=0,
-        archive=archive, sink=sink, sleep=sleep,
+        fixture_sportmonks_id=1,
+        speed=60.0,
+        from_minute=0,
+        archive=archive,
+        sink=sink,
+        sleep=sleep,
     )
 
     assert report.events_emitted == 0
@@ -128,8 +185,12 @@ async def test_invalid_speed_is_rejected() -> None:
 
     with pytest.raises(ValueError, match="speed"):
         await replay_match(
-            fixture_sportmonks_id=1, speed=0.0, from_minute=0,
-            archive=archive, sink=_RecordingSink(), sleep=_RecordingSleep(),
+            fixture_sportmonks_id=1,
+            speed=0.0,
+            from_minute=0,
+            archive=archive,
+            sink=_RecordingSink(),
+            sleep=_RecordingSleep(),
         )
 
 
@@ -139,6 +200,10 @@ async def test_invalid_from_minute_is_rejected() -> None:
 
     with pytest.raises(ValueError, match="from_minute"):
         await replay_match(
-            fixture_sportmonks_id=1, speed=60.0, from_minute=-1,
-            archive=archive, sink=_RecordingSink(), sleep=_RecordingSleep(),
+            fixture_sportmonks_id=1,
+            speed=60.0,
+            from_minute=-1,
+            archive=archive,
+            sink=_RecordingSink(),
+            sleep=_RecordingSleep(),
         )

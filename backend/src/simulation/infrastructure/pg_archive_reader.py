@@ -53,14 +53,10 @@ class SqlAlchemyReplayArchiveReader:
         mapping = await self.fixtures.map_sportmonks_to_internal_id()
         internal_id = mapping.get(fixture_sportmonks_id)
         if internal_id is None:
-            raise LookupError(
-                f"fixture sportmonks_id={fixture_sportmonks_id} not present in core.fixture"
-            )
+            raise LookupError(f"fixture sportmonks_id={fixture_sportmonks_id} not present in core.fixture")
         return internal_id
 
-    async def _load_array(
-        self, fixture_sportmonks_id: int, *, include: str, key: str
-    ) -> list[dict[str, Any]]:
+    async def _load_array(self, fixture_sportmonks_id: int, *, include: str, key: str) -> list[dict[str, Any]]:
         """Return ``response.data[key]`` from the archived row matching ``include``.
 
         Returns ``[]`` when the row exists but the array is empty or
@@ -77,9 +73,7 @@ class SqlAlchemyReplayArchiveReader:
             )
         ).first()
         if row is None:
-            raise LookupError(
-                f"no raw archive for endpoint={endpoint} with include={include!r}"
-            )
+            raise LookupError(f"no raw archive for endpoint={endpoint} with include={include!r}")
         envelope = cast(dict[str, Any], row.response)
         data = envelope.get("data")
         if not isinstance(data, dict):

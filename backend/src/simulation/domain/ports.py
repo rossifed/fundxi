@@ -30,6 +30,31 @@ class WipeExecutor(Protocol):
         """Clear user-owned portfolio state (portfolio, holdings, trades)."""
         ...
 
+    async def wipe_fixture_data(self, fixture_internal_id: int) -> None:
+        """Clear one fixture's replayable data only (events, comments, ticks).
+
+        Scoped counterpart of :meth:`wipe_simulation_data`: leaves every
+        other fixture untouched. Tournament-level aggregates that have
+        no per-fixture key (rolled-up player stats, daily snapshots) are
+        *not* touched and may be left stale until a full wipe + rebuild.
+        """
+        ...
+
+
+class FixtureProgressWriter(Protocol):
+    """Port for reflecting a replay's progress onto the fixture row.
+
+    ``advance`` marks the fixture ``live`` at the given game minute and
+    recomputes its score from the goal events written so far (same
+    transaction — uncommitted inserts are visible). ``finish`` returns
+    the fixture to ``finished`` once the replay ends. Commit semantics
+    belong to the surrounding session.
+    """
+
+    async def advance(self, *, fixture_internal_id: int, minute: int) -> None: ...
+
+    async def finish(self, *, fixture_internal_id: int) -> None: ...
+
 
 class ReplayArchiveReader(Protocol):
     """Port for loading a recorded fixture's timeline from the raw archive."""
@@ -51,8 +76,7 @@ class LiveDataSink(Protocol):
     write pipeline end to end.
     """
 
-    async def emit(self, event: ReplayEvent, *, fixture_internal_id: int) -> None:
-        ...
+    async def emit(self, event: ReplayEvent, *, fixture_internal_id: int) -> None: ...
 
 
 class PlayerPriceTickWriter(Protocol):
@@ -72,6 +96,30 @@ class PlayerPriceTickWriter(Protocol):
         performance_rating: float,
         change_since_open: float,
     ) -> None: ...
+
+
+class ReplayController(Protocol):
+    """Out-of-band control over an in-flight replay (pause / stop).
+
+    ``replay_match`` consults the controller at every game-minute
+    boundary. The default — no controller at all — means the replay
+    runs to completion uninterrupted; the CLI and the unit tests rely
+    on that. Only the GUI, which can pause or stop a run from another
+    thread, supplies one.
+    """
+
+    def stop_requested(self) -> bool:
+        """True once the caller wants the replay to halt early."""
+        ...
+
+    async def wait_while_paused(self) -> None:
+        """Block while the caller has the replay paused; return when resumed.
+
+        Returns immediately when not paused. Should also return
+        promptly if a stop is requested while paused, so the replay can
+        observe the stop and unwind.
+        """
+        ...
 
 
 # Sleep abstraction so the use case can be exercised without real-time

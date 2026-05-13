@@ -32,10 +32,20 @@ function dto_to_domain(dto: FixtureDTO): Fixture {
   };
 }
 
-export async function init_fixtures_repository(): Promise<void> {
+async function _load(): Promise<void> {
   const dtos = await api_get<FixtureDTO[]>("/api/fixtures");
   FIXTURES = dtos.map(dto_to_domain);
   FIXTURES_BY_ID = new Map(FIXTURES.map(f => [f.id, f]));
+}
+
+export async function init_fixtures_repository(): Promise<void> {
+  await _load();
+}
+
+/** Re-fetch the fixtures list — status / clock / score may have changed
+ * (e.g. a match just went live). Used by the live-update path. */
+export async function refresh_fixtures(): Promise<void> {
+  await _load();
 }
 
 export const fixtures_repository = {

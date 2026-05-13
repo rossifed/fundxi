@@ -12,7 +12,7 @@ interface MatchPlayerDTO {
   team_id: string;
   value: number;
   rating: number;
-  change_24h: number;
+  change_last_match: number;
   formation_position: number | null;
 }
 
@@ -54,7 +54,7 @@ function dto_player(p: MatchPlayerDTO): MatchPlayer {
     value: p.value,
     rating: p.rating,
     team_id: p.team_id,
-    change_24h: p.change_24h,
+    change_last_match: p.change_last_match,
   };
 }
 
@@ -86,6 +86,8 @@ function dto_to_match(dto: MatchResponseDTO): Match {
     status: dto.status as MatchStatus,
     home_xi: dto.home_xi.map(dto_player),
     away_xi: dto.away_xi.map(dto_player),
+    home_bench: dto.home_bench.map(dto_player),
+    away_bench: dto.away_bench.map(dto_player),
     player_changes,
     events: dto.events.map(dto_event),
   };
@@ -100,6 +102,14 @@ function _fetch_by_fixture_id(fixture_id: number): Promise<Match> {
     p = api_get<MatchResponseDTO>(`/api/fixtures/${fixture_id}/match`).then(dto_to_match);
     _by_fixture_cache.set(fixture_id, p);
   }
+  return p;
+}
+
+// Cache-busting refetch — used by the live-update path so the MatchView's
+// clock / score / scorer list track an in-play (or replayed) match.
+function _refresh_by_fixture_id(fixture_id: number): Promise<Match> {
+  const p = api_get<MatchResponseDTO>(`/api/fixtures/${fixture_id}/match`).then(dto_to_match);
+  _by_fixture_cache.set(fixture_id, p);
   return p;
 }
 
@@ -123,6 +133,10 @@ export const matches_repository = {
   },
   async fetch_by_fixture_id(fixture_id: number): Promise<Match | undefined> {
     return _fetch_by_fixture_id(fixture_id);
+  },
+  /** Cache-busting refetch of one match — call on a live SSE update. */
+  async refresh_by_fixture_id(fixture_id: number): Promise<Match | undefined> {
+    return _refresh_by_fixture_id(fixture_id);
   },
   /** Sync — returns the pre-fetched live match (or undefined). */
   get_live_match(): Match | undefined {

@@ -32,16 +32,22 @@ from src.simulation.application.replay_match import ReplayReport, replay_match
 from src.simulation.domain.ports import LiveDataSink
 from src.simulation.domain.price_state import PriceState
 from src.simulation.domain.replay_event import ReplayEvent
+from src.simulation.infrastructure.fixture_progress_sink import FixtureProgressSink
+from src.simulation.infrastructure.fixture_status_publisher import publish_fixture_status
 from src.simulation.infrastructure.nats_publishing_sink import NatsPublishingSink
 from src.simulation.infrastructure.nats_publishing_tick_writer import NatsPublishingTickWriter
 from src.simulation.infrastructure.pg_archive_reader import SqlAlchemyReplayArchiveReader
+from src.simulation.infrastructure.pg_fixture_progress_writer import SqlAlchemyFixtureProgressWriter
 from src.simulation.infrastructure.pg_price_tick_writer import SqlAlchemyPlayerPriceTickWriter
 from src.simulation.infrastructure.price_tick_sink import PriceTickEmittingSink
 from src.simulation.infrastructure.projector_sink import ProjectorSink
 from src.simulation.infrastructure.replay_context import (
+    acquire_replay_lock,
+    ensure_fixture_idle,
     load_fixture_kickoff,
     load_initial_price_state,
     load_sportmonks_id_maps,
+    release_replay_lock,
 )
 
 log = structlog.get_logger(__name__)
@@ -124,38 +130,47 @@ async def run(*, fixture_sportmonks_id: int, speed: float, from_minute: int, no_
         nats=not no_nats,
     )
     async with SessionLocal() as session, _make_publisher(no_nats=no_nats) as publisher:
-        fixtures_repo = SqlAlchemyFixtureRepository(session)
-        archive = SqlAlchemyReplayArchiveReader(session=session, fixtures=fixtures_repo)
-        player_id_by_smk, team_id_by_smk = await load_sportmonks_id_maps(session)
-        kickoff = await load_fixture_kickoff(session, fixture_sportmonks_id=fixture_sportmonks_id)
-        price_state = await load_initial_price_state(session, as_of=kickoff)
-        log.info(
-            "simulation.replay.context_loaded",
-            players=len(player_id_by_smk),
-            teams=len(team_id_by_smk),
-            kickoff=kickoff.isoformat(),
-        )
+        await acquire_replay_lock(session)
+        try:
+            await ensure_fixture_idle(session, fixture_sportmonks_id=fixture_sportmonks_id)
+            fixtures_repo = SqlAlchemyFixtureRepository(session)
+            archive = SqlAlchemyReplayArchiveReader(session=session, fixtures=fixtures_repo)
+            player_id_by_smk, team_id_by_smk = await load_sportmonks_id_maps(session)
+            kickoff = await load_fixture_kickoff(session, fixture_sportmonks_id=fixture_sportmonks_id)
+            price_state = await load_initial_price_state(session, as_of=kickoff)
+            log.info(
+                "simulation.replay.context_loaded",
+                players=len(player_id_by_smk),
+                teams=len(team_id_by_smk),
+                kickoff=kickoff.isoformat(),
+            )
 
-        sink = _CliSink(
-            inner=_build_replay_sink(
+            progress_writer = SqlAlchemyFixtureProgressWriter(session=session)
+            sink = _CliSink(
+                inner=_build_replay_sink(
+                    session=session,
+                    player_id_by_smk=player_id_by_smk,
+                    team_id_by_smk=team_id_by_smk,
+                    price_state=price_state,
+                    kickoff=kickoff,
+                    publisher=publisher,
+                    progress_writer=progress_writer,
+                ),
                 session=session,
-                player_id_by_smk=player_id_by_smk,
-                team_id_by_smk=team_id_by_smk,
-                price_state=price_state,
-                kickoff=kickoff,
-                publisher=publisher,
-            ),
-            session=session,
-        )
-        report = await replay_match(
-            fixture_sportmonks_id=fixture_sportmonks_id,
-            speed=speed,
-            from_minute=from_minute,
-            archive=archive,
-            sink=sink,
-            sleep=asyncio.sleep,
-        )
-        await session.commit()
+            )
+            report = await replay_match(
+                fixture_sportmonks_id=fixture_sportmonks_id,
+                speed=speed,
+                from_minute=from_minute,
+                archive=archive,
+                sink=sink,
+                sleep=asyncio.sleep,
+            )
+            await progress_writer.finish(fixture_internal_id=report.fixture_internal_id)
+            await session.commit()
+            await publish_fixture_status(publisher, fixture_internal_id=report.fixture_internal_id, status="finished")
+        finally:
+            await release_replay_lock(session)
     log.info(
         "simulation.replay.done",
         fixture_internal_id=report.fixture_internal_id,
@@ -173,9 +188,12 @@ def _build_replay_sink(
     price_state: PriceState,
     kickoff: datetime,
     publisher: NotificationPublisher,
+    progress_writer: SqlAlchemyFixtureProgressWriter,
 ) -> LiveDataSink:
     """Assemble the inner sink chain shared by the CLI and the Streamlit GUI:
-    ProjectorSink → PriceTickEmittingSink → NatsPublishingSink. The outermost
+    ProjectorSink → PriceTickEmittingSink → FixtureProgressSink → NatsPublishingSink.
+    FixtureProgressSink sits *inside* NatsPublishingSink so the fixture row is
+    updated before the per-event notification is published. The outermost
     decorator (commit-per-minute + logging/progress) is added by the caller."""
     projector_sink = ProjectorSink(
         comments=SqlAlchemyMatchCommentRepository(session),
@@ -194,7 +212,8 @@ def _build_replay_sink(
         player_id_by_sportmonks=player_id_by_smk,
         team_id_by_sportmonks=team_id_by_smk,
     )
-    return NatsPublishingSink(inner=pricing_sink, publisher=publisher)
+    progress_sink = FixtureProgressSink(inner=pricing_sink, progress=progress_writer)
+    return NatsPublishingSink(inner=progress_sink, publisher=publisher)
 
 
 def main() -> int:

@@ -60,6 +60,12 @@ export function usePlayerLiveVersion(player_id: number | null | undefined): numb
   return useTopicVersion(player_id == null ? null : `player/${player_id}`);
 }
 
+/** Live version for the global "any match had activity" stream — the Home
+ * Match Center card uses it to notice a match going live (or ending). */
+export function useMatchesLiveVersion(): number {
+  return useTopicVersion("matches");
+}
+
 /** Live version for the global price-tick stream (Portfolio page). */
 export function usePricesLiveVersion(): number {
   return useTopicVersion("prices");

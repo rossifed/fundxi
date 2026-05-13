@@ -52,7 +52,7 @@ export const screener_service = {
         case "value":
           return b.valuation.current_price - a.valuation.current_price;
         case "change":
-          return b.valuation.change_24h - a.valuation.change_24h;
+          return b.valuation.change_since_inception - a.valuation.change_since_inception;
         case "rating":
           return b.valuation.performance_rating - a.valuation.performance_rating;
         case "age":
@@ -64,7 +64,7 @@ export const screener_service = {
   top_movers(limit = 8, direction: MoverDirection = "up"): PlayerWithValuation[] {
     const sign = direction === "up" ? 1 : -1;
     return enrich_all()
-      .sort((a, b) => sign * (b.valuation.change_24h - a.valuation.change_24h))
+      .sort((a, b) => sign * (b.valuation.change_since_inception - a.valuation.change_since_inception))
       .slice(0, limit);
   },
 };

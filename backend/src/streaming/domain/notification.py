@@ -7,6 +7,9 @@ subject to the set of SSE topics that should receive its payload.
 Topic vocabulary:
   - ``fixture:<id>``  — everything happening in one fixture (events,
     comments, status, lineup, per-player stats).
+  - ``matches``       — *any* fixture had activity (events / comments /
+    status). Lets the Home "Match Center" card notice that a match just
+    went live (or ended) without knowing the fixture id up front.
   - ``player:<id>``   — that player's price ticks.
   - ``prices``        — every player's price ticks (the Portfolio page
     subscribes here and filters client-side by its holdings).
@@ -34,7 +37,8 @@ def topics_for_subject(subject: str) -> tuple[str, ...]:
     entity = parts[2] if len(parts) >= 3 else None
 
     if kind in _FIXTURE_KINDS:
-        return (f"fixture:{entity}",) if entity is not None else ()
+        # Both the per-fixture topic and the global "matches" feed.
+        return (f"fixture:{entity}", "matches") if entity is not None else ()
     if kind == "player_price_tick":
         return (f"player:{entity}", "prices") if entity is not None else ()
     if kind in _GLOBAL_KIND_TO_TOPIC:
