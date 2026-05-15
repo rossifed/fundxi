@@ -38,3 +38,11 @@ class Fixture:
     # Tactical formation each team played in this fixture (e.g. "4-3-3").
     home_formation: str | None = None
     away_formation: str | None = None
+    # Stadium + tournament phase. ``stage_name`` is the raw Sportmonks label
+    # ("Group Stage", "Round of 16", "Final"); ``round_name`` is the
+    # matchday within a stage ("1", "2", "3" for the group stage; null for
+    # knockouts). ``venue_name`` is the stadium name; city/capacity stay
+    # in ``core.venue`` and are not surfaced here.
+    venue_name: str | None = None
+    stage_name: str | None = None
+    round_name: str | None = None

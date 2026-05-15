@@ -3,21 +3,33 @@
 DDD role: Adapter. Conflict target = `sportmonks_id`.
 """
 
-from sqlalchemy import select
+from sqlalchemy import case, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from src.domain.match.fixture import Fixture, FixtureStatus
 from src.infrastructure.db.models.fixture import FixtureORM
+from src.infrastructure.db.models.standings import StandingORM
+from src.infrastructure.db.models.venue import VenueORM
 
 
-def _to_domain(orm: FixtureORM) -> Fixture:
+def _to_domain(
+    orm: FixtureORM,
+    *,
+    group_override: str | None = None,
+    venue_name: str | None = None,
+) -> Fixture:
+    # Group letter (A..H) lives on ``core.standings``, populated by the
+    # StandingsPoller. ``FixtureORM.group`` stays empty because Sportmonks'
+    # /fixtures endpoint doesn't expose the group name. We resolve at read
+    # time via a LEFT JOIN on the home team's standings row.
     return Fixture(
         id=orm.id,
         home_team_id=orm.home_team_id,
         away_team_id=orm.away_team_id,
         status=FixtureStatus(orm.status),
-        group=orm.group,
+        group=group_override if group_override is not None else orm.group,
         home_score=orm.home_score,
         away_score=orm.away_score,
         kickoff_at=orm.kickoff_at,
@@ -29,6 +41,9 @@ def _to_domain(orm: FixtureORM) -> Fixture:
         away_kit_palette=orm.away_kit_palette,
         home_formation=orm.home_formation,
         away_formation=orm.away_formation,
+        venue_name=venue_name,
+        stage_name=orm.stage_name,
+        round_name=orm.round_name,
     )
 
 
@@ -64,19 +79,40 @@ class SqlAlchemyFixtureRepository:
         await self._session.execute(stmt)
 
     async def list_all(self) -> list[Fixture]:
-        result = await self._session.execute(select(FixtureORM).order_by(FixtureORM.kickoff_at))
-        return [_to_domain(row) for row in result.scalars().all()]
+        rows = await self._session.execute(self._select_enriched().order_by(FixtureORM.kickoff_at))
+        return [_to_domain(fx, group_override=grp, venue_name=vn) for fx, grp, vn in rows.all()]
 
     async def get_by_id(self, fixture_id: int) -> Fixture | None:
-        result = await self._session.execute(select(FixtureORM).where(FixtureORM.id == fixture_id))
-        row = result.scalar_one_or_none()
-        return _to_domain(row) if row else None
+        rows = await self._session.execute(self._select_enriched().where(FixtureORM.id == fixture_id))
+        row = rows.one_or_none()
+        if row is None:
+            return None
+        fx, grp, vn = row
+        return _to_domain(fx, group_override=grp, venue_name=vn)
 
     async def list_by_status(self, status: FixtureStatus) -> list[Fixture]:
-        result = await self._session.execute(
-            select(FixtureORM).where(FixtureORM.status == status.value).order_by(FixtureORM.kickoff_at)
+        rows = await self._session.execute(
+            self._select_enriched().where(FixtureORM.status == status.value).order_by(FixtureORM.kickoff_at)
         )
-        return [_to_domain(row) for row in result.scalars().all()]
+        return [_to_domain(fx, group_override=grp, venue_name=vn) for fx, grp, vn in rows.all()]
+
+    @staticmethod
+    def _select_enriched():
+        # Group letter is only meaningful when both teams sit in the same
+        # group (i.e. a group-stage match). Knockout fixtures cross groups,
+        # so we deliberately return NULL there — the UI shows them as KO.
+        home_s = aliased(StandingORM)
+        away_s = aliased(StandingORM)
+        return (
+            select(
+                FixtureORM,
+                case((home_s.group == away_s.group, home_s.group), else_=None).label("group_letter"),
+                VenueORM.name.label("venue_name"),
+            )
+            .outerjoin(home_s, home_s.team_id == FixtureORM.home_team_id)
+            .outerjoin(away_s, away_s.team_id == FixtureORM.away_team_id)
+            .outerjoin(VenueORM, VenueORM.id == FixtureORM.venue_id)
+        )
 
     async def map_sportmonks_to_internal_id(self) -> dict[int, int]:
         result = await self._session.execute(
@@ -123,4 +159,22 @@ class SqlAlchemyFixtureRepository:
             sql_update(FixtureORM)
             .where(FixtureORM.sportmonks_id == sportmonks_id)
             .values(home_formation=home_formation, away_formation=away_formation)
+        )
+
+    async def set_venue_and_phase(
+        self,
+        *,
+        sportmonks_id: int,
+        venue_id: int | None,
+        stage_name: str | None,
+        round_name: str | None,
+    ) -> None:
+        """Update venue link and tournament phase labels. No-op if the
+        fixture row doesn't exist yet."""
+        from sqlalchemy import update as sql_update
+
+        await self._session.execute(
+            sql_update(FixtureORM)
+            .where(FixtureORM.sportmonks_id == sportmonks_id)
+            .values(venue_id=venue_id, stage_name=stage_name, round_name=round_name)
         )

@@ -24,10 +24,14 @@ from src.domain.match.match_event import MatchEvent, MatchEventRepository
 from src.infrastructure.db.models.player import PlayerORM
 from src.infrastructure.db.models.team import TeamORM
 from src.infrastructure.sportmonks.client import SportmonksClient
+from src.infrastructure.db.repositories.team_match_stat import SqlAlchemyTeamMatchStatRepository
+from src.infrastructure.db.repositories.venue import SqlAlchemyVenueRepository
 from src.infrastructure.sportmonks.projectors.fixture_formation import project_fixture_formations
 from src.infrastructure.sportmonks.projectors.fixture_kit import project_fixture_kit_colors
 from src.infrastructure.sportmonks.projectors.lineup import project_lineup
 from src.infrastructure.sportmonks.projectors.match_event import project_match_event
+from src.infrastructure.sportmonks.projectors.team_match_stat import project_team_match_stats
+from src.infrastructure.sportmonks.projectors.venue import project_venue
 
 log = structlog.get_logger(__name__)
 
@@ -86,9 +90,12 @@ async def bootstrap_fixture_details(
     events_count = 0
     skipped = 0
 
+    venue_repo = SqlAlchemyVenueRepository(session)
+    team_stat_repo = SqlAlchemyTeamMatchStatRepository(session)
+
     for smk_fixture_id, internal_fixture_id in fixture_id_by_smk.items():
         endpoint = f"/fixtures/{smk_fixture_id}"
-        params = {"include": "events.type;lineups.position;metadata"}
+        params = {"include": "events.type;lineups.position;metadata;venue;stage;round;statistics.type"}
         envelope = await client.get(endpoint, params=params)
         await raw_archive.insert_if_new(endpoint=endpoint, params=params, response=envelope)
         fixtures_count += 1
@@ -111,6 +118,33 @@ async def bootstrap_fixture_details(
             home_formation=formations.home,
             away_formation=formations.away,
         )
+
+        # Venue + tournament phase (Sportmonks venue / stage / round includes).
+        data = envelope.get("data") if isinstance(envelope.get("data"), dict) else {}
+        venue_projection = project_venue(data.get("venue") if isinstance(data, dict) else None)
+        venue_internal_id: int | None = None
+        if venue_projection is not None:
+            venue_internal_id = await venue_repo.upsert(venue_projection)
+        stage_payload = data.get("stage") if isinstance(data, dict) else None
+        round_payload = data.get("round") if isinstance(data, dict) else None
+        stage_name = stage_payload.get("name") if isinstance(stage_payload, dict) else None
+        round_name = round_payload.get("name") if isinstance(round_payload, dict) else None
+        await fixture_repo.set_venue_and_phase(
+            sportmonks_id=smk_fixture_id,
+            venue_id=venue_internal_id,
+            stage_name=stage_name if isinstance(stage_name, str) else None,
+            round_name=round_name if isinstance(round_name, str) else None,
+        )
+
+        # Team-level match statistics (Sportmonks ``statistics.type``).
+        stat_rows = project_team_match_stats(data.get("statistics") if isinstance(data, dict) else None)
+        team_stat_payload: list[tuple[str, str, Any]] = []
+        for stat in stat_rows:
+            internal_team_id = team_id_by_smk.get(stat.sportmonks_team_id)
+            if internal_team_id is None:
+                continue
+            team_stat_payload.append((internal_team_id, stat.type_code, stat.value))
+        await team_stat_repo.upsert_batch(fixture_id=internal_fixture_id, rows=team_stat_payload)
 
         # Lineups
         for lineup_payload in _items(envelope, "lineups"):

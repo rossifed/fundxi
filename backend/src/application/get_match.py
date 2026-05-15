@@ -21,15 +21,22 @@ from src.infrastructure.db.models.lineup import LineupORM
 from src.infrastructure.db.models.match_event import MatchEventORM
 from src.infrastructure.db.models.player import PlayerORM
 from src.infrastructure.db.models.player_price_tick import PlayerPriceTickORM
+from src.infrastructure.db.models.standings import StandingORM
+from src.infrastructure.db.models.venue import VenueORM
 
 
-def _fixture_orm_to_domain(orm: FixtureORM) -> Fixture:
+def _fixture_orm_to_domain(
+    orm: FixtureORM,
+    *,
+    group_override: str | None = None,
+    venue_name: str | None = None,
+) -> Fixture:
     return Fixture(
         id=orm.id,
         home_team_id=orm.home_team_id,
         away_team_id=orm.away_team_id,
         status=FixtureStatus(orm.status),
-        group=orm.group,
+        group=group_override if group_override is not None else orm.group,
         home_score=orm.home_score,
         away_score=orm.away_score,
         kickoff_at=orm.kickoff_at,
@@ -41,6 +48,9 @@ def _fixture_orm_to_domain(orm: FixtureORM) -> Fixture:
         away_kit_palette=orm.away_kit_palette,
         home_formation=orm.home_formation,
         away_formation=orm.away_formation,
+        venue_name=venue_name,
+        stage_name=orm.stage_name,
+        round_name=orm.round_name,
     )
 
 
@@ -120,7 +130,24 @@ async def get_match_view(
     if fx_orm is None:
         return None
 
-    fixture = _fixture_orm_to_domain(fx_orm)
+    # Same-group test: a fixture is a group-stage match iff both teams sit in
+    # the same group. Knockout fixtures cross groups → group stays empty.
+    grp_rows = await session.execute(
+        select(StandingORM.team_id, StandingORM.group).where(
+            StandingORM.team_id.in_((fx_orm.home_team_id, fx_orm.away_team_id))
+        )
+    )
+    grp_by_team = {team_id: grp for team_id, grp in grp_rows.all()}
+    home_grp = grp_by_team.get(fx_orm.home_team_id)
+    away_grp = grp_by_team.get(fx_orm.away_team_id)
+    group_letter = home_grp if home_grp is not None and home_grp == away_grp else None
+
+    venue_name: str | None = None
+    if fx_orm.venue_id is not None:
+        venue_row = await session.execute(select(VenueORM.name).where(VenueORM.id == fx_orm.venue_id))
+        venue_name = venue_row.scalar_one_or_none()
+
+    fixture = _fixture_orm_to_domain(fx_orm, group_override=group_letter, venue_name=venue_name)
 
     # Lineups (separate by role + team).
     lineups_rows = (await session.execute(select(LineupORM).where(LineupORM.fixture_id == fixture_id))).scalars().all()

@@ -18,6 +18,9 @@ class FixtureResponse(BaseModel):
     kickoff_at: datetime | None = None
     minute: int | None = None
     note: str | None = None
+    venue_name: str | None = None
+    stage_name: str | None = None
+    round_name: str | None = None
 
     @classmethod
     def from_domain(cls, fixture: Fixture) -> "FixtureResponse":
@@ -32,4 +35,7 @@ class FixtureResponse(BaseModel):
             kickoff_at=fixture.kickoff_at,
             minute=fixture.minute,
             note=fixture.note,
+            venue_name=fixture.venue_name,
+            stage_name=fixture.stage_name,
+            round_name=fixture.round_name,
         )

@@ -31,6 +31,7 @@ from src.infrastructure.db.repositories.lineup import SqlAlchemyLineupRepository
 from src.infrastructure.db.repositories.match_comment import SqlAlchemyMatchCommentRepository
 from src.infrastructure.db.repositories.match_event import SqlAlchemyMatchEventRepository
 from src.infrastructure.db.repositories.player_match_stat import SqlAlchemyPlayerMatchStatRepository
+from src.infrastructure.db.repositories.team_match_stat import SqlAlchemyTeamMatchStatRepository
 from src.infrastructure.db.repositories.raw_sportmonks_event import SqlAlchemyRawSportmonksEventRepository
 from src.infrastructure.sportmonks.client import SportmonksClient, SportmonksError
 from src.infrastructure.sportmonks.projectors.fixture import project_fixture
@@ -38,6 +39,7 @@ from src.infrastructure.sportmonks.projectors.lineup import project_lineup
 from src.infrastructure.sportmonks.projectors.match_comment import project_match_comment
 from src.infrastructure.sportmonks.projectors.match_event import project_match_event
 from src.infrastructure.sportmonks.projectors.player_match_stat import project_player_match_stat
+from src.infrastructure.sportmonks.projectors.team_match_stat import project_team_match_stats
 from src.ingest.application.commit_then_publish import commit_then_publish
 from src.ingest.domain.ports import NotificationPublisher
 from src.ingest.infrastructure.sportmonks_id_maps import SportmonksIdMaps
@@ -47,7 +49,9 @@ log = structlog.get_logger(__name__)
 # State + scores + participants come back by default with /fixtures/{id}
 # in v3, but listing them explicitly makes the contract self-documenting
 # and lets us add fields without ambiguity later.
-_INPLAY_INCLUDE = "state;participants;scores;events.type;comments;lineups.position;lineups.details"
+_INPLAY_INCLUDE = (
+    "state;participants;scores;events.type;comments;lineups.position;lineups.details;statistics.type"
+)
 
 
 @dataclass(slots=True)
@@ -126,6 +130,9 @@ class SportmonksInplayPoller:
         )
         lineups_count = await self._project_lineups(session=session, lineups_payload=lineups_payload)
         player_stats_count = await self._project_player_match_stats(session=session, lineups_payload=lineups_payload)
+        team_stats_count = await self._project_team_match_stats(
+            session=session, stats_payload=_array(data.get("statistics"))
+        )
 
         fix_id = self.fixture_internal_id
         notifications: list[tuple[str, bytes]] = []
@@ -139,6 +146,8 @@ class SportmonksInplayPoller:
             notifications.append(self._notif("lineup", {"fixture_id": fix_id, "count": lineups_count}))
         if player_stats_count > 0:
             notifications.append(self._notif("player_match_stat", {"fixture_id": fix_id, "count": player_stats_count}))
+        if team_stats_count > 0:
+            notifications.append(self._notif("team_match_stat", {"fixture_id": fix_id, "count": team_stats_count}))
 
         await commit_then_publish(session=session, publisher=self.publisher, notifications=notifications)
 
@@ -150,6 +159,7 @@ class SportmonksInplayPoller:
             comments=comments_count,
             lineups=lineups_count,
             player_stats=player_stats_count,
+            team_stats=team_stats_count,
         )
 
     def _notif(self, kind: str, body: dict[str, Any]) -> tuple[str, bytes]:
@@ -242,6 +252,20 @@ class SportmonksInplayPoller:
             await repo.upsert(stat, raw_details=raw_details)
             upserted += 1
         return upserted
+
+    async def _project_team_match_stats(
+        self, *, session: AsyncSession, stats_payload: list[dict[str, Any]]
+    ) -> int:
+        if not stats_payload:
+            return 0
+        repo = SqlAlchemyTeamMatchStatRepository(session)
+        rows: list[tuple[str, str, Any]] = []
+        for projection in project_team_match_stats(stats_payload):
+            internal_team_id = self.id_maps.team_id_by_sportmonks.get(projection.sportmonks_team_id)
+            if internal_team_id is None:
+                continue
+            rows.append((internal_team_id, projection.type_code, projection.value))
+        return await repo.upsert_batch(fixture_id=self.fixture_internal_id, rows=rows)
 
 
 def _array(value: object) -> list[dict[str, Any]]:

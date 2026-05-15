@@ -40,3 +40,9 @@ class FixtureORM(Base, AuditMixin):
     # From Sportmonks fixture metadata (type_id 159) or the formations include.
     home_formation: Mapped[str | None] = mapped_column(String(16))
     away_formation: Mapped[str | None] = mapped_column(String(16))
+    # Stadium + tournament phase, ingested from Sportmonks ``venue``,
+    # ``stage`` and ``round`` includes. Nullable: a re-run of
+    # ``bootstrap_fixture_details`` populates them.
+    venue_id: Mapped[int | None] = mapped_column(ForeignKey("core.venue.id", ondelete="SET NULL"))
+    stage_name: Mapped[str | None] = mapped_column(String(60))
+    round_name: Mapped[str | None] = mapped_column(String(60))

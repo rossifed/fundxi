@@ -21,6 +21,7 @@ from src.domain.valuation.valuation_provider import ValuationProvider
 from src.infrastructure.db.repositories.fixture import SqlAlchemyFixtureRepository
 from src.infrastructure.db.repositories.match_comment import SqlAlchemyMatchCommentRepository
 from src.infrastructure.db.repositories.news import SqlAlchemyNewsRepository
+from src.infrastructure.db.repositories.team_match_stat import SqlAlchemyTeamMatchStatRepository
 
 router = APIRouter(prefix="/api/fixtures", tags=["fixtures"])
 
@@ -141,6 +142,23 @@ async def fixtures_news(
 ) -> list[NewsResponse]:
     items = await news_repo.list_by_fixture(fixture_id)
     return [NewsResponse.from_domain(n) for n in items]
+
+
+@router.get("/{fixture_id}/team-stats")
+async def fixtures_team_stats(
+    fixture_id: int,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, dict[str, float]]:
+    """Return per-team match stats as ``{ team_id: { type_code: value } }``.
+    Empty dicts when no stats have been ingested yet."""
+    repo = SqlAlchemyTeamMatchStatRepository(session)
+    rows = await repo.list_for_fixture(fixture_id)
+    by_team: dict[str, dict[str, float]] = {}
+    for team_id, type_code, value in rows:
+        if value is None:
+            continue
+        by_team.setdefault(team_id, {})[type_code] = float(value)
+    return by_team
 
 
 @router.get("/{fixture_id}", response_model=FixtureResponse)
