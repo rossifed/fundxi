@@ -3,6 +3,7 @@ import { matches_api } from "@/api/matches_api";
 import { teams_api } from "@/api/teams_api";
 import type { Fixture, FixtureStatus } from "@/domain/match/fixture";
 import type { Match } from "@/domain/match/match";
+import { build_bracket, type BracketLayout } from "@/domain/match/bracket";
 import { LiveBadge } from "@/ui/components/LiveBadge";
 import { useLiveRefetch, useMatchesLiveVersion } from "@/ui/hooks/use_live_updates";
 
@@ -309,82 +310,6 @@ const BRACKET_PHASES: { stage_name: string; label: string }[] = [
   { stage_name: "Final", label: "Final" },
 ];
 
-interface BracketLayout {
-  r16_left: (Fixture | null)[];   // 4, top→bottom
-  qf_left: (Fixture | null)[];    // 2, top→bottom
-  sf_left: Fixture | null;
-  final: Fixture | null;
-  sf_right: Fixture | null;
-  qf_right: (Fixture | null)[];   // 2, top→bottom
-  r16_right: (Fixture | null)[];  // 4, top→bottom
-  third_place: Fixture | null;
-}
-
-/** Build a mirrored bracket from the data: walks the tree from the Final
- * backwards. ``advanced_team`` is derived by "who appears in the next
- * round?", so the order doesn't depend on Sportmonks home/away tagging
- * which is arbitrary at neutral venues. */
-function build_bracket(fixtures: Fixture[]): BracketLayout {
-  const r16 = fixtures.filter(f => f.stage_name === "Round of 16").sort(compare_by_kickoff);
-  const qf = fixtures.filter(f => f.stage_name === "Quarter-finals").sort(compare_by_kickoff);
-  const sf = fixtures.filter(f => f.stage_name === "Semi-finals").sort(compare_by_kickoff);
-  const final = fixtures.find(f => f.stage_name === "Final") ?? null;
-  const third_place = fixtures.find(f => f.stage_name === "3rd Place Final") ?? null;
-
-  const qf_teams = new Set(qf.flatMap(m => [m.home_team_id, m.away_team_id]));
-  const sf_teams = new Set(sf.flatMap(m => [m.home_team_id, m.away_team_id]));
-  const final_teams = new Set(final ? [final.home_team_id, final.away_team_id] : []);
-
-  const winner_for = (fx: Fixture, next_teams: Set<string>): string | null => {
-    if (next_teams.has(fx.home_team_id)) return fx.home_team_id;
-    if (next_teams.has(fx.away_team_id)) return fx.away_team_id;
-    return null;
-  };
-
-  // Match each R16/QF/SF to its winner (or null if upcoming).
-  const r16_winners = r16.map(m => winner_for(m, qf_teams));
-  const qf_winners = qf.map(m => winner_for(m, sf_teams));
-  const sf_winners = sf.map(m => winner_for(m, final_teams));
-
-  // Split SFs by which final team they produced. Fallback to chronological
-  // when final isn't there yet.
-  let sf_left: Fixture | null = null;
-  let sf_right: Fixture | null = null;
-  if (final) {
-    const idx_l = sf.findIndex((_, i) => sf_winners[i] === final.home_team_id);
-    const idx_r = sf.findIndex((_, i) => sf_winners[i] === final.away_team_id);
-    sf_left = idx_l >= 0 ? sf[idx_l] : null;
-    sf_right = idx_r >= 0 ? sf[idx_r] : null;
-  } else {
-    sf_left = sf[0] ?? null;
-    sf_right = sf[1] ?? null;
-  }
-
-  const qf_pair_for = (sf_match: Fixture | null): (Fixture | null)[] => {
-    if (!sf_match) return [null, null];
-    const pair = qf.filter(
-      (_, i) => qf_winners[i] === sf_match.home_team_id || qf_winners[i] === sf_match.away_team_id,
-    );
-    pair.sort(compare_by_kickoff);
-    return [pair[0] ?? null, pair[1] ?? null];
-  };
-
-  const r16_pair_for = (qf_match: Fixture | null): (Fixture | null)[] => {
-    if (!qf_match) return [null, null];
-    const pair = r16.filter(
-      (_, i) => r16_winners[i] === qf_match.home_team_id || r16_winners[i] === qf_match.away_team_id,
-    );
-    pair.sort(compare_by_kickoff);
-    return [pair[0] ?? null, pair[1] ?? null];
-  };
-
-  const qf_left = qf_pair_for(sf_left);
-  const qf_right = qf_pair_for(sf_right);
-  const r16_left = [...r16_pair_for(qf_left[0]), ...r16_pair_for(qf_left[1])];
-  const r16_right = [...r16_pair_for(qf_right[0]), ...r16_pair_for(qf_right[1])];
-
-  return { r16_left, qf_left, sf_left, final, sf_right, qf_right, r16_right, third_place };
-}
 
 function BracketView({ fixtures, on_open }: { fixtures: Fixture[]; on_open: (fx: Fixture) => void | Promise<void> }) {
   const by_group = new Map<string, Fixture[]>();
