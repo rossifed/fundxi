@@ -38,8 +38,8 @@ export function compute_holding_metrics(holding: Holding, current_price: number)
 }
 
 export function compute_portfolio_totals(
-  holdings: Holding[],
-  prices_by_player_id: Map<number, number>,
+  holdings: readonly Holding[],
+  prices_by_player_id: ReadonlyMap<number, number>,
   cash: number,
 ): PortfolioTotals {
   let market_value = 0;

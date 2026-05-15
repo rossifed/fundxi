@@ -178,58 +178,56 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
         <KpiCard label="Trades" value={String(trades.length)} />
       </div>
 
-      {/* Row-aligned grid: each "row" places a left-col widget next to
-          its right-rail counterpart so their headers line up vertically.
-          Row 1: Perf chart        | Long/Short + Wins/Losses stack
-          Row 2: Position/Age pies | By team
-          Row 3: Positions/Trades spans both columns. */}
+      {/* 2-col layout: stats + perf + positions on the left, breakdowns
+          stack on the right. The right rail starts at the very top of
+          this grid (same Y as Long/Short on the left). */}
       <div
         style={{
           display: "grid",
           gridTemplateColumns: "minmax(0, 1fr) 340px",
           columnGap: 16,
           rowGap: 16,
-          alignItems: "start",
+          alignItems: "stretch",
         }}
       >
-        {/* Row 1 left — Performance chart */}
-        <div
-          style={{
-            background: "rgba(255,255,255,.02)",
-            border: "1px solid rgba(255,255,255,.04)",
-            borderRadius: 12,
-            padding: "16px 20px",
-            minWidth: 0,
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 800 }}>Performance</div>
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", marginTop: 2 }}>Since tournament start</div>
+        {/* Left col — Perf chart → Positions/Trades (stretches to match
+            the right rail height so the bottoms align). */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
+          <div
+            style={{
+              background: "rgba(255,255,255,.02)",
+              border: "1px solid rgba(255,255,255,.04)",
+              borderRadius: 12,
+              padding: "16px 20px",
+              minWidth: 0,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 800 }}>Performance</div>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", marginTop: 2 }}>Since tournament start</div>
+              </div>
+              <span className="mono" style={{ fontSize: 18, fontWeight: 800, color: color_for_sign(period_return) }}>
+                {fmt_signed_pct(period_return, 1)}
+              </span>
             </div>
-            <span className="mono" style={{ fontSize: 18, fontWeight: 800, color: color_for_sign(period_return) }}>
-              {period_return >= 0 ? "+" : ""}{period_return.toFixed(1)}%
-            </span>
+            <PerformanceChart data={performance_data} height={280} />
           </div>
-          <PerformanceChart data={performance_data} height={220} />
-        </div>
 
-        {/* Row 1 right — Long/Short + Wins/Losses stacked */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <ExposureCard total_value={total_value} />
-          <WinLossCard holdings={holdings} />
-        </div>
-
-        {/* Row 2 — Positions / Trade history (full width, primary view) */}
-        <div
-          style={{
-            gridColumn: "1 / -1",
-            background: "rgba(255,255,255,.02)",
-            border: "1px solid rgba(255,255,255,.04)",
-            borderRadius: 12,
-            overflow: "hidden",
-          }}
-        >
+          {/* Positions / Trade history — flex-grows to fill remaining
+              left-col height so the bottom aligns with the right rail. */}
+          <div
+            style={{
+              background: "rgba(255,255,255,.02)",
+              border: "1px solid rgba(255,255,255,.04)",
+              borderRadius: 12,
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
+              flex: 1,
+              minHeight: 0,
+            }}
+          >
         <div
           style={{
             display: "flex",
@@ -293,7 +291,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
               <span style={{ textAlign: "right" }}>Value</span>
               <span style={{ textAlign: "right" }}>P&L</span>
             </div>
-            <div className="scroll-visible" style={{ maxHeight: 480, overflowY: "auto" }}>
+            <div className="scroll-visible" style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
             {sorted_holdings.map(h => {
               const team = teams_api.get(h.player.team_id);
               return (
@@ -378,7 +376,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
               <span style={{ textAlign: "right" }}>Total</span>
               <span style={{ textAlign: "right" }}>Date</span>
             </div>
-            <div className="scroll-visible" style={{ maxHeight: 480, overflowY: "auto" }}>
+            <div className="scroll-visible" style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
             {trades
               .slice()
               .reverse()
@@ -449,22 +447,17 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
             </div>
           </>
         )}
-      </div>
-
-        {/* Row 3 — Breakdowns row, full-width 3-col (secondary analytics) */}
-        <div
-          style={{
-            gridColumn: "1 / -1",
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr 1fr",
-            gap: 12,
-            minWidth: 0,
-          }}
-        >
-          <BreakdownCard title="By position" items={position_items} chart="pie" large />
-          <BreakdownCard title="By age" items={age_items} chart="pie" large />
-          <BreakdownCard title="By team" items={team_items} chart="bars" />
+          </div>
         </div>
+
+        {/* Right rail — full analytics stack */}
+        <aside style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <ExposureCard total_value={total_value} />
+          <WinLossCard holdings={holdings} />
+          <BreakdownCard title="By team" items={team_items} chart="bars" />
+          <BreakdownCard title="By position" items={position_items} chart="pie" />
+          <BreakdownCard title="By age" items={age_items} chart="pie" />
+        </aside>
       </div>
 
     </div>
@@ -516,8 +509,8 @@ function BreakdownCard({
         {title}
       </div>
       {chart === "pie" ? (
-        <div style={{ padding: 14, display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-          <Donut segments={segments} size={large ? 140 : 130} />
+        <div style={{ padding: "10px 12px 12px", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+          <Donut segments={segments} size={large ? 140 : 110} />
           <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 1 }}>
             {items.map((item, i) => {
               const pct_num = parseFloat(item.pct);
@@ -717,9 +710,9 @@ function WinLossCard({ holdings }: { holdings: HoldingMetrics[] }) {
     >
       <div
         style={{
-          padding: "12px 18px",
+          padding: "9px 14px",
           borderBottom: "1px solid rgba(255,255,255,.05)",
-          fontSize: 12,
+          fontSize: 11,
           fontWeight: 800,
           color: "rgba(255,255,255,.55)",
           letterSpacing: 0.5,
@@ -728,14 +721,14 @@ function WinLossCard({ holdings }: { holdings: HoldingMetrics[] }) {
       >
         Trades Wins / Losses
       </div>
-      <div style={{ padding: 18 }}>
+      <div style={{ padding: "12px 14px" }}>
         <div
           style={{
-            height: 30,
-            borderRadius: 6,
+            height: 22,
+            borderRadius: 5,
             overflow: "hidden",
             display: "flex",
-            marginBottom: 14,
+            marginBottom: 10,
             border: "1px solid rgba(255,255,255,.06)",
           }}
         >
@@ -801,9 +794,9 @@ function ExposureCard({ total_value }: { total_value: number }) {
     >
       <div
         style={{
-          padding: "12px 18px",
+          padding: "9px 14px",
           borderBottom: "1px solid rgba(255,255,255,.05)",
-          fontSize: 12,
+          fontSize: 11,
           fontWeight: 800,
           color: "rgba(255,255,255,.55)",
           letterSpacing: 0.5,
@@ -812,7 +805,7 @@ function ExposureCard({ total_value }: { total_value: number }) {
       >
         Position Long / Short
       </div>
-      <div style={{ padding: 18 }}>
+      <div style={{ padding: "12px 14px" }}>
         <ExposureView total_value={total_value} />
       </div>
     </div>
@@ -832,11 +825,11 @@ function ExposureView({ total_value }: { total_value: number }) {
     <div>
       <div
         style={{
-          height: 30,
-          borderRadius: 6,
+          height: 22,
+          borderRadius: 5,
           overflow: "hidden",
           display: "flex",
-          marginBottom: 14,
+          marginBottom: 10,
           border: "1px solid rgba(255,255,255,.06)",
         }}
       >

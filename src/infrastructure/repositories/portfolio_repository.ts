@@ -57,7 +57,7 @@ export function _set_from_outcome(dto: PortfolioDTO): void {
 }
 
 export const portfolio_repository = {
-  find_my_holdings(): Holding[] {
+  find_my_holdings(): readonly Holding[] {
     return _holdings;
   },
   find_my_cash(): number {
