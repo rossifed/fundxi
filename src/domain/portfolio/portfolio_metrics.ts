@@ -17,6 +17,13 @@ export interface HoldingMetrics extends Holding {
   return_pct: number;
 }
 
+/** Share of the portfolio represented by a position's market value.
+ * Returns 0 when ``total_value`` is 0 (no portfolio). */
+export function compute_portfolio_share(market_value: number, total_value: number): number {
+  if (total_value === 0) return 0;
+  return (market_value / total_value) * 100;
+}
+
 export function compute_holding_metrics(holding: Holding, current_price: number): HoldingMetrics {
   const market_value = current_price * holding.shares;
   const cost_basis = holding.average_buy_price * holding.shares;

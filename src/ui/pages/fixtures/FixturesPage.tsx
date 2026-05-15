@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { matches_api } from "@/api/matches_api";
 import { teams_api } from "@/api/teams_api";
 import type { Fixture, FixtureStatus } from "@/domain/match/fixture";
 import type { Match } from "@/domain/match/match";
 import { LiveBadge } from "@/ui/components/LiveBadge";
+import { useLiveRefetch, useMatchesLiveVersion } from "@/ui/hooks/use_live_updates";
 
 type StatusFilter = "all" | FixtureStatus;
 type ViewMode = "calendar" | "bracket";
@@ -118,7 +119,15 @@ export function FixturesPage({ on_open_match }: FixturesPageProps) {
     if (typeof window !== "undefined") window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, view_mode);
   }, [view_mode]);
 
-  const all = matches_api.list_fixtures();
+  // Live: re-fetch fixtures on any global "match activity" tick. The
+  // ``matches`` SSE topic fans out for every event/comment/status/lineup
+  // change on any fixture — exactly the right granularity for this list.
+  const [data_version, set_data_version] = useState(0);
+  useLiveRefetch(useMatchesLiveVersion(), () => {
+    void matches_api.refresh_fixtures().then(() => set_data_version(v => v + 1));
+  });
+
+  const all = useMemo(() => matches_api.list_fixtures(), [data_version]);
   const fixtures = filter === "all" ? all : all.filter(f => f.status === filter);
   const days = group_by_day(fixtures);
 

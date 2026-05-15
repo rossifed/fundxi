@@ -25,6 +25,10 @@ export const portfolio_api = {
   list_trades(): Trade[] {
     return trades_repository.find_all();
   },
+  /** Live portfolio value history (cash + Σ shares × price_t for held players). */
+  get_portfolio_history(length?: number): number[] {
+    return portfolio_service.get_my_portfolio_history(length);
+  },
   /** Async — re-fetch the portfolio (holdings + cash) from the BFF. */
   refresh(): Promise<void> {
     return refresh_portfolio();

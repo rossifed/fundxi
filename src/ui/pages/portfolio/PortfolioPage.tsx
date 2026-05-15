@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { compute_period_return } from "@/domain/market/return";
 import { players_api } from "@/api/players_api";
 import { portfolio_api } from "@/api/portfolio_api";
 import { teams_api } from "@/api/teams_api";
@@ -10,7 +11,6 @@ import { PlayerChip } from "@/ui/components/PlayerChip";
 import { PositionBadge } from "@/ui/components/PositionBadge";
 import { PerformanceChart } from "@/ui/components/PerformanceChart";
 import { Donut } from "@/ui/components/Donut";
-import { spark_market_index } from "@/infrastructure/repositories/valuations_repository";
 import { fmt_eur_m, fmt_eur_m_signed, fmt_shares } from "@/ui/helpers/format";
 
 function fmt_short_date(iso: string | undefined): string {
@@ -20,6 +20,7 @@ function fmt_short_date(iso: string | undefined): string {
   return d.toLocaleDateString(undefined, { day: "2-digit", month: "short" });
 }
 import { usePricesLiveVersion, useLiveRefetch } from "@/ui/hooks/use_live_updates";
+import { pulse_class, usePulse } from "@/ui/hooks/use_pulse";
 
 type PositionsTab = "positions" | "trades";
 
@@ -110,21 +111,18 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
 
   const [positions_tab, set_positions_tab] = useState<PositionsTab>("positions");
 
-  // Single chart: portfolio value rebased onto the real market index
-  // (= average of every player's price over the tournament). v0 has no
-  // per-trade history × price-tick join yet, so we approximate the
-  // portfolio curve as `total_value × index_t / index_T`. Same shape as
-  // the market for an evenly-weighted book; will be replaced once we
-  // compute holdings × historical prices on the backend.
-  const performance_data = useMemo(() => {
-    const idx = spark_market_index(120);
-    const last = idx[idx.length - 1] || 1;
-    return idx.map(v => ({ v: Math.round((v / last) * total_value) }));
-  }, [total_value]);
-  const period_return =
-    performance_data.length > 1
-      ? ((performance_data[performance_data.length - 1].v - performance_data[0].v) / performance_data[0].v) * 100
-      : 0;
+  // Real portfolio curve: cash + Σ shares × price_t for each held
+  // player, derived from per-player sparklines in the domain layer
+  // (``compute_portfolio_history``). Reflects the user's actual book —
+  // a concentration on Messi makes the curve look like Messi's price.
+  const performance_data = useMemo(
+    () => portfolio_api.get_portfolio_history(120).map(v => ({ v })),
+    [data_version],
+  );
+  const period_return = useMemo(
+    () => compute_period_return(performance_data.map(p => p.v)),
+    [performance_data],
+  );
 
   const sorted_holdings = useMemo(() => [...holdings].sort((a, b) => b.market_value - a.market_value), [holdings]);
 
@@ -275,7 +273,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "minmax(0, 2.4fr) 80px 100px 80px 100px 100px 90px",
+                gridTemplateColumns: "280px 70px 80px 100px 80px 100px 100px 90px",
                 padding: "10px 18px",
                 borderBottom: "1px solid rgba(255,255,255,.04)",
                 fontSize: 10,
@@ -287,6 +285,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
               }}
             >
               <span>Player</span>
+              <span>Side</span>
               <span>Pos</span>
               <span>Opened</span>
               <span style={{ textAlign: "right" }}>Shares</span>
@@ -303,7 +302,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                   onClick={() => on_open_player(h.player)}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "minmax(0, 2.4fr) 80px 100px 80px 100px 100px 90px",
+                    gridTemplateColumns: "280px 70px 80px 100px 80px 100px 100px 90px",
                     padding: "11px 18px",
                     borderBottom: "1px solid rgba(255,255,255,.025)",
                     cursor: "pointer",
@@ -324,7 +323,6 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                         <span style={{ fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
                           {h.player.name}
                         </span>
-                        <SideBadge shares={h.shares} />
                       </div>
                       <div style={{ fontSize: 11, color: "rgba(255,255,255,.3)", display: "flex", alignItems: "center", gap: 4 }}>
                         <span>{team?.flag}</span>
@@ -332,6 +330,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                       </div>
                     </div>
                   </div>
+                  <span><SideBadge shares={h.shares} /></span>
                   <PositionBadge position={h.player.position} />
                   <span className="mono" style={{ fontSize: 12, color: "rgba(255,255,255,.55)" }}>
                     {fmt_short_date(opened_by_player.get(h.player_id))}
@@ -340,9 +339,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                   <span className="mono" style={{ textAlign: "right", color: "rgba(255,255,255,.55)" }}>
                     €{h.average_buy_price}M
                   </span>
-                  <span className="mono" style={{ textAlign: "right", fontWeight: 800 }}>
-                    {fmt_eur_m(h.market_value)}
-                  </span>
+                  <PulseValueCell value={h.market_value} display={fmt_eur_m(h.market_value)} />
                   <span
                     className="mono"
                     style={{
@@ -363,7 +360,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "70px minmax(0, 1.8fr) 90px 90px 110px 90px",
+                gridTemplateColumns: "280px 70px 90px 90px 110px 90px",
                 padding: "10px 18px",
                 borderBottom: "1px solid rgba(255,255,255,.04)",
                 fontSize: 10,
@@ -374,8 +371,8 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                 gap: 12,
               }}
             >
-              <span>Type</span>
               <span>Player</span>
+              <span>Type</span>
               <span style={{ textAlign: "right" }}>Shares</span>
               <span style={{ textAlign: "right" }}>Price</span>
               <span style={{ textAlign: "right" }}>Total</span>
@@ -394,7 +391,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                     key={t.id}
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "70px minmax(0, 1.8fr) 90px 90px 110px 90px",
+                      gridTemplateColumns: "280px 70px 90px 90px 110px 90px",
                       padding: "11px 18px",
                       borderBottom: "1px solid rgba(255,255,255,.025)",
                       alignItems: "center",
@@ -402,6 +399,27 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                       fontSize: 13,
                     }}
                   >
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                      {player && (
+                        <PlayerAvatar player={player} team_color={team?.color ?? "#666"} size={32} />
+                      )}
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                          {player && (
+                            <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,.45)", flexShrink: 0 }}>
+                              {player.jersey_number}
+                            </span>
+                          )}
+                          <span style={{ fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
+                            {t.player_name}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 11, color: "rgba(255,255,255,.3)", display: "flex", alignItems: "center", gap: 4 }}>
+                          <span>{team?.flag}</span>
+                          <span>{team?.name}</span>
+                        </div>
+                      </div>
+                    </div>
                     <span
                       style={{
                         fontSize: 10,
@@ -417,21 +435,6 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                     >
                       {t.kind.toUpperCase()}
                     </span>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                      {player && (
-                        <PlayerAvatar player={player} team_color={team?.color ?? "#666"} size={32} />
-                      )}
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-                        {player && (
-                          <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,.45)", flexShrink: 0 }}>
-                            {player.jersey_number}
-                          </span>
-                        )}
-                        <span style={{ fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
-                          {t.player_name}
-                        </span>
-                      </div>
-                    </div>
                     <span className="mono" style={{ textAlign: "right" }}>{fmt_shares(t.shares)}</span>
                     <span className="mono" style={{ textAlign: "right", color: "rgba(255,255,255,.55)" }}>
                       €{t.price}M
@@ -650,11 +653,24 @@ function SideBadge({ shares }: { shares: number }) {
         borderRadius: 3,
         letterSpacing: 0.4,
         flexShrink: 0,
-        background: is_short ? "var(--color-action-sell)" : "var(--color-action-buy)",
+        background: is_short ? "var(--color-negative)" : "var(--color-positive)",
         color: "#fff",
       }}
     >
       {is_short ? "SHORT" : "LONG"}
+    </span>
+  );
+}
+
+/** Mono value cell with a one-shot Bloomberg-style pulse on change. */
+function PulseValueCell({ value, display }: { value: number; display: string }) {
+  const pulse = usePulse(value);
+  return (
+    <span
+      className={`mono ${pulse_class(pulse)}`}
+      style={{ textAlign: "right", fontWeight: 800, padding: "1px 4px" }}
+    >
+      {display}
     </span>
   );
 }
@@ -727,13 +743,13 @@ function WinLossCard({ holdings }: { holdings: HoldingMetrics[] }) {
             <div
               style={{
                 width: `${win_pct}%`,
-                background: "rgba(55,255,99,.18)",
+                background: "color-mix(in srgb, var(--color-positive) 22%, transparent)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
               }}
             >
-              <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: "var(--color-positive)" }}>{win_pct.toFixed(0)}%</span>
+              <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: "#fff" }}>{win_pct.toFixed(0)}%</span>
             </div>
           )}
           {flat > 0 && (
@@ -753,20 +769,20 @@ function WinLossCard({ holdings }: { holdings: HoldingMetrics[] }) {
             <div
               style={{
                 width: `${loss_pct}%`,
-                background: "rgba(255,40,93,.18)",
+                background: "color-mix(in srgb, var(--color-negative) 22%, transparent)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
               }}
             >
-              <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: "var(--color-negative)" }}>{loss_pct.toFixed(0)}%</span>
+              <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: "#fff" }}>{loss_pct.toFixed(0)}%</span>
             </div>
           )}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-          <ExposureCell label="Winners" value={String(winners)} color="var(--color-positive)" />
+          <ExposureCell label="Winners" value={String(winners)} color="rgba(255,255,255,.85)" />
           <ExposureCell label="Flat" value={String(flat)} color="rgba(255,255,255,.7)" />
-          <ExposureCell label="Losers" value={String(losers)} color="var(--color-negative)" />
+          <ExposureCell label="Losers" value={String(losers)} color="rgba(255,255,255,.85)" />
         </div>
       </div>
     </div>
@@ -827,30 +843,34 @@ function ExposureView({ total_value }: { total_value: number }) {
         <div
           style={{
             width: long_pct + "%",
-            background: "rgba(55,255,99,.18)",
+            background: "color-mix(in srgb, var(--color-positive) 22%, transparent)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
           }}
         >
-          <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: "var(--color-positive)" }}>{long_pct}%</span>
+          <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: "#fff" }}>{long_pct}%</span>
         </div>
         <div
           style={{
             width: short_pct + "%",
-            background: "rgba(255,40,93,.18)",
+            background: "color-mix(in srgb, var(--color-negative) 22%, transparent)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
           }}
         >
-          <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: "var(--color-negative)" }}>{short_pct}%</span>
+          <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: "#fff" }}>{short_pct}%</span>
         </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-        <ExposureCell label="Long" value={fmt_eur_m(long_value)} color="var(--color-positive)" />
-        <ExposureCell label="Short" value={fmt_eur_m(short_value)} color="var(--color-negative)" />
-        <ExposureCell label="Net" value={fmt_eur_m_signed(net_exposure)} color="rgba(255,255,255,.7)" />
+        <ExposureCell label="Long" value={fmt_eur_m(long_value)} color="rgba(255,255,255,.85)" />
+        <ExposureCell label="Short" value={fmt_eur_m(short_value)} color="rgba(255,255,255,.85)" />
+        <ExposureCell
+          label="Net"
+          value={fmt_eur_m_signed(net_exposure)}
+          color={net_exposure >= 0 ? "var(--color-positive)" : "var(--color-negative)"}
+        />
       </div>
     </div>
   );

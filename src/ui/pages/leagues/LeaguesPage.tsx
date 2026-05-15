@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { leagues_api } from "@/api/leagues_api";
-
-const MEDALS = ["🥇", "🥈", "🥉"];
+import { Avatar } from "@/ui/components/Avatar";
 
 type View = "board" | "create" | "join";
 
@@ -219,7 +218,7 @@ export function LeaguesPage() {
                   color: active ? "#fff" : "rgba(255,255,255,.45)",
                 }}
               >
-                <span style={{ fontSize: 16 }}>{l.icon}</span>
+                <Avatar seed={l.id} name={l.name} size={22} />
                 <span style={{ fontSize: 12, fontWeight: active ? 700 : 500 }}>{l.name}</span>
                 <span style={{ fontSize: 10, color: "rgba(255,255,255,.3)" }}>
                   {l.member_count}
@@ -262,110 +261,41 @@ export function LeaguesPage() {
         </button>
       </div>
 
-      {/* 2-col layout: meta+podium LEFT, full leaderboard RIGHT */}
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(320px, 2fr) 3fr", gap: 16 }}>
-        {/* LEFT */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {/* League header */}
-          <div
-            style={{
-              background: "rgba(255,255,255,.025)",
-              border: "1px solid rgba(255,255,255,.05)",
-              borderRadius: 12,
-              padding: "16px 18px",
-            }}
-          >
-            <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 16, fontWeight: 800 }}>{league.name}</div>
-              <div style={{ fontSize: 12, color: "rgba(255,255,255,.45)" }}>{league.description}</div>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,.04)" }}>
-              <span style={{ color: "rgba(255,255,255,.35)" }}>
-                {league.member_count} {league.is_public ? "players" : "members"}
-              </span>
-              {!league.is_public && league.invite_code && (
-                <span className="mono" style={{ color: "var(--color-positive)", fontWeight: 700 }}>{league.invite_code}</span>
-              )}
-            </div>
-          </div>
-
-          {/* Your rank */}
-          {me && (
-            <div
-              style={{
-                background: "linear-gradient(135deg,rgba(55,255,99,.1),rgba(55,255,99,.04))",
-                border: "1px solid rgba(55,255,99,.18)",
-                borderRadius: 12,
-                padding: "16px 18px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ fontSize: 26 }}>{me.avatar}</span>
-                <div>
-                  <div style={{ fontSize: 11, color: "rgba(255,255,255,.45)", letterSpacing: 0.4, textTransform: "uppercase", fontWeight: 600 }}>
-                    Your rank
-                  </div>
-                  <div className="mono" style={{ fontSize: 28, fontWeight: 900, marginTop: 2 }}>
-                    {me.rank}
-                    <span style={{ fontSize: 13, color: "rgba(255,255,255,.35)", fontWeight: 500 }}> / {league.member_count}</span>
-                  </div>
-                </div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div className="mono" style={{ fontSize: 18, fontWeight: 800, color: me.return_pct >= 0 ? "var(--color-positive)" : "var(--color-negative)" }}>
-                  {me.return_pct >= 0 ? "+" : ""}{me.return_pct}%
-                </div>
-                <div className="mono" style={{ fontSize: 12, color: "rgba(255,255,255,.45)", marginTop: 2 }}>
-                  €{me.value.toLocaleString()}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Podium */}
-          <div
-            style={{
-              background: "rgba(255,255,255,.02)",
-              border: "1px solid rgba(255,255,255,.04)",
-              borderRadius: 12,
-              padding: 14,
-            }}
-          >
-            <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,.55)", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 12 }}>
-              Podium
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-              {league.leaderboard.slice(0, 3).map((entry, i) => (
-                <div
-                  key={entry.rank}
-                  style={{
-                    textAlign: "center",
-                    borderRadius: 10,
-                    padding: "12px 6px",
-                    background: "rgba(255,255,255,.025)",
-                    border: `1px solid ${entry.is_me ? "rgba(55,255,99,.25)" : "rgba(255,255,255,.05)"}`,
-                  }}
-                >
-                  <div style={{ fontSize: 22 }}>{MEDALS[i]}</div>
-                  <div style={{ fontSize: 18, marginTop: 4 }}>{entry.avatar}</div>
-                  <div style={{ fontSize: 12, fontWeight: 700, marginTop: 4 }}>
-                    {entry.name}
-                    {entry.is_me && <div style={{ fontSize: 10, color: "var(--color-positive)", fontWeight: 700 }}>(you)</div>}
-                  </div>
-                  <div className="mono" style={{ fontSize: 13, fontWeight: 800, color: entry.return_pct >= 0 ? "var(--color-positive)" : "var(--color-negative)", marginTop: 4 }}>
-                    {entry.return_pct > 0 ? "+" : ""}{entry.return_pct}%
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+      {/* League header (compact, full width) */}
+      <div
+        style={{
+          background: "rgba(255,255,255,.025)",
+          border: "1px solid rgba(255,255,255,.05)",
+          borderRadius: 12,
+          padding: "14px 18px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 16,
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 800 }}>{league.name}</div>
+          <div style={{ fontSize: 12, color: "rgba(255,255,255,.45)" }}>{league.description}</div>
         </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, fontSize: 12 }}>
+          <span style={{ color: "rgba(255,255,255,.35)" }}>
+            {league.member_count} {league.is_public ? "players" : "members"}
+          </span>
+          {me && (
+            <span style={{ color: "rgba(255,255,255,.55)" }}>
+              You · <span className="mono" style={{ fontWeight: 700, color: "#fff" }}>#{me.rank}</span>
+              <span style={{ color: "rgba(255,255,255,.35)" }}> / {league.member_count}</span>
+            </span>
+          )}
+          {!league.is_public && league.invite_code && (
+            <span className="mono" style={{ color: "var(--color-positive)", fontWeight: 700 }}>{league.invite_code}</span>
+          )}
+        </div>
+      </div>
 
-        {/* RIGHT — full leaderboard */}
-        <div
+      {/* Leaderboard (full width) */}
+      <div
           style={{
             background: "rgba(255,255,255,.02)",
             border: "1px solid rgba(255,255,255,.04)",
@@ -422,7 +352,7 @@ export function LeaguesPage() {
                 {entry.rank}
               </span>
               <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 16 }}>{entry.avatar}</span>
+                <Avatar seed={entry.name} name={entry.name} size={26} />
                 <span style={{ fontWeight: entry.is_me ? 700 : 500 }}>
                   {entry.name}
                   {entry.is_me && <span style={{ fontSize: 10, color: "var(--color-positive)", marginLeft: 6, fontWeight: 700 }}>YOU</span>}
@@ -436,7 +366,6 @@ export function LeaguesPage() {
               </span>
             </div>
           ))}
-        </div>
       </div>
     </div>
   );

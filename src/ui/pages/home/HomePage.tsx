@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { compute_return_pct } from "@/domain/market/return";
 import { matches_api } from "@/api/matches_api";
 import { players_api } from "@/api/players_api";
 import { teams_api } from "@/api/teams_api";
@@ -413,10 +414,7 @@ function MoversColumn({
       </div>
       {players.map((p, i) => {
         const team = teams_api.get(p.team_id);
-        const tournament_return =
-          p.valuation.base_value > 0
-            ? ((p.valuation.current_price - p.valuation.base_value) / p.valuation.base_value) * 100
-            : 0;
+        const tournament_return = compute_return_pct(p.valuation.current_price, p.valuation.base_value);
         const up = tournament_return >= 0;
         return (
           <div

@@ -5,6 +5,8 @@ import { portfolio_api } from "@/api/portfolio_api";
 import { teams_api } from "@/api/teams_api";
 import { valuations_api } from "@/api/valuations_api";
 import { POSITION_LABEL, type Player } from "@/domain/player/player";
+import { compute_period_return, compute_return_pct } from "@/domain/market/return";
+import { compute_portfolio_share } from "@/domain/portfolio/portfolio_metrics";
 import type { PricePoint } from "@/infrastructure/repositories/valuations_repository";
 import type { PlayerTournamentStat } from "@/infrastructure/repositories/player_stats_repository";
 import type { PlayerMatchEntry } from "@/infrastructure/repositories/player_matches_repository";
@@ -192,10 +194,7 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
 
   const chart_points = useMemo(() => (price_history ?? []).map(p => p.price), [price_history]);
   const [hover_idx, set_hover_idx] = useState<number | null>(null);
-  const period_return =
-    chart_points.length > 1
-      ? ((chart_points[chart_points.length - 1] - chart_points[0]) / chart_points[0]) * 100
-      : 0;
+  const period_return = compute_period_return(chart_points);
   const period_is_up = chart_points.length > 1 && chart_points[chart_points.length - 1] >= chart_points[0];
   const period_color = period_is_up ? "var(--color-chart-primary)" : "var(--color-action-sell)";
 
@@ -325,14 +324,14 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
               : null;
             const ph = price_history ?? [];
             const since_start_pct =
-              ph.length > 1 ? ((ph[ph.length - 1].price - ph[0].price) / ph[0].price) * 100 : null;
+              ph.length > 1 ? compute_period_return(ph.map(p => p.price)) : null;
             let last_match_pct: number | null = null;
             if (ph.length > 1) {
               const last_fixture_id = [...ph].reverse().find(p => p.fixture_id !== null)?.fixture_id;
               if (last_fixture_id != null) {
                 const ticks = ph.filter(p => p.fixture_id === last_fixture_id);
                 if (ticks.length > 1) {
-                  last_match_pct = ((ticks[ticks.length - 1].price - ticks[0].price) / ticks[0].price) * 100;
+                  last_match_pct = compute_period_return(ticks.map(t => t.price));
                 }
               }
             }
@@ -506,7 +505,7 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
               // Stable reference so successive hovers can be read against each
               // other: a 14% hover then a 10% hover means a 4pp local drop.
               const first_price = price_history[0].price;
-              const delta_pct = first_price !== 0 ? ((rec.price - first_price) / first_price) * 100 : 0;
+              const delta_pct = compute_return_pct(rec.price, first_price);
               const delta_label = `${delta_pct >= 0 ? "+" : ""}${delta_pct.toFixed(2)}%`;
               const delta_color = delta_pct >= 0 ? "var(--color-positive)" : "var(--color-negative)";
               return (
@@ -1054,8 +1053,8 @@ function YourPositionCard({ player, current_price }: { player: Player; current_p
   const market_value = holding!.shares * current_price;
   const cost_basis = holding!.shares * holding!.average_buy_price;
   const pnl = market_value - cost_basis;
-  const return_pct = cost_basis === 0 ? 0 : (pnl / cost_basis) * 100;
-  const portfolio_pct = totals.total_value === 0 ? 0 : (market_value / totals.total_value) * 100;
+  const return_pct = compute_return_pct(market_value, cost_basis);
+  const portfolio_pct = compute_portfolio_share(market_value, totals.total_value);
   const is_long = holding!.shares > 0;
 
   return (

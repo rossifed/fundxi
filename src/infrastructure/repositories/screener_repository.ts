@@ -50,6 +50,12 @@ export async function init_screener_repository(): Promise<void> {
   SCREENER_ENTRIES = await api_get<ScreenerEntry[]>("/api/players/screener-view");
 }
 
+/** Cache-busting re-fetch — call on a live SSE price tick to pick up the
+ * latest current_price / change_24h / per-match deltas. */
+export async function refresh_screener_repository(): Promise<void> {
+  SCREENER_ENTRIES = await api_get<ScreenerEntry[]>("/api/players/screener-view");
+}
+
 export const screener_repository = {
   find_all(): ScreenerEntry[] {
     return SCREENER_ENTRIES;

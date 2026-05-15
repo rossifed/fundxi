@@ -133,3 +133,31 @@ body,
   background: rgba(228, 21, 65, 0.1);
   color: var(--color-negative);
 }
+
+/* One-shot price tick pulse — Bloomberg style. A short tinted-background
+   flash that fades to transparent. Class is added on value change and
+   auto-removed ~700ms later by the ``usePulse`` hook. */
+@keyframes price_pulse_up {
+  0% {
+    background-color: color-mix(in srgb, var(--color-positive) 25%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+@keyframes price_pulse_down {
+  0% {
+    background-color: color-mix(in srgb, var(--color-negative) 25%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+.price-pulse-up {
+  animation: price_pulse_up 700ms ease-out;
+  border-radius: 4px;
+}
+.price-pulse-down {
+  animation: price_pulse_down 700ms ease-out;
+  border-radius: 4px;
+}

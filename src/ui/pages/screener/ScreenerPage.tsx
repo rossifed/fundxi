@@ -8,9 +8,12 @@ import { PlayerChip } from "@/ui/components/PlayerChip";
 import { PositionBadge } from "@/ui/components/PositionBadge";
 import { Spark } from "@/ui/components/Spark";
 import {
+  refresh_screener_repository,
   screener_repository,
   type ScreenerEntry,
 } from "@/infrastructure/repositories/screener_repository";
+import { useLiveRefetch, usePricesLiveVersion } from "@/ui/hooks/use_live_updates";
+import { pulse_class, usePulse } from "@/ui/hooks/use_pulse";
 import { spark_for_player } from "@/infrastructure/repositories/valuations_repository";
 import { price_label } from "@/ui/helpers/format";
 import { toggle_set } from "@/ui/helpers/state";
@@ -109,7 +112,13 @@ export function ScreenerPage({ on_open_player, watchlist, toggle_watch }: Screen
   const [sort_key, set_sort_key] = useState<SortKey>("value");
   const [sort_dir, set_sort_dir] = useState<SortDir>("desc");
 
-  const all_entries = useMemo(() => screener_repository.find_all(), []);
+  // Live: re-fetch screener data on every global price tick so prices /
+  // change_24h / per-match deltas reflect what just happened on the pitch.
+  const [data_version, set_data_version] = useState(0);
+  useLiveRefetch(usePricesLiveVersion(), () => {
+    void refresh_screener_repository().then(() => set_data_version(v => v + 1));
+  });
+  const all_entries = useMemo(() => screener_repository.find_all(), [data_version]);
   const all_team_ids = useMemo(
     () => Array.from(new Set(all_entries.map(e => e.team_id))),
     [all_entries],
@@ -506,6 +515,21 @@ interface RowProps {
   on_toggle_watch: () => void;
 }
 
+/** Player price cell with a one-shot Bloomberg-style pulse on change.
+ * The hue (green/red) is derived from the direction; we just toggle a
+ * className for ~700ms via ``usePulse``. */
+function PriceCell({ value }: { value: number }) {
+  const pulse = usePulse(value);
+  return (
+    <span
+      className={`mono ${pulse_class(pulse)}`}
+      style={{ fontWeight: 700, textAlign: "right", whiteSpace: "nowrap", display: "block", padding: "1px 4px" }}
+    >
+      €{value.toFixed(2)}M
+    </span>
+  );
+}
+
 function Row({
   entry: e,
   team_color,
@@ -622,9 +646,7 @@ function Row({
         <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{team_name}</span>
       </span>
       <PositionBadge position={e.position as Position} />
-      <span className="mono" style={{ fontWeight: 700, textAlign: "right", whiteSpace: "nowrap", display: "block" }}>
-        €{e.current_price.toFixed(2)}M
-      </span>
+      <PriceCell value={e.current_price} />
       {columns.map(c => (
         <ScreenerCell key={c.key} entry={e} column={c} />
       ))}
