@@ -1,3 +1,5 @@
+@import "./theme.css";
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -109,7 +111,7 @@ body,
 
 .bg.on {
   background: rgba(33, 108, 110, 0.08);
-  color: #216c6e;
+  color: var(--color-positive);
   border-color: rgba(33, 108, 110, 0.15);
 }
 
@@ -124,10 +126,10 @@ body,
 
 .cu {
   background: rgba(33, 108, 110, 0.1);
-  color: #216c6e;
+  color: var(--color-positive);
 }
 
 .cn {
   background: rgba(228, 21, 65, 0.1);
-  color: #E41541;
+  color: var(--color-negative);
 }

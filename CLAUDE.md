@@ -198,11 +198,47 @@ test before merge. No test, not merged.
 - **PascalCase** for React component files (`HomePage.tsx`, `Sheet.tsx`).
 - **Explicit field names**: `Player.change_24h`, not `Player.ch`. PEP8 spirit.
 - All English: code, comments, commits, docs.
-- Inline styles preserved from the original prototype design (color/layout
-  fidelity). Migration to a styling system (vanilla-extract / CSS modules) is
-  a future-only consideration, not a current refactor target.
-- No emojis in source code. Mock data may include emojis as content (flags,
-  event icons, league avatars).
+- **No emojis in source code.** Mock data may include emojis as content
+  (flags, event icons, league avatars).
+
+## Styling & theming — NON-NEGOTIABLE
+
+All colors flow through the **design tokens** system. Never hardcode a hex
+value in a component, ever. The system is:
+
+1. **`src/ui/design/theme.css`** — CSS custom properties (`--color-…`)
+   organised in `:root` (default dark theme) and `[data-theme="<name>"]`
+   override blocks. Single source of truth for what each semantic color
+   actually looks like.
+2. **`src/ui/design/tokens.ts`** — TypeScript wrappers exposing
+   `var(--color-…)` strings for React inline styles
+   (`import { color } from "@/ui/design/tokens"` → `color.positive`,
+   `color.actionBuy`, etc.).
+3. **Components** consume tokens, never literals:
+   - ✅ `<span style={{ color: color.positive }}>`
+   - ✅ `<span style={{ color: "var(--color-positive)" }}>`
+   - ❌ `<span style={{ color: "#216c6e" }}>`
+4. **Theme switching** = `document.documentElement.dataset.theme = "ocean"`.
+   No JSX changes. No re-bundle. A new theme is just a new
+   `[data-theme="<name>"]` block in `theme.css`.
+
+**Rules:**
+- Adding a new color → first add the variable in `theme.css`, then the
+  matching `color.X` in `tokens.ts`, then use it in the component. Don't
+  shortcut by typing a hex.
+- Semantic names, not visual: `--color-positive`, not `--color-green`
+  (alternate themes may move "positive" to a different hue).
+- The only legitimate hex literals in components are **provider data**
+  (team kit colors / flag colors coming from Sportmonks), which are
+  per-row data, not theme.
+- RGBA white/black overlays (`rgba(255,255,255,.04)` for subtle surfaces)
+  are theme-agnostic on a dark UI and may stay inline as a transitional
+  pattern, but feel free to tokenise them when they have semantic meaning
+  (e.g. `--color-surface-2`).
+
+Violation of this rule is a stop-the-line bug. A "change all the X-color
+buttons" request must be a 1-line edit in `theme.css`, never a sed across
+the repo.
 
 ## Stack
 

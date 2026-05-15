@@ -1,0 +1,65 @@
+/* Design tokens — CSS custom properties.
+ *
+ * Every visual color the app uses is defined here. Components reference
+ * them via ``var(--color-…)`` (either directly in a CSS file, or via
+ * ``tokens`` exports in ``tokens.ts`` for React inline styles).
+ *
+ * Theming model:
+ *   - ``:root`` holds the default (dark) theme.
+ *   - Alternate themes live in ``[data-theme="<name>"]`` blocks and
+ *     override the tokens. Toggle by setting ``data-theme`` on
+ *     ``<html>`` (or any ancestor of the styled subtree).
+ *
+ * Adding a new theme:
+ *   1) Add a ``[data-theme="my-theme"] { … }`` block below.
+ *   2) Override only the variables that differ; the rest cascade.
+ *   3) Wire a switcher (e.g. ``document.documentElement.dataset.theme =
+ *      "my-theme"``).
+ *
+ * Naming convention: semantic, NOT visual. Use ``--color-positive`` (the
+ * intent: "this is a gain"), not ``--color-green``. Themes can change the
+ * actual hue without touching component code.
+ */
+
+:root,
+[data-theme="dark"] {
+  /* Action buttons / brand actions (Buy/Sell, Long/Short badges).
+     These are the high-contrast brand colors of the trading actions. */
+  --color-action-buy: #5CF26C;
+  --color-action-sell: #F41258;
+
+  /* Positive / negative semantic colors (P&L, percentages, winners). */
+  --color-positive: #216c6e;
+  --color-negative: #E41541;
+
+  /* Chart primaries. */
+  --color-chart-primary: #183C82;
+  --color-chart-negative: #F41258;
+
+  /* Accents (hero title, decorative). */
+  --color-accent: #9CA0DD;
+  --color-brand-green: #48ff43;
+
+  /* Surfaces. */
+  --color-bg: #020406;
+  --color-tooltip-bg: #0d0d0f;
+  --color-surface-deep: #0d1419;
+  --color-surface-deeper: #0b0f14;
+
+  /* Ambient gradient stops (radial bg on the App shell). */
+  --color-grad-1: #393690;
+  --color-grad-2: #11377E;
+  --color-grad-3: #07081D;
+  --color-grad-4: #020109;
+}
+
+/* Example alternate theme — preview the system; remove or refine when
+   we ship a real second theme. */
+[data-theme="ocean"] {
+  --color-action-buy: #06B6D4;
+  --color-positive: #14B8A6;
+  --color-chart-primary: #0EA5E9;
+  --color-accent: #67E8F9;
+  --color-grad-1: #0E7490;
+  --color-grad-2: #0C4A6E;
+}

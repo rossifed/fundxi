@@ -82,6 +82,47 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match }: Hom
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24, animation: "fu .3s ease" }}>
+      {/* Hero — only on Home, signals "welcome" */}
+      <header
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "center",
+          gap: 18,
+          marginBottom: 8,
+          marginTop: 4,
+        }}
+      >
+        <h1
+          style={{
+            fontSize: 56,
+            fontWeight: 900,
+            letterSpacing: -2.2,
+            lineHeight: 1,
+            margin: 0,
+            background:
+              "linear-gradient(135deg, rgba(255,255,255,.95) 0%, rgba(255,255,255,.55) 100%)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            backgroundClip: "text",
+          }}
+        >
+          Fund<span style={{ color: "var(--color-accent)", WebkitTextFillColor: "var(--color-accent)", background: "none" }}>XI</span>
+        </h1>
+        <span
+          style={{
+            fontSize: 14,
+            fontWeight: 500,
+            color: "rgba(255,255,255,.4)",
+            letterSpacing: 0.3,
+            fontStyle: "italic",
+            paddingBottom: 4,
+          }}
+        >
+          Trade the game.
+        </span>
+      </header>
+
       {/* Match Center + Leagues */}
       <div style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: 16 }}>
         {/* Match Center */}
@@ -205,7 +246,7 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match }: Hom
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div className="mono" style={{ fontSize: 16, fontWeight: 800 }}>{me.rank}</div>
-                    <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: me.return_pct >= 0 ? "#216c6e" : "#E41541" }}>
+                    <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: me.return_pct >= 0 ? "var(--color-positive)" : "var(--color-negative)" }}>
                       {me.return_pct >= 0 ? "+" : ""}{me.return_pct}%
                     </div>
                   </div>
@@ -430,7 +471,7 @@ function MoversColumn({
             />
             <div style={{ textAlign: "right", minWidth: 64 }}>
               <div className="mono" style={{ fontSize: 12, fontWeight: 700 }}>€{p.valuation.current_price}M</div>
-              <div className="mono" style={{ fontSize: 11, fontWeight: 800, color: up ? "#216c6e" : "#E41541" }}>
+              <div className="mono" style={{ fontSize: 11, fontWeight: 800, color: up ? "var(--color-positive)" : "var(--color-negative)" }}>
                 {up ? "+" : ""}{tournament_return.toFixed(1)}%
               </div>
             </div>

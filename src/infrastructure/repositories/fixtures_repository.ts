@@ -12,6 +12,9 @@ interface FixtureDTO {
   kickoff_at: string | null;
   minute: number | null;
   note: string | null;
+  venue_name: string | null;
+  stage_name: string | null;
+  round_name: string | null;
 }
 
 let FIXTURES: Fixture[] = [];
@@ -29,6 +32,9 @@ function dto_to_domain(dto: FixtureDTO): Fixture {
     date: dto.kickoff_at ?? undefined,
     minute: dto.minute ?? undefined,
     note: dto.note ?? undefined,
+    venue_name: dto.venue_name ?? undefined,
+    stage_name: dto.stage_name ?? undefined,
+    round_name: dto.round_name ?? undefined,
   };
 }
 

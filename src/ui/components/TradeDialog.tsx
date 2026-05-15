@@ -79,7 +79,7 @@ export function TradeDialog({
       <Sheet open={true} on_close={on_close} max_width={460}>
         <div style={{ padding: "32px 24px 24px", textAlign: "center" }}>
           <div style={{ fontSize: 56, marginBottom: 8 }}>{c_is_buy ? "✅" : "🔴"}</div>
-          <div style={{ fontSize: 20, fontWeight: 800, color: c_is_buy ? "#216c6e" : "#E41541", marginBottom: 4 }}>
+          <div style={{ fontSize: 20, fontWeight: 800, color: c_is_buy ? "var(--color-positive)" : "var(--color-negative)", marginBottom: 4 }}>
             {c_is_buy ? "Bought" : "Sold"}!
           </div>
           <div style={{ fontSize: 13, color: "rgba(255,255,255,.55)", marginBottom: 22 }}>
@@ -98,7 +98,7 @@ export function TradeDialog({
             <SummaryCell
               label="Position"
               value={c_is_buy ? "📈 Long" : "📉 Short"}
-              color={c_is_buy ? "#216c6e" : "#E41541"}
+              color={c_is_buy ? "var(--color-positive)" : "var(--color-negative)"}
               mono={false}
             />
           </div>
@@ -230,8 +230,8 @@ export function TradeDialog({
               background: !can_confirm
                 ? "rgba(255,255,255,.04)"
                 : is_buy
-                  ? "linear-gradient(135deg,#5CF26C,#0D9488)"
-                  : "linear-gradient(135deg,#F41258,#dc2626)",
+                  ? "linear-gradient(135deg,var(--color-action-buy),#0D9488)"
+                  : "linear-gradient(135deg,var(--color-action-sell),#dc2626)",
               color: !can_confirm ? "rgba(255,255,255,.25)" : "#fff",
               border: !can_confirm ? "1px solid rgba(255,255,255,.06)" : "none",
               cursor: !can_confirm ? "not-allowed" : "pointer",
@@ -270,7 +270,7 @@ export function TradeDialog({
           </div>
           <div style={{ textAlign: "right" }}>
             <div className="mono" style={{ fontSize: 14, fontWeight: 800 }}>€{current_price}M</div>
-            <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: is_up ? "#216c6e" : "#E41541" }}>
+            <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: is_up ? "var(--color-positive)" : "var(--color-negative)" }}>
               {is_up ? "+" : ""}{change_pct}%
             </div>
           </div>
@@ -279,8 +279,8 @@ export function TradeDialog({
         {/* Buy/Sell tabs */}
         <div style={{ display: "flex", background: "rgba(255,255,255,.03)", borderRadius: 10, padding: 3 }}>
           {([
-            { k: "buy" as TradeKindLocal, label: "Buy", color: "#5CF26C" },
-            { k: "sell" as TradeKindLocal, label: "Sell", color: "#F41258" },
+            { k: "buy" as TradeKindLocal, label: "Buy", color: "var(--color-action-buy)" },
+            { k: "sell" as TradeKindLocal, label: "Sell", color: "var(--color-action-sell)" },
           ]).map(t => (
             <button
               key={t.k}
@@ -297,8 +297,8 @@ export function TradeDialog({
                 background:
                   kind === t.k
                     ? t.k === "buy"
-                      ? "#5CF26C"
-                      : "#F41258"
+                      ? "var(--color-action-buy)"
+                      : "var(--color-action-sell)"
                     : "transparent",
                 color: kind === t.k ? "#fff" : "rgba(255,255,255,.35)",
               }}
@@ -534,26 +534,26 @@ export function TradeDialog({
             <PreviewRow
               label="Total"
               value={fmt_eur_m(final_amount)}
-              accent={is_buy ? "#216c6e" : "#E41541"}
+              accent={is_buy ? "var(--color-positive)" : "var(--color-negative)"}
               bold
             />
             <PreviewRow
               label="Position"
               before={`${fmt_shares(held_shares)} shares`}
               after={`${fmt_shares(preview.shares_after)} shares`}
-              accent={is_buy ? "#216c6e" : "#E41541"}
+              accent={is_buy ? "var(--color-positive)" : "var(--color-negative)"}
             />
             <PreviewRow
               label="Cash"
               before={fmt_eur_m(preview.cash_before)}
               after={fmt_eur_m(preview.cash_after)}
-              accent={is_buy ? "#E41541" : "#216c6e"}
+              accent={is_buy ? "var(--color-negative)" : "var(--color-positive)"}
               warning={preview.cash_after < 0}
             />
             <PreviewRow
               label="Type"
               value={is_buy ? "📈 Long" : is_short ? `📉 Short (${short_qty} naked)` : "Close position"}
-              accent={is_buy ? "#216c6e" : is_short ? "rgba(255,255,255,.5)" : "#E41541"}
+              accent={is_buy ? "var(--color-positive)" : is_short ? "rgba(255,255,255,.5)" : "var(--color-negative)"}
             />
           </div>
         </div>
@@ -573,7 +573,7 @@ export function TradeDialog({
           >
             <span style={{ fontSize: 16, flexShrink: 0 }}>⛔</span>
             <span style={{ fontSize: 12, color: "rgba(255,255,255,.7)", lineHeight: 1.45 }}>
-              <strong style={{ color: "#E41541" }}>Insufficient capital.</strong> You need{" "}
+              <strong style={{ color: "var(--color-negative)" }}>Insufficient capital.</strong> You need{" "}
               <span className="mono" style={{ fontWeight: 700 }}>€{preview.shortfall.toLocaleString()}</span> more.
               You have <span className="mono">€{preview.cash_before.toLocaleString()}</span> available.
             </span>
@@ -638,7 +638,7 @@ function PreviewRow({
               className="mono"
               style={{
                 fontWeight: 700,
-                color: warning ? "#E41541" : accent ?? "#fff",
+                color: warning ? "var(--color-negative)" : accent ?? "#fff",
               }}
             >
               {after}

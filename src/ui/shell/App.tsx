@@ -21,7 +21,7 @@ import { RightRail } from "./RightRail";
 type TabId = "home" | "screener" | "fixtures" | "portfolio" | "leagues" | "profile";
 
 const DEFAULT_WATCHLIST = new Set<number>([16, 7, 108, 148]);
-const APP_MAX_WIDTH = 1600;
+const APP_MAX_WIDTH = 1800;
 
 // Pages where the right rail adds value (live ticker, watchlist, movers).
 // Hidden on Match View (full bleed) and Profile (settings, no need).
@@ -121,6 +121,23 @@ export function App() {
           zIndex: 0,
         }}
       />
+      {/* Faint full-screen WC backdrop. ``screen`` blend keeps only the
+          bright parts of the image (gold trophy, stadium lights, sky)
+          visible through the dark page tint — shadows blend away. */}
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          backgroundImage: "url('/wc-bg.jpg')",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+          opacity: 0.08,
+          mixBlendMode: "screen",
+          pointerEvents: "none",
+          zIndex: 0,
+        }}
+      />
 
       <div
         style={{
@@ -148,8 +165,8 @@ export function App() {
               minHeight: 0,
             }}
           >
-            <div style={{ padding: "24px 32px 64px", maxWidth: 1200, width: "100%" }}>
-              {!selected_match && (
+            <div style={{ padding: "24px 32px 64px", width: "100%" }}>
+              {!selected_match && tab !== "home" && (
                 <div
                   style={{
                     display: "flex",

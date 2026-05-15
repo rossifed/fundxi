@@ -11,8 +11,8 @@ interface SparkProps {
   height?: number;
 }
 
-const UP_COLOR = "#183C82";
-const DOWN_COLOR = "#F41258";
+const UP_COLOR = "var(--color-chart-primary)";
+const DOWN_COLOR = "var(--color-action-sell)";
 
 export function Spark({ data, color, width = 60, height = 20 }: SparkProps) {
   const gradient_id = useId().replace(/:/g, "");

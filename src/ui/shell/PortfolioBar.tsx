@@ -34,7 +34,7 @@ export function PortfolioBar({ totals, holdings_count, on_click }: PortfolioBarP
             width: 5,
             height: 5,
             borderRadius: 3,
-            background: up ? "#216c6e" : "#E41541",
+            background: up ? "var(--color-positive)" : "var(--color-negative)",
             boxShadow: `0 0 6px ${up ? "rgba(55,255,99,.4)" : "rgba(255,40,93,.4)"}`,
           }}
         />
@@ -49,7 +49,7 @@ export function PortfolioBar({ totals, holdings_count, on_click }: PortfolioBarP
           style={{
             fontSize: 12,
             fontWeight: 700,
-            color: up ? "#216c6e" : "#E41541",
+            color: up ? "var(--color-positive)" : "var(--color-negative)",
           }}
         >
           {return_pct >= 0 ? "+" : ""}
@@ -62,7 +62,7 @@ export function PortfolioBar({ totals, holdings_count, on_click }: PortfolioBarP
         <Stat
           label="P&L"
           value={fmt_eur_m_signed(pnl)}
-          color={up ? "#216c6e" : "#E41541"}
+          color={up ? "var(--color-positive)" : "var(--color-negative)"}
         />
         <span style={{ fontSize: 11, color: "rgba(255,255,255,.2)" }}>◈</span>
       </div>

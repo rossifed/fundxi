@@ -5,8 +5,10 @@ import type { Position } from "@/domain/player/player";
 import { comments_api } from "@/api/comments_api";
 import { matches_api } from "@/api/matches_api";
 import { players_api } from "@/api/players_api";
+import { team_stats_api } from "@/api/team_stats_api";
 import { teams_api } from "@/api/teams_api";
 import { valuations_api } from "@/api/valuations_api";
+import type { TeamMatchStats } from "@/domain/match/team_match_stats";
 import { useFixtureLiveVersion, useLiveRefetch, usePricesLiveVersion } from "@/ui/hooks/use_live_updates";
 import { PitchView } from "@/ui/pages/match/PitchView";
 
@@ -20,8 +22,8 @@ interface MatchViewProps {
   go_portfolio?: () => void; // not used here; kept for the App's prop contract
 }
 
-const GREEN = "#216c6e";
-const RED = "#E41541";
+const GREEN = "var(--color-positive)";
+const RED = "var(--color-negative)";
 
 const POSITION_GROUPS: readonly { key: Position; label: string }[] = [
   { key: "GK", label: "Goalkeeper" },
@@ -111,13 +113,16 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
   // Commentary feed.
   const fixture_live_version = useFixtureLiveVersion(match.fixture_id);
   const [commentaries, set_commentaries] = useState<MatchComment[] | null>(null);
+  const [team_stats, set_team_stats] = useState<TeamMatchStats | null>(null);
   useEffect(() => {
     if (!match.fixture_id) {
       set_commentaries([]);
+      set_team_stats({});
       return;
     }
     let cancelled = false;
     set_commentaries(null);
+    set_team_stats(null);
     comments_api
       .for_fixture(match.fixture_id)
       .then(items => {
@@ -126,13 +131,21 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
       .catch(() => {
         if (!cancelled) set_commentaries([]);
       });
+    team_stats_api
+      .for_fixture(match.fixture_id)
+      .then(stats => {
+        if (!cancelled) set_team_stats(stats);
+      })
+      .catch(() => {
+        if (!cancelled) set_team_stats({});
+      });
     return () => {
       cancelled = true;
     };
   }, [match.fixture_id]);
 
   // Live: a fixture event/comment ping → re-fetch the match (clock / score /
-  // scorers / per-player prices) and the commentary feed in place.
+  // scorers / per-player prices), the commentary feed AND the team stats.
   useLiveRefetch(fixture_live_version, () => {
     if (!match.fixture_id) return;
     matches_api
@@ -148,6 +161,12 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
       .then(set_commentaries)
       .catch(() => {
         /* keep the current feed on a transient error */
+      });
+    team_stats_api
+      .refresh_for_fixture(match.fixture_id)
+      .then(set_team_stats)
+      .catch(() => {
+        /* keep the current stats on a transient error */
       });
   });
 
@@ -165,6 +184,8 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
     [commentaries],
   );
 
+  const is_desktop = useIsDesktop();
+
   const card: CSSProperties = {
     background: "rgba(255,255,255,.02)",
     border: "1px solid rgba(255,255,255,.05)",
@@ -173,7 +194,15 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
   };
 
   return (
-    <div style={{ maxWidth: 820, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16, animation: "fu .25s ease" }}>
+    <div
+      style={{
+        width: "100%",
+        display: "flex",
+        flexDirection: "column",
+        gap: 16,
+        animation: "fu .25s ease",
+      }}
+    >
       <div>
         <button
           onClick={on_back}
@@ -229,84 +258,293 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
           the fold. Scrolls right-to-left continuously, pauses on hover. */}
       <LiveTicker comments={commentaries ?? []} card_style={card} />
 
-      {/* Line-up view toggle — Liste / Terrain. */}
-      <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <div
-          role="tablist"
-          style={{
-            display: "inline-flex",
-            background: "rgba(255,255,255,.03)",
-            border: "1px solid rgba(255,255,255,.06)",
-            borderRadius: 8,
-            padding: 3,
-            gap: 2,
-          }}
+      {/* Two-column grid on desktop: lineup on the left, sticky Stats +
+          Commentary panel on the right. On mobile / narrow viewports the
+          same widgets stack vertically — same content, just laid out by
+          available width. */}
+      <div
+        style={
+          is_desktop
+            ? {
+                display: "grid",
+                gridTemplateColumns: "minmax(0, 1fr) 340px",
+                gap: 16,
+                alignItems: "start",
+              }
+            : { display: "flex", flexDirection: "column", gap: 16 }
+        }
+      >
+        {/* Left column: lineup view toggle + rosters / pitch */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <div
+              role="tablist"
+              style={{
+                display: "inline-flex",
+                background: "rgba(255,255,255,.03)",
+                border: "1px solid rgba(255,255,255,.06)",
+                borderRadius: 8,
+                padding: 3,
+                gap: 2,
+              }}
+            >
+              {(["list", "pitch"] as const).map(m => {
+                const active = view_mode === m;
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => set_view_mode(m)}
+                    style={{
+                      padding: "5px 12px",
+                      border: "none",
+                      background: active ? "rgba(255,255,255,.08)" : "transparent",
+                      color: active ? "#fff" : "rgba(255,255,255,.5)",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      letterSpacing: 0.3,
+                      borderRadius: 6,
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    {m === "list" ? "List" : "Pitch"}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {view_mode === "list" ? (
+            <DualRoster
+              home_xi={only_match_players(match.home_xi)}
+              away_xi={match.away_xi}
+              home_bench={match.home_bench ?? []}
+              away_bench={match.away_bench ?? []}
+              home_title={`${home_team?.flag ?? ""} ${home_team?.name ?? match.home_team_id}`.trim()}
+              away_title={`${away_team?.flag ?? ""} ${away_team?.name ?? match.away_team_id}`.trim()}
+              home_color={match.home_kit_color ?? home_team?.color}
+              away_color={match.away_kit_color ?? away_team?.color}
+              card={card}
+              on_open_player={on_open_player_profile}
+            />
+          ) : (
+            <div>
+              <PitchView
+                match={match}
+                home_color={match.home_kit_color ?? home_team?.color}
+                away_color={match.away_kit_color ?? away_team?.color}
+                on_open_player={on_open_player_profile}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Right column: Stats + Commentary, both bounded so they never
+            push the page height beyond the viewport. Sticky on desktop. */}
+        <aside
+          style={
+            is_desktop
+              ? {
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 14,
+                  position: "sticky",
+                  top: 16,
+                  alignSelf: "start",
+                  maxHeight: "calc(100vh - 32px)",
+                }
+              : { display: "flex", flexDirection: "column", gap: 14 }
+          }
         >
-          {(["list", "pitch"] as const).map(m => {
-            const active = view_mode === m;
+          <TeamStatsPanel
+            stats={team_stats}
+            home_team_id={match.home_team_id}
+            away_team_id={match.away_team_id}
+            home_color={match.home_kit_color ?? home_team?.color}
+            away_color={match.away_kit_color ?? away_team?.color}
+            card={card}
+          />
+          <div
+            style={{
+              ...card,
+              display: "flex",
+              flexDirection: "column",
+              minHeight: 0,
+              flex: is_desktop ? 1 : "none",
+              maxHeight: is_desktop ? undefined : 480,
+            }}
+          >
+            <div
+              style={{
+                padding: "12px 16px",
+                fontSize: 12,
+                fontWeight: 700,
+                color: "rgba(255,255,255,.6)",
+                borderBottom: "1px solid rgba(255,255,255,.05)",
+                flexShrink: 0,
+              }}
+            >
+              Commentary
+            </div>
+            <div style={{ overflowY: "auto", minHeight: 0, flex: 1 }}>
+              <Commentary comments={commentaries_chrono} loading={commentaries === null} />
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function useIsDesktop(): boolean {
+  const [is_desktop, set_is_desktop] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return window.matchMedia("(min-width: 1024px)").matches;
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mql = window.matchMedia("(min-width: 1024px)");
+    const handler = (e: MediaQueryListEvent) => set_is_desktop(e.matches);
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, []);
+  return is_desktop;
+}
+
+// Subset of Sportmonks stat codes surfaced in the side panel. Presentational
+// localization only — the data itself is the provider's. Order matters: it
+// drives the row order in the panel.
+const STAT_ROWS: { code: string; label: string; is_pct?: boolean }[] = [
+  { code: "ball-possession", label: "Possession", is_pct: true },
+  { code: "shots-total", label: "Shots" },
+  { code: "shots-on-target", label: "On target" },
+  { code: "corners", label: "Corners" },
+  { code: "fouls", label: "Fouls" },
+  { code: "yellowcards", label: "Yellow cards" },
+  { code: "passes", label: "Passes" },
+  { code: "successful-passes-percentage", label: "Pass accuracy", is_pct: true },
+  { code: "dangerous-attacks", label: "Dangerous attacks" },
+];
+
+function TeamStatsPanel({
+  stats,
+  home_team_id,
+  away_team_id,
+  home_color,
+  away_color,
+  card,
+}: {
+  stats: TeamMatchStats | null;
+  home_team_id: string;
+  away_team_id: string;
+  home_color?: string;
+  away_color?: string;
+  card: CSSProperties;
+}) {
+  const home = stats?.[home_team_id] ?? {};
+  const away = stats?.[away_team_id] ?? {};
+  const has_any = STAT_ROWS.some(r => r.code in home || r.code in away);
+  return (
+    <div style={card}>
+      <div
+        style={{
+          padding: "12px 16px",
+          fontSize: 12,
+          fontWeight: 700,
+          color: "rgba(255,255,255,.6)",
+          borderBottom: "1px solid rgba(255,255,255,.05)",
+        }}
+      >
+        Match stats
+      </div>
+      {stats === null ? (
+        <div style={{ padding: 16, fontSize: 12, color: "rgba(255,255,255,.4)" }}>loading…</div>
+      ) : !has_any ? (
+        <div style={{ padding: 16, fontSize: 12, color: "rgba(255,255,255,.4)" }}>No stats yet.</div>
+      ) : (
+        <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+          {STAT_ROWS.map(row => {
+            const h = home[row.code];
+            const a = away[row.code];
+            if (h == null && a == null) return null;
             return (
-              <button
-                key={m}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => set_view_mode(m)}
-                style={{
-                  padding: "5px 12px",
-                  border: "none",
-                  background: active ? "rgba(255,255,255,.08)" : "transparent",
-                  color: active ? "#fff" : "rgba(255,255,255,.5)",
-                  fontSize: 11,
-                  fontWeight: 700,
-                  letterSpacing: 0.3,
-                  borderRadius: 6,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-              >
-                {m === "list" ? "List" : "Pitch"}
-              </button>
+              <StatRow
+                key={row.code}
+                label={row.label}
+                home={h}
+                away={a}
+                is_pct={row.is_pct}
+                home_color={home_color}
+                away_color={away_color}
+              />
             );
           })}
         </div>
-      </div>
-
-      {view_mode === "list" ? (
-        /* Rosters — the two line-ups, grouped by position. Section labels are
-           centered and span both columns so the home / away grids stay aligned
-           even when teams have different counts per position. */
-        <DualRoster
-          home_xi={only_match_players(match.home_xi)}
-          away_xi={match.away_xi}
-          home_bench={match.home_bench ?? []}
-          away_bench={match.away_bench ?? []}
-          home_title={`${home_team?.flag ?? ""} ${home_team?.name ?? match.home_team_id}`.trim()}
-          away_title={`${away_team?.flag ?? ""} ${away_team?.name ?? match.away_team_id}`.trim()}
-          home_color={match.home_kit_color ?? home_team?.color}
-          away_color={match.away_kit_color ?? away_team?.color}
-          card={card}
-          on_open_player={on_open_player_profile}
-        />
-      ) : (
-        // Stay within the 820-wide content column — any breakout was
-        // forcing horizontal scroll once the App sidebar + browser chrome
-        // were accounted for. The trapezoid still reads cleanly at 820 px.
-        <div>
-          <PitchView
-            match={match}
-            home_color={match.home_kit_color ?? home_team?.color}
-            away_color={match.away_kit_color ?? away_team?.color}
-            on_open_player={on_open_player_profile}
-          />
-        </div>
       )}
+    </div>
+  );
+}
 
-      {/* Commentary */}
-      <div style={card}>
-        <div style={{ padding: "12px 16px", fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,.6)", borderBottom: "1px solid rgba(255,255,255,.05)" }}>
-          Commentary
-        </div>
-        <Commentary comments={commentaries_chrono} loading={commentaries === null} />
+function StatRow({
+  label,
+  home,
+  away,
+  is_pct,
+  home_color,
+  away_color,
+}: {
+  label: string;
+  home: number | undefined;
+  away: number | undefined;
+  is_pct?: boolean;
+  home_color?: string;
+  away_color?: string;
+}) {
+  const home_v = home ?? 0;
+  const away_v = away ?? 0;
+  const total = home_v + away_v;
+  const home_share = total > 0 ? home_v / total : 0.5;
+  const fmt = (v: number | undefined) => (v == null ? "—" : is_pct ? `${Math.round(v)}%` : String(Math.round(v)));
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: "#fff", minWidth: 32 }}>
+          {fmt(home)}
+        </span>
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 700,
+            color: "rgba(255,255,255,.45)",
+            letterSpacing: 0.5,
+            textTransform: "uppercase",
+          }}
+        >
+          {label}
+        </span>
+        <span
+          className="mono"
+          style={{ fontSize: 12, fontWeight: 700, color: "#fff", minWidth: 32, textAlign: "right" }}
+        >
+          {fmt(away)}
+        </span>
+      </div>
+      <div style={{ display: "flex", height: 3, borderRadius: 2, overflow: "hidden", background: "rgba(255,255,255,.05)" }}>
+        <div
+          style={{
+            width: `${home_share * 100}%`,
+            background: home_color ?? "rgba(255,255,255,.5)",
+          }}
+        />
+        <div
+          style={{
+            width: `${(1 - home_share) * 100}%`,
+            background: away_color ?? "rgba(255,255,255,.25)",
+          }}
+        />
       </div>
     </div>
   );

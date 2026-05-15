@@ -197,7 +197,7 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
       ? ((chart_points[chart_points.length - 1] - chart_points[0]) / chart_points[0]) * 100
       : 0;
   const period_is_up = chart_points.length > 1 && chart_points[chart_points.length - 1] >= chart_points[0];
-  const period_color = period_is_up ? "#183C82" : "#F41258";
+  const period_color = period_is_up ? "var(--color-chart-primary)" : "var(--color-action-sell)";
 
   return (
     <Sheet open={true} on_close={on_close} max_width={1080}>
@@ -341,7 +341,7 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
             const fmt_pct = (v: number | null): string =>
               v === null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
             const pct_color = (v: number | null): string | undefined =>
-              v === null ? undefined : v >= 0 ? "#216c6e" : "#E41541";
+              v === null ? undefined : v >= 0 ? "var(--color-positive)" : "var(--color-negative)";
             return (
               <SectionCard title="Valuation">
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 0 }}>
@@ -350,7 +350,7 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
                   <SmallKpi
                     label="P&L"
                     value={pnl !== null ? fmt_eur_m_signed(pnl) : "—"}
-                    color={pnl !== null ? (pnl >= 0 ? "#216c6e" : "#E41541") : undefined}
+                    color={pnl !== null ? (pnl >= 0 ? "var(--color-positive)" : "var(--color-negative)") : undefined}
                   />
                   <SmallKpi label="Since Start" value={fmt_pct(since_start_pct)} color={pct_color(since_start_pct)} />
                   <SmallKpi label="Last Match" value={fmt_pct(last_match_pct)} color={pct_color(last_match_pct)} />
@@ -508,7 +508,7 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
               const first_price = price_history[0].price;
               const delta_pct = first_price !== 0 ? ((rec.price - first_price) / first_price) * 100 : 0;
               const delta_label = `${delta_pct >= 0 ? "+" : ""}${delta_pct.toFixed(2)}%`;
-              const delta_color = delta_pct >= 0 ? "#216c6e" : "#E41541";
+              const delta_color = delta_pct >= 0 ? "var(--color-positive)" : "var(--color-negative)";
               return (
                 <div
                   style={{
@@ -636,7 +636,7 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
                       ? "L"
                       : "D";
               const result_color =
-                result === "W" ? "#216c6e" : result === "L" ? "#E41541" : "rgba(255,255,255,.45)";
+                result === "W" ? "var(--color-positive)" : result === "L" ? "var(--color-negative)" : "rgba(255,255,255,.45)";
               const dt = m.kickoff_at ? new Date(m.kickoff_at) : null;
               const date_label = dt
                 ? dt.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "2-digit" })
@@ -653,8 +653,8 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
                 m.in_match_pct == null
                   ? "rgba(255,255,255,.3)"
                   : m.in_match_pct >= 0
-                    ? "#216c6e"
-                    : "#E41541";
+                    ? "var(--color-positive)"
+                    : "var(--color-negative)";
               return (
                 <div
                   key={m.fixture_id}
@@ -681,7 +681,7 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
                         fontSize: 9,
                         fontWeight: 800,
                         color: "#fff",
-                        background: "#F41258",
+                        background: "var(--color-action-sell)",
                         padding: "2px 5px",
                         borderRadius: 3,
                         letterSpacing: 0.6,
@@ -892,12 +892,12 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
                 <SmallKpi
                   label="Goals"
                   value={String(tournament_stats.goals ?? 0)}
-                  color={(tournament_stats.goals ?? 0) > 0 ? "#216c6e" : undefined}
+                  color={(tournament_stats.goals ?? 0) > 0 ? "var(--color-positive)" : undefined}
                 />
                 <SmallKpi
                   label="Assists"
                   value={String(tournament_stats.assists ?? 0)}
-                  color={(tournament_stats.assists ?? 0) > 0 ? "#216c6e" : undefined}
+                  color={(tournament_stats.assists ?? 0) > 0 ? "var(--color-positive)" : undefined}
                 />
                 <SmallKpi
                   label="Shots"
@@ -911,7 +911,7 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
                 <SmallKpi
                   label="Red Cards"
                   value={String(tournament_stats.red_cards ?? 0)}
-                  color={(tournament_stats.red_cards ?? 0) > 0 ? "#E41541" : undefined}
+                  color={(tournament_stats.red_cards ?? 0) > 0 ? "var(--color-negative)" : undefined}
                 />
                 <SmallKpi label="Key Passes" value={String(tournament_stats.key_passes ?? 0)} />
               </div>
@@ -929,7 +929,7 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
                 fontSize: 14,
                 fontWeight: 800,
                 borderRadius: 10,
-                background: "#5CF26C",
+                background: "var(--color-action-buy)",
                 color: "#fff",
                 border: "none",
                 cursor: "pointer",
@@ -947,7 +947,7 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
                 fontSize: 14,
                 fontWeight: 800,
                 borderRadius: 10,
-                background: "#F41258",
+                background: "var(--color-action-sell)",
                 color: "#fff",
                 border: "none",
                 cursor: "pointer",
@@ -1062,7 +1062,7 @@ function YourPositionCard({ player, current_price }: { player: Player; current_p
     <div style={card_style}>
       {header(
         is_long ? "LONG" : "SHORT",
-        is_long ? "#216c6e" : "#E41541",
+        is_long ? "var(--color-positive)" : "var(--color-negative)",
         is_long ? "rgba(55,255,99,.1)" : "rgba(255,40,93,.1)",
       )}
       <div
@@ -1081,12 +1081,12 @@ function YourPositionCard({ player, current_price }: { player: Player; current_p
         <PositionStat
           label="P&L"
           value={fmt_eur_m_signed(pnl)}
-          color={pnl >= 0 ? "#216c6e" : "#E41541"}
+          color={pnl >= 0 ? "var(--color-positive)" : "var(--color-negative)"}
         />
         <PositionStat
           label="Return"
           value={`${return_pct >= 0 ? "+" : ""}${return_pct.toFixed(1)}%`}
-          color={return_pct >= 0 ? "#216c6e" : "#E41541"}
+          color={return_pct >= 0 ? "var(--color-positive)" : "var(--color-negative)"}
         />
         <PositionStat label="% portfolio" value={`${portfolio_pct.toFixed(1)}%`} />
       </div>

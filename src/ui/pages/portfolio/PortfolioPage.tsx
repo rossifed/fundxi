@@ -5,25 +5,37 @@ import { teams_api } from "@/api/teams_api";
 import { valuations_api } from "@/api/valuations_api";
 import { POSITION_LABEL } from "@/domain/player/player";
 import type { Player } from "@/domain/player/player";
+import type { HoldingMetrics } from "@/domain/portfolio/portfolio_metrics";
 import { PlayerChip } from "@/ui/components/PlayerChip";
 import { PositionBadge } from "@/ui/components/PositionBadge";
 import { PerformanceChart } from "@/ui/components/PerformanceChart";
 import { Donut } from "@/ui/components/Donut";
 import { spark_market_index } from "@/infrastructure/repositories/valuations_repository";
 import { fmt_eur_m, fmt_eur_m_signed, fmt_shares } from "@/ui/helpers/format";
+
+function fmt_short_date(iso: string | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, { day: "2-digit", month: "short" });
+}
 import { usePricesLiveVersion, useLiveRefetch } from "@/ui/hooks/use_live_updates";
 
 type PositionsTab = "positions" | "trades";
 
+// Palette built around the PerformanceChart accent ``var(--color-chart-primary)``. Same
+// hue family, slightly brighter so the fill-opacity on the Pie cells
+// (~0.55) reveals the gradient background through the slices —
+// matches the semi-transparent feel of the perf chart's area fill.
 const CHART_PALETTE = [
-  "rgba(255,255,255,.7)",
-  "rgba(255,255,255,.5)",
-  "rgba(255,255,255,.35)",
-  "rgba(255,255,255,.22)",
-  "rgba(255,255,255,.14)",
-  "rgba(255,255,255,.09)",
-  "rgba(255,255,255,.06)",
-  "rgba(255,255,255,.04)",
+  "#7C92E5",
+  "#5E7AD4",
+  "#4561C2",
+  "#3F5BBE",
+  "#2D4AA5",
+  "#1F3D8B",
+  "var(--color-chart-primary)",
+  "#15326D",
 ];
 
 interface PortfolioPageProps {
@@ -116,6 +128,18 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
 
   const sorted_holdings = useMemo(() => [...holdings].sort((a, b) => b.market_value - a.market_value), [holdings]);
 
+  // Earliest trade per player → opening date of the current position.
+  // For longs that's the first buy; for shorts the first sell. We just
+  // take the earliest of any kind matching this player_id.
+  const opened_by_player = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const t of trades) {
+      const cur = map.get(t.player_id);
+      if (!cur || t.date < cur) map.set(t.player_id, t.date);
+    }
+    return map;
+  }, [trades]);
+
   const team_items = by_team.map((t, i) => ({
     label: `${t.flag} ${t.name}`,
     color: CHART_PALETTE[i] ?? CHART_PALETTE.at(-1)!,
@@ -138,7 +162,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       {/* KPI row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 12 }}>
         <KpiCard label="Total Value" value={fmt_eur_m(total_value)} />
         <KpiCard label="Cash" value={fmt_eur_m(totals.cash)} />
         <KpiCard label="Invested" value={fmt_eur_m(totals.total_cost)} />
@@ -146,51 +170,68 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
         <KpiCard
           label="P&L"
           value={fmt_eur_m_signed(pnl)}
-          color={pnl >= 0 ? "#216c6e" : "#E41541"}
+          color={pnl >= 0 ? "var(--color-positive)" : "var(--color-negative)"}
         />
         <KpiCard
           label="Return"
           value={`${return_pct >= 0 ? "+" : ""}${return_pct.toFixed(1)}%`}
-          color={return_pct >= 0 ? "#216c6e" : "#E41541"}
+          color={return_pct >= 0 ? "var(--color-positive)" : "var(--color-negative)"}
         />
+        <KpiCard label="Trades" value={String(trades.length)} />
       </div>
 
-      {/* Performance chart */}
+      {/* Row-aligned grid: each "row" places a left-col widget next to
+          its right-rail counterpart so their headers line up vertically.
+          Row 1: Perf chart        | Long/Short + Wins/Losses stack
+          Row 2: Position/Age pies | By team
+          Row 3: Positions/Trades spans both columns. */}
       <div
         style={{
-          background: "rgba(255,255,255,.02)",
-          border: "1px solid rgba(255,255,255,.04)",
-          borderRadius: 12,
-          padding: "16px 20px",
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1fr) 340px",
+          columnGap: 16,
+          rowGap: 16,
+          alignItems: "start",
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 800 }}>Performance</div>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", marginTop: 2 }}>Since tournament start</div>
+        {/* Row 1 left — Performance chart */}
+        <div
+          style={{
+            background: "rgba(255,255,255,.02)",
+            border: "1px solid rgba(255,255,255,.04)",
+            borderRadius: 12,
+            padding: "16px 20px",
+            minWidth: 0,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 800 }}>Performance</div>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", marginTop: 2 }}>Since tournament start</div>
+            </div>
+            <span className="mono" style={{ fontSize: 18, fontWeight: 800, color: period_return >= 0 ? "var(--color-positive)" : "var(--color-negative)" }}>
+              {period_return >= 0 ? "+" : ""}{period_return.toFixed(1)}%
+            </span>
           </div>
-          <span className="mono" style={{ fontSize: 18, fontWeight: 800, color: period_return >= 0 ? "#216c6e" : "#E41541" }}>
-            {period_return >= 0 ? "+" : ""}{period_return.toFixed(1)}%
-          </span>
+          <PerformanceChart data={performance_data} height={220} />
         </div>
-        <PerformanceChart data={performance_data} width={1100} height={220} />
-      </div>
 
-      {/* Breakdown — stacked, all visible at once */}
-      <BreakdownCard title="By team" items={team_items} />
-      <BreakdownCard title="By position" items={position_items} />
-      <BreakdownCard title="By age" items={age_items} />
-      <ExposureCard total_value={total_value} />
+        {/* Row 1 right — Long/Short + Wins/Losses stacked */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <ExposureCard total_value={total_value} />
+          <WinLossCard holdings={holdings} />
+        </div>
 
-      {/* Positions / Trade history — single column, tabbed */}
-      <div
-        style={{
-          background: "rgba(255,255,255,.02)",
-          border: "1px solid rgba(255,255,255,.04)",
-          borderRadius: 12,
-          overflow: "hidden",
-        }}
-      >
+        {/* Row 2 — Positions / Trade history (full width, primary view) */}
+        <div
+          style={{
+            gridColumn: "1 / -1",
+            background: "rgba(255,255,255,.02)",
+            border: "1px solid rgba(255,255,255,.04)",
+            borderRadius: 12,
+            overflow: "hidden",
+          }}
+        >
         <div
           style={{
             display: "flex",
@@ -234,7 +275,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "minmax(0, 2.4fr) 90px 90px 110px 100px 90px",
+                gridTemplateColumns: "minmax(0, 2.4fr) 80px 100px 80px 100px 100px 90px",
                 padding: "10px 18px",
                 borderBottom: "1px solid rgba(255,255,255,.04)",
                 fontSize: 10,
@@ -247,11 +288,13 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
             >
               <span>Player</span>
               <span>Pos</span>
+              <span>Opened</span>
               <span style={{ textAlign: "right" }}>Shares</span>
               <span style={{ textAlign: "right" }}>Avg buy</span>
               <span style={{ textAlign: "right" }}>Value</span>
               <span style={{ textAlign: "right" }}>P&L</span>
             </div>
+            <div className="scroll-visible" style={{ maxHeight: 480, overflowY: "auto" }}>
             {sorted_holdings.map(h => {
               const team = teams_api.get(h.player.team_id);
               return (
@@ -260,7 +303,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                   onClick={() => on_open_player(h.player)}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "minmax(0, 2.4fr) 90px 90px 110px 100px 90px",
+                    gridTemplateColumns: "minmax(0, 2.4fr) 80px 100px 80px 100px 100px 90px",
                     padding: "11px 18px",
                     borderBottom: "1px solid rgba(255,255,255,.025)",
                     cursor: "pointer",
@@ -272,10 +315,16 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                    <PlayerChip jersey_number={h.player.jersey_number} team_color={team?.color ?? "#666"} size={30} />
+                    <PlayerAvatar player={h.player} team_color={team?.color ?? "#666"} size={36} />
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {h.player.name}
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                        <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,.45)", flexShrink: 0 }}>
+                          {h.player.jersey_number}
+                        </span>
+                        <span style={{ fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
+                          {h.player.name}
+                        </span>
+                        <SideBadge shares={h.shares} />
                       </div>
                       <div style={{ fontSize: 11, color: "rgba(255,255,255,.3)", display: "flex", alignItems: "center", gap: 4 }}>
                         <span>{team?.flag}</span>
@@ -284,6 +333,9 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                     </div>
                   </div>
                   <PositionBadge position={h.player.position} />
+                  <span className="mono" style={{ fontSize: 12, color: "rgba(255,255,255,.55)" }}>
+                    {fmt_short_date(opened_by_player.get(h.player_id))}
+                  </span>
                   <span className="mono" style={{ textAlign: "right", fontWeight: 700 }}>{fmt_shares(h.shares)}</span>
                   <span className="mono" style={{ textAlign: "right", color: "rgba(255,255,255,.55)" }}>
                     €{h.average_buy_price}M
@@ -296,7 +348,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                     style={{
                       textAlign: "right",
                       fontWeight: 700,
-                      color: h.pnl >= 0 ? "#216c6e" : "#E41541",
+                      color: h.pnl >= 0 ? "var(--color-positive)" : "var(--color-negative)",
                     }}
                   >
                     {h.pnl >= 0 ? "+" : ""}{h.return_pct.toFixed(1)}%
@@ -304,6 +356,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                 </div>
               );
             })}
+            </div>
           </>
         ) : (
           <>
@@ -328,6 +381,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
               <span style={{ textAlign: "right" }}>Total</span>
               <span style={{ textAlign: "right" }}>Date</span>
             </div>
+            <div className="scroll-visible" style={{ maxHeight: 480, overflowY: "auto" }}>
             {trades
               .slice()
               .reverse()
@@ -354,8 +408,8 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                         fontWeight: 800,
                         padding: "3px 8px",
                         borderRadius: 4,
-                        background: is_buy ? "rgba(34,197,94,.1)" : "rgba(255,40,93,.1)",
-                        color: is_buy ? "#216c6e" : "#E41541",
+                        background: is_buy ? "var(--color-action-buy)" : "var(--color-action-sell)",
+                        color: "#fff",
                         textAlign: "center",
                         letterSpacing: 0.5,
                         width: "fit-content",
@@ -365,15 +419,18 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                     </span>
                     <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
                       {player && (
-                        <PlayerChip
-                          jersey_number={player.jersey_number}
-                          team_color={team?.color ?? "#666"}
-                          size={28}
-                        />
+                        <PlayerAvatar player={player} team_color={team?.color ?? "#666"} size={32} />
                       )}
-                      <span style={{ fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {t.player_name}
-                      </span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                        {player && (
+                          <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,.45)", flexShrink: 0 }}>
+                            {player.jersey_number}
+                          </span>
+                        )}
+                        <span style={{ fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
+                          {t.player_name}
+                        </span>
+                      </div>
                     </div>
                     <span className="mono" style={{ textAlign: "right" }}>{fmt_shares(t.shares)}</span>
                     <span className="mono" style={{ textAlign: "right", color: "rgba(255,255,255,.55)" }}>
@@ -386,8 +443,25 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                   </div>
                 );
               })}
+            </div>
           </>
         )}
+      </div>
+
+        {/* Row 3 — Breakdowns row, full-width 3-col (secondary analytics) */}
+        <div
+          style={{
+            gridColumn: "1 / -1",
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr 1fr",
+            gap: 12,
+            minWidth: 0,
+          }}
+        >
+          <BreakdownCard title="By position" items={position_items} chart="pie" large />
+          <BreakdownCard title="By age" items={age_items} chart="pie" large />
+          <BreakdownCard title="By team" items={team_items} chart="bars" />
+        </div>
       </div>
 
     </div>
@@ -401,8 +475,221 @@ interface BreakdownItem {
   v: number;
 }
 
-function BreakdownCard({ title, items }: { title: string; items: BreakdownItem[] }) {
-  const segments = items.map(x => ({ value: x.v, color: x.color }));
+function BreakdownCard({
+  title,
+  items,
+  chart = "bars",
+  large = false,
+}: {
+  title: string;
+  items: BreakdownItem[];
+  /** ``bars`` = per-row horizontal bars (best for many categories).
+   *  ``pie`` = full pie chart + items list below (best for ≤ 6 segments). */
+  chart?: "bars" | "pie";
+  /** Bigger donut for the wider above-the-fold cards (pie variant only). */
+  large?: boolean;
+}) {
+  const segments = items.map(x => ({ value: x.v, color: x.color, label: x.label }));
+  return (
+    <div
+      style={{
+        background: "rgba(255,255,255,.02)",
+        border: "1px solid rgba(255,255,255,.04)",
+        borderRadius: 12,
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          padding: "9px 14px",
+          borderBottom: "1px solid rgba(255,255,255,.05)",
+          fontSize: 11,
+          fontWeight: 800,
+          color: "rgba(255,255,255,.55)",
+          letterSpacing: 0.5,
+          textTransform: "uppercase",
+        }}
+      >
+        {title}
+      </div>
+      {chart === "pie" ? (
+        <div style={{ padding: 14, display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+          <Donut segments={segments} size={large ? 140 : 130} />
+          <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 1 }}>
+            {items.map((item, i) => {
+              const pct_num = parseFloat(item.pct);
+              const is_negative = pct_num < 0;
+              return (
+                <div
+                  key={i}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "5px 0",
+                    borderBottom: i < items.length - 1 ? "1px solid rgba(255,255,255,.04)" : undefined,
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: 2, background: item.color, flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "#fff" }}>
+                      {item.label}
+                    </span>
+                  </div>
+                  <span
+                    className="mono"
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: is_negative ? "var(--color-negative)" : "rgba(255,255,255,.75)",
+                      flexShrink: 0,
+                    }}
+                  >
+                    {pct_num >= 0 ? "+" : ""}{item.pct}%
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div
+          className="scroll-visible"
+          style={{
+            padding: "12px 14px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+            maxHeight: 290,
+            overflowY: "auto",
+          }}
+        >
+          {items.map((item, i) => {
+            const pct_num = parseFloat(item.pct);
+            const is_negative = pct_num < 0;
+            return (
+              <div key={i} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: "#fff",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      minWidth: 0,
+                    }}
+                  >
+                    {item.label}
+                  </span>
+                  <span
+                    className="mono"
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: is_negative ? "var(--color-negative)" : "rgba(255,255,255,.75)",
+                      flexShrink: 0,
+                    }}
+                  >
+                    {pct_num >= 0 ? "+" : ""}{item.pct}%
+                  </span>
+                </div>
+                <div style={{ height: 5, borderRadius: 2, background: "rgba(255,255,255,.04)", overflow: "hidden" }}>
+                  <div
+                    style={{
+                      width: `${Math.max(2, Math.abs(pct_num))}%`,
+                      height: "100%",
+                      background: is_negative ? "var(--color-negative)" : item.color,
+                      borderRadius: 2,
+                      transition: "width .3s ease",
+                    }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Player avatar: Sportmonks photo when available, falls back to the
+ * team-color jersey-number chip. Same pattern as the Screener. */
+function PlayerAvatar({ player, team_color, size }: { player: Player; team_color: string; size: number }) {
+  if (player.image_path) {
+    return (
+      <img
+        src={player.image_path}
+        alt={player.full_name ?? player.name}
+        style={{
+          width: size,
+          height: size,
+          borderRadius: 8,
+          objectFit: "contain",
+          background: "rgba(255,255,255,.05)",
+          border: "1px solid rgba(255,255,255,.08)",
+          flexShrink: 0,
+        }}
+      />
+    );
+  }
+  return <PlayerChip jersey_number={player.jersey_number} team_color={team_color} size={size} />;
+}
+
+function SideBadge({ shares }: { shares: number }) {
+  const is_short = shares < 0;
+  return (
+    <span
+      style={{
+        fontSize: 9,
+        fontWeight: 800,
+        padding: "1px 5px",
+        borderRadius: 3,
+        letterSpacing: 0.4,
+        flexShrink: 0,
+        background: is_short ? "var(--color-action-sell)" : "var(--color-action-buy)",
+        color: "#fff",
+      }}
+    >
+      {is_short ? "SHORT" : "LONG"}
+    </span>
+  );
+}
+
+function KpiCard({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div
+      style={{
+        background: "rgba(255,255,255,.025)",
+        border: "1px solid rgba(255,255,255,.05)",
+        borderRadius: 12,
+        padding: "14px 16px",
+      }}
+    >
+      <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", letterSpacing: 0.4, textTransform: "uppercase", fontWeight: 600 }}>
+        {label}
+      </div>
+      <div className="mono" style={{ fontSize: 22, fontWeight: 800, color: color ?? "#fff", marginTop: 4 }}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+/** Win / Loss card — same layout as ``ExposureCard`` (Long / Short)
+ * but counts open positions by P&L sign. Stacked bar at the top,
+ * three cells below: Winners / Flat / Losers. */
+function WinLossCard({ holdings }: { holdings: HoldingMetrics[] }) {
+  const winners = holdings.filter(h => h.pnl > 0).length;
+  const losers = holdings.filter(h => h.pnl < 0).length;
+  const flat = holdings.length - winners - losers;
+  const total = holdings.length || 1;
+  const win_pct = (winners / total) * 100;
+  const loss_pct = (losers / total) * 100;
+  const flat_pct = (flat / total) * 100;
   return (
     <div
       style={{
@@ -423,59 +710,64 @@ function BreakdownCard({ title, items }: { title: string; items: BreakdownItem[]
           textTransform: "uppercase",
         }}
       >
-        {title}
+        Trades Wins / Losses
       </div>
-      <div style={{ padding: 18, display: "flex", alignItems: "flex-start", gap: 24 }}>
-        <Donut segments={segments} size={120} />
+      <div style={{ padding: 18 }}>
         <div
           style={{
-            flex: 1,
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "2px 24px",
+            height: 30,
+            borderRadius: 6,
+            overflow: "hidden",
+            display: "flex",
+            marginBottom: 14,
+            border: "1px solid rgba(255,255,255,.06)",
           }}
         >
-          {items.map((item, i) => (
+          {winners > 0 && (
             <div
-              key={i}
               style={{
+                width: `${win_pct}%`,
+                background: "rgba(55,255,99,.18)",
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "space-between",
-                padding: "6px 0",
-                borderBottom: "1px solid rgba(255,255,255,.04)",
+                justifyContent: "center",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                <div style={{ width: 8, height: 8, borderRadius: 2, background: item.color, flexShrink: 0 }} />
-                <span style={{ fontSize: 12, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {item.label}
-                </span>
-              </div>
-              <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: item.color }}>{item.pct}%</span>
+              <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: "var(--color-positive)" }}>{win_pct.toFixed(0)}%</span>
             </div>
-          ))}
+          )}
+          {flat > 0 && (
+            <div
+              style={{
+                width: `${flat_pct}%`,
+                background: "rgba(255,255,255,.06)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: "rgba(255,255,255,.5)" }}>{flat_pct.toFixed(0)}%</span>
+            </div>
+          )}
+          {losers > 0 && (
+            <div
+              style={{
+                width: `${loss_pct}%`,
+                background: "rgba(255,40,93,.18)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: "var(--color-negative)" }}>{loss_pct.toFixed(0)}%</span>
+            </div>
+          )}
         </div>
-      </div>
-    </div>
-  );
-}
-
-function KpiCard({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <div
-      style={{
-        background: "rgba(255,255,255,.025)",
-        border: "1px solid rgba(255,255,255,.05)",
-        borderRadius: 12,
-        padding: "14px 16px",
-      }}
-    >
-      <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", letterSpacing: 0.4, textTransform: "uppercase", fontWeight: 600 }}>
-        {label}
-      </div>
-      <div className="mono" style={{ fontSize: 22, fontWeight: 800, color: color ?? "#fff", marginTop: 4 }}>
-        {value}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+          <ExposureCell label="Winners" value={String(winners)} color="var(--color-positive)" />
+          <ExposureCell label="Flat" value={String(flat)} color="rgba(255,255,255,.7)" />
+          <ExposureCell label="Losers" value={String(losers)} color="var(--color-negative)" />
+        </div>
       </div>
     </div>
   );
@@ -502,7 +794,7 @@ function ExposureCard({ total_value }: { total_value: number }) {
           textTransform: "uppercase",
         }}
       >
-        Long / Short
+        Position Long / Short
       </div>
       <div style={{ padding: 18 }}>
         <ExposureView total_value={total_value} />
@@ -541,7 +833,7 @@ function ExposureView({ total_value }: { total_value: number }) {
             justifyContent: "center",
           }}
         >
-          <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: "#216c6e" }}>📈 {long_pct}%</span>
+          <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: "var(--color-positive)" }}>{long_pct}%</span>
         </div>
         <div
           style={{
@@ -552,21 +844,13 @@ function ExposureView({ total_value }: { total_value: number }) {
             justifyContent: "center",
           }}
         >
-          <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: "#E41541" }}>📉 {short_pct}%</span>
+          <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: "var(--color-negative)" }}>{short_pct}%</span>
         </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-        <ExposureCell label="Long" value={fmt_eur_m(long_value)} color="#216c6e" />
-        <ExposureCell label="Short" value={fmt_eur_m(short_value)} color="#E41541" />
+        <ExposureCell label="Long" value={fmt_eur_m(long_value)} color="var(--color-positive)" />
+        <ExposureCell label="Short" value={fmt_eur_m(short_value)} color="var(--color-negative)" />
         <ExposureCell label="Net" value={fmt_eur_m_signed(net_exposure)} color="rgba(255,255,255,.7)" />
-      </div>
-      <div style={{ marginTop: 14, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,.05)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 12 }}>
-          <span style={{ color: "rgba(255,255,255,.35)" }}>L/S Ratio</span>
-          <span className="mono" style={{ fontWeight: 700 }}>
-            {short_value > 0 ? `${(long_value / short_value).toFixed(1)}x` : "∞"}
-          </span>
-        </div>
       </div>
     </div>
   );

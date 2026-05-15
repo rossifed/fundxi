@@ -75,8 +75,8 @@ const STROKE = 0.45;
 const TOUCHLINE_STROKE = 0.75;
 const STRIPE_COUNT = 6; // alternating bands across the pitch length
 
-const POS = "#216c6e";
-const NEG = "#E41541";
+const POS = "var(--color-positive)";
+const NEG = "var(--color-negative)";
 
 function fmt_pct_token(v: number): string {
   return `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;

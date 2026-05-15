@@ -453,7 +453,10 @@ export function ScreenerPage({ on_open_player, watchlist, toggle_watch }: Screen
         </div>
 
         {/* Body */}
-        <div style={{ display: "flex", flexDirection: "column" }}>
+        <div
+          className="scroll-visible"
+          style={{ display: "flex", flexDirection: "column", maxHeight: 640, overflowY: "auto" }}
+        >
           {filtered.map(e => {
             const team = teams_api.get(e.team_id);
             const watched = watchlist?.has(e.id) ?? false;
@@ -683,7 +686,7 @@ function fmt_int(v: number | null): string {
 
 function pct_color(v: number | null): string | undefined {
   if (v === null) return undefined;
-  return v >= 0 ? "#216c6e" : "#E41541";
+  return v >= 0 ? "var(--color-positive)" : "var(--color-negative)";
 }
 
 function ScreenerCell({ entry: e, column: c }: { entry: ScreenerEntry; column: ColumnDef }) {
@@ -705,7 +708,7 @@ function ScreenerCell({ entry: e, column: c }: { entry: ScreenerEntry; column: C
           className="mono"
           style={{
             ...base_style,
-            color: e.pnl == null ? "rgba(255,255,255,.3)" : e.pnl >= 0 ? "#216c6e" : "#E41541",
+            color: e.pnl == null ? "rgba(255,255,255,.3)" : e.pnl >= 0 ? "var(--color-positive)" : "var(--color-negative)",
           }}
         >
           {e.pnl == null ? "—" : `${e.pnl >= 0 ? "+" : ""}${e.pnl.toFixed(2)}M`}
@@ -735,13 +738,13 @@ function ScreenerCell({ entry: e, column: c }: { entry: ScreenerEntry; column: C
       return <span className="mono" style={base_style}>{fmt_int(e.minutes_played)}</span>;
     case "goals":
       return (
-        <span className="mono" style={{ ...base_style, color: (e.goals ?? 0) > 0 ? "#216c6e" : undefined }}>
+        <span className="mono" style={{ ...base_style, color: (e.goals ?? 0) > 0 ? "var(--color-positive)" : undefined }}>
           {fmt_int(e.goals)}
         </span>
       );
     case "assists":
       return (
-        <span className="mono" style={{ ...base_style, color: (e.assists ?? 0) > 0 ? "#216c6e" : undefined }}>
+        <span className="mono" style={{ ...base_style, color: (e.assists ?? 0) > 0 ? "var(--color-positive)" : undefined }}>
           {fmt_int(e.assists)}
         </span>
       );
