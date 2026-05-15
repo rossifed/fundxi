@@ -1,6 +1,11 @@
-// Bootstrap: prime all backend-fed repository caches in parallel before the
-// app's UI starts rendering data-bound pages. Mocks (leagues only) initialize
-// themselves at module load and need no action.
+// Repository bootstrap, split by auth requirement.
+//
+// - ``init_public_repositories``  → no auth required (teams, players,
+//   fixtures, valuations, screener, news, matches). Runs for every
+//   visitor including anonymous ones.
+// - ``init_authenticated_repositories``  → require a logged-in session
+//   (portfolio, trades). Called after login / on app boot when
+//   ``/api/auth/me`` returns a user.
 
 import { init_fixtures_repository } from "@/infrastructure/repositories/fixtures_repository";
 import { init_matches_repository } from "@/infrastructure/repositories/matches_repository";
@@ -12,8 +17,7 @@ import { init_teams_repository } from "@/infrastructure/repositories/teams_repos
 import { init_trades_repository } from "@/infrastructure/repositories/trades_repository";
 import { init_valuations_repository } from "@/infrastructure/repositories/valuations_repository";
 
-export async function bootstrap_repositories(): Promise<void> {
-  // First wave: independent repos.
+export async function init_public_repositories(): Promise<void> {
   await Promise.all([
     init_teams_repository(),
     init_players_repository(),
@@ -21,12 +25,9 @@ export async function bootstrap_repositories(): Promise<void> {
     init_valuations_repository(),
     init_screener_repository(),
   ]);
-  // Second wave: depend on the first (news/matches enrich via fixtures+teams,
-  // trades enrich via players, portfolio is independent of the first wave).
-  await Promise.all([
-    init_news_repository(),
-    init_matches_repository(),
-    init_portfolio_repository(),
-    init_trades_repository(),
-  ]);
+  await Promise.all([init_news_repository(), init_matches_repository()]);
+}
+
+export async function init_authenticated_repositories(): Promise<void> {
+  await Promise.all([init_portfolio_repository(), init_trades_repository()]);
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { bootstrap_repositories } from "@/infrastructure/repositories/init";
+import { init_public_repositories } from "@/infrastructure/repositories/init";
 
 type State = "loading" | "ready" | "error";
 
@@ -16,7 +16,7 @@ export function BootstrapGate({ children }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    bootstrap_repositories()
+    init_public_repositories()
       .then(() => {
         if (!cancelled) set_state("ready");
       })

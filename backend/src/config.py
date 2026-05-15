@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     # Cash (in €M) granted to a brand-new user portfolio. No default — must be
     # set explicitly via INITIAL_CASH env var so we don't ship a magic value.
     initial_cash: float = Field(default=0.0)
+    # JWT signing secret. MUST be set in production via the ``JWT_SECRET``
+    # env var (or fundxi will refuse to issue tokens). The default below
+    # is only for local dev convenience.
+    jwt_secret: str = Field(default="dev-only-change-me-in-production")
     log_level: str = Field(default="INFO")
 
 

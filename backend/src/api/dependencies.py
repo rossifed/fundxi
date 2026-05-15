@@ -6,8 +6,11 @@ bound to a fresh AsyncSession.
 
 from collections.abc import AsyncIterator
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.config import get_settings
+from src.infrastructure.security.jwt_tokens import JwtIssuer
 
 from src.domain.valuation.valuation_provider import ValuationProvider
 from src.infrastructure.db.repositories.fixture import SqlAlchemyFixtureRepository
@@ -23,6 +26,24 @@ from src.infrastructure.valuation.engine_valuation_provider import EngineValuati
 async def get_session() -> AsyncIterator[AsyncSession]:
     async with SessionLocal() as session:
         yield session
+
+
+SESSION_COOKIE = "fundxi_session"
+
+
+def get_current_user_id(request: Request) -> int:
+    """Resolve the JWT in the ``fundxi_session`` cookie → user id.
+    Raises 401 if missing or invalid. Use for routes that REQUIRE auth
+    (portfolio, trades, leagues create/join, etc.). Public routes
+    don't take this dependency."""
+    token = request.cookies.get(SESSION_COOKIE)
+    if not token:
+        raise HTTPException(status_code=401, detail="not authenticated")
+    issuer = JwtIssuer(secret=get_settings().jwt_secret)
+    user_id = issuer.verify(token)
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="invalid or expired session")
+    return user_id
 
 
 def get_team_repo(session: AsyncSession = Depends(get_session)) -> SqlAlchemyTeamRepository:

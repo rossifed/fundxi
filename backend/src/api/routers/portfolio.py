@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.dependencies import get_session
+from src.api.dependencies import get_current_user_id, get_session
 from src.api.dtos.portfolio import (
     HoldingResponse,
     PortfolioResponse,
@@ -27,17 +27,14 @@ from src.infrastructure.db.repositories.user import SqlAlchemyUserRepository
 router = APIRouter(tags=["app"])
 
 
-async def _resolve_default_user_and_portfolio(
-    session: AsyncSession,
+async def _resolve_user_and_portfolio(
+    session: AsyncSession, user_id: int
 ) -> tuple[int, str, Portfolio]:
     user_repo = SqlAlchemyUserRepository(session)
     portfolio_repo = SqlAlchemyPortfolioRepository(session)
-    user = await user_repo.get_default_human()
+    user = await user_repo.get_by_id(user_id)
     if user is None:
-        raise HTTPException(
-            status_code=503,
-            detail="default user not bootstrapped — run bootstrap_user worker first",
-        )
+        raise HTTPException(status_code=401, detail="user not found")
     portfolio = await portfolio_repo.get_by_user_id(user.id)
     if portfolio is None:
         raise HTTPException(status_code=503, detail=f"no portfolio for user {user.id}")
@@ -54,17 +51,17 @@ def _portfolio_dto(portfolio: Portfolio, holdings: list[HoldingResponse]) -> Por
 
 
 @router.get("/api/me", response_model=UserResponse)
-async def me(session: AsyncSession = Depends(get_session)) -> UserResponse:
+async def me(user_id: int = Depends(get_current_user_id), session: AsyncSession = Depends(get_session)) -> UserResponse:
     user_repo = SqlAlchemyUserRepository(session)
-    user = await user_repo.get_default_human()
+    user = await user_repo.get_by_id(user_id)
     if user is None:
-        raise HTTPException(status_code=503, detail="default user not bootstrapped")
+        raise HTTPException(status_code=401, detail="user not found")
     return UserResponse(id=user.id, name=user.name, kind=user.kind.value)
 
 
 @router.get("/api/portfolio", response_model=PortfolioResponse)
-async def get_portfolio(session: AsyncSession = Depends(get_session)) -> PortfolioResponse:
-    _, _, portfolio = await _resolve_default_user_and_portfolio(session)
+async def get_portfolio(user_id: int = Depends(get_current_user_id), session: AsyncSession = Depends(get_session)) -> PortfolioResponse:
+    _, _, portfolio = await _resolve_user_and_portfolio(session, user_id)
     portfolio_repo = SqlAlchemyPortfolioRepository(session)
     holdings = await portfolio_repo.list_holdings(portfolio.id)
     return _portfolio_dto(
@@ -77,8 +74,8 @@ async def get_portfolio(session: AsyncSession = Depends(get_session)) -> Portfol
 
 
 @router.post("/api/trades", response_model=TradeOutcomeResponse)
-async def post_trade(body: TradeRequestBody, session: AsyncSession = Depends(get_session)) -> TradeOutcomeResponse:
-    _, _, portfolio = await _resolve_default_user_and_portfolio(session)
+async def post_trade(body: TradeRequestBody, user_id: int = Depends(get_current_user_id), session: AsyncSession = Depends(get_session)) -> TradeOutcomeResponse:
+    _, _, portfolio = await _resolve_user_and_portfolio(session, user_id)
     portfolio_repo = SqlAlchemyPortfolioRepository(session)
     trade_repo = SqlAlchemyTradeRepository(session)
 
@@ -128,8 +125,8 @@ async def post_trade(body: TradeRequestBody, session: AsyncSession = Depends(get
 
 
 @router.get("/api/trades", response_model=list[TradeResponse])
-async def list_trades(session: AsyncSession = Depends(get_session)) -> list[TradeResponse]:
-    _, _, portfolio = await _resolve_default_user_and_portfolio(session)
+async def list_trades(user_id: int = Depends(get_current_user_id), session: AsyncSession = Depends(get_session)) -> list[TradeResponse]:
+    _, _, portfolio = await _resolve_user_and_portfolio(session, user_id)
     trade_repo = SqlAlchemyTradeRepository(session)
     trades = await trade_repo.list_by_portfolio(portfolio.id)
     return [
