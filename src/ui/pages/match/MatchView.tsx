@@ -3,6 +3,7 @@ import type { Match, MatchEvent, MatchPlayer } from "@/domain/match/match";
 import type { MatchComment } from "@/domain/match/match_comment";
 import type { Position } from "@/domain/player/player";
 import { comments_api } from "@/api/comments_api";
+import { fmt_signed_pct } from "@/ui/helpers/format";
 import { matches_api } from "@/api/matches_api";
 import { players_api } from "@/api/players_api";
 import { team_stats_api } from "@/api/team_stats_api";
@@ -41,7 +42,7 @@ const GOAL_GLYPHS = new Set(["⚽", "🎯"]);
 
 function fmt_pct(v: number | undefined | null): string {
   if (v == null) return "—";
-  return `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
+  return `${fmt_signed_pct(v, 1)}`;
 }
 function pct_color(v: number | undefined | null): string {
   if (v == null) return "rgba(255,255,255,.35)";

@@ -12,7 +12,7 @@ import type { PlayerTournamentStat } from "@/infrastructure/repositories/player_
 import type { PlayerMatchEntry } from "@/infrastructure/repositories/player_matches_repository";
 import type { PlayerNewsEntry } from "@/infrastructure/repositories/player_news_repository";
 import { Sheet } from "@/ui/components/Sheet";
-import { fmt_eur_m, fmt_eur_m_signed } from "@/ui/helpers/format";
+import { color_for_sign, fmt_eur_m, fmt_eur_m_signed, fmt_signed_pct } from "@/ui/helpers/format";
 import { PlayerChip } from "@/ui/components/PlayerChip";
 import { PositionBadge } from "@/ui/components/PositionBadge";
 import { usePlayerLiveVersion, useLiveRefetch } from "@/ui/hooks/use_live_updates";
@@ -338,9 +338,9 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
             const apps = tournament_stats?.appearances ?? null;
             const avg_match_pct = since_start_pct !== null && apps && apps > 0 ? since_start_pct / apps : null;
             const fmt_pct = (v: number | null): string =>
-              v === null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
+              v === null ? "—" : `${fmt_signed_pct(v, 1)}`;
             const pct_color = (v: number | null): string | undefined =>
-              v === null ? undefined : v >= 0 ? "var(--color-positive)" : "var(--color-negative)";
+              v === null ? undefined : color_for_sign(v);
             return (
               <SectionCard title="Valuation">
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 0 }}>
@@ -349,7 +349,7 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
                   <SmallKpi
                     label="P&L"
                     value={pnl !== null ? fmt_eur_m_signed(pnl) : "—"}
-                    color={pnl !== null ? (pnl >= 0 ? "var(--color-positive)" : "var(--color-negative)") : undefined}
+                    color={pnl !== null ? (color_for_sign(pnl)) : undefined}
                   />
                   <SmallKpi label="Since Start" value={fmt_pct(since_start_pct)} color={pct_color(since_start_pct)} />
                   <SmallKpi label="Last Match" value={fmt_pct(last_match_pct)} color={pct_color(last_match_pct)} />
@@ -506,8 +506,8 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
               // other: a 14% hover then a 10% hover means a 4pp local drop.
               const first_price = price_history[0].price;
               const delta_pct = compute_return_pct(rec.price, first_price);
-              const delta_label = `${delta_pct >= 0 ? "+" : ""}${delta_pct.toFixed(2)}%`;
-              const delta_color = delta_pct >= 0 ? "var(--color-positive)" : "var(--color-negative)";
+              const delta_label = `${fmt_signed_pct(delta_pct, 2)}`;
+              const delta_color = color_for_sign(delta_pct);
               return (
                 <div
                   style={{
@@ -646,7 +646,7 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
               const score_label = my_score != null && opp_score != null ? `${my_score}-${opp_score}` : "—";
               const pct_label =
                 m.in_match_pct != null
-                  ? `${m.in_match_pct >= 0 ? "+" : ""}${m.in_match_pct.toFixed(2)}%`
+                  ? `${fmt_signed_pct(m.in_match_pct, 2)}`
                   : "—";
               const pct_color =
                 m.in_match_pct == null
@@ -1080,12 +1080,12 @@ function YourPositionCard({ player, current_price }: { player: Player; current_p
         <PositionStat
           label="P&L"
           value={fmt_eur_m_signed(pnl)}
-          color={pnl >= 0 ? "var(--color-positive)" : "var(--color-negative)"}
+          color={color_for_sign(pnl)}
         />
         <PositionStat
           label="Return"
-          value={`${return_pct >= 0 ? "+" : ""}${return_pct.toFixed(1)}%`}
-          color={return_pct >= 0 ? "var(--color-positive)" : "var(--color-negative)"}
+          value={`${fmt_signed_pct(return_pct, 1)}`}
+          color={color_for_sign(return_pct)}
         />
         <PositionStat label="% portfolio" value={`${portfolio_pct.toFixed(1)}%`} />
       </div>

@@ -15,7 +15,7 @@ import {
 import { useLiveRefetch, usePricesLiveVersion } from "@/ui/hooks/use_live_updates";
 import { pulse_class, usePulse } from "@/ui/hooks/use_pulse";
 import { spark_for_player } from "@/infrastructure/repositories/valuations_repository";
-import { price_label } from "@/ui/helpers/format";
+import { color_for_sign, fmt_signed_pct, price_label } from "@/ui/helpers/format";
 import { toggle_set } from "@/ui/helpers/state";
 import { position_color } from "@/ui/design/tokens";
 
@@ -699,7 +699,7 @@ function pluck(e: ScreenerEntry, key: SortKey): number | string | null {
 
 function fmt_pct(v: number | null): string {
   if (v === null) return "—";
-  return `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
+  return `${fmt_signed_pct(v, 1)}`;
 }
 
 function fmt_int(v: number | null): string {
@@ -708,7 +708,7 @@ function fmt_int(v: number | null): string {
 
 function pct_color(v: number | null): string | undefined {
   if (v === null) return undefined;
-  return v >= 0 ? "var(--color-positive)" : "var(--color-negative)";
+  return color_for_sign(v);
 }
 
 function ScreenerCell({ entry: e, column: c }: { entry: ScreenerEntry; column: ColumnDef }) {
@@ -730,7 +730,7 @@ function ScreenerCell({ entry: e, column: c }: { entry: ScreenerEntry; column: C
           className="mono"
           style={{
             ...base_style,
-            color: e.pnl == null ? "rgba(255,255,255,.3)" : e.pnl >= 0 ? "var(--color-positive)" : "var(--color-negative)",
+            color: e.pnl == null ? "rgba(255,255,255,.3)" : color_for_sign(e.pnl),
           }}
         >
           {e.pnl == null ? "—" : `${e.pnl >= 0 ? "+" : ""}${e.pnl.toFixed(2)}M`}

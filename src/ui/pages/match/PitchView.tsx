@@ -10,6 +10,7 @@ import type { Match, MatchPlayer } from "@/domain/match/match";
 import { compute_pitch_positions, type PitchPosition } from "@/domain/match/formation_layout";
 import { players_api } from "@/api/players_api";
 import { teams_api } from "@/api/teams_api";
+import { fmt_signed_pct } from "@/ui/helpers/format";
 
 // SVG canvas. Aspect ≈ 1.6:1 — landscape, slightly taller for breathing room.
 const SVG_W = 200;
@@ -79,7 +80,7 @@ const POS = "var(--color-positive)";
 const NEG = "var(--color-negative)";
 
 function fmt_pct_token(v: number): string {
-  return `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
+  return `${fmt_signed_pct(v, 1)}`;
 }
 
 const TEAM_SELECT_STORAGE_KEY = "fundxi.pitch.team_select";

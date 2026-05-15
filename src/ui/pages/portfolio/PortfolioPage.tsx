@@ -11,7 +11,7 @@ import { PlayerChip } from "@/ui/components/PlayerChip";
 import { PositionBadge } from "@/ui/components/PositionBadge";
 import { PerformanceChart } from "@/ui/components/PerformanceChart";
 import { Donut } from "@/ui/components/Donut";
-import { fmt_eur_m, fmt_eur_m_signed, fmt_shares } from "@/ui/helpers/format";
+import { color_for_sign, fmt_eur_m, fmt_eur_m_signed, fmt_shares, fmt_signed_pct } from "@/ui/helpers/format";
 
 function fmt_short_date(iso: string | undefined): string {
   if (!iso) return "—";
@@ -168,12 +168,12 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
         <KpiCard
           label="P&L"
           value={fmt_eur_m_signed(pnl)}
-          color={pnl >= 0 ? "var(--color-positive)" : "var(--color-negative)"}
+          color={color_for_sign(pnl)}
         />
         <KpiCard
           label="Return"
-          value={`${return_pct >= 0 ? "+" : ""}${return_pct.toFixed(1)}%`}
-          color={return_pct >= 0 ? "var(--color-positive)" : "var(--color-negative)"}
+          value={`${fmt_signed_pct(return_pct, 1)}`}
+          color={color_for_sign(return_pct)}
         />
         <KpiCard label="Trades" value={String(trades.length)} />
       </div>
@@ -207,7 +207,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
               <div style={{ fontSize: 14, fontWeight: 800 }}>Performance</div>
               <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", marginTop: 2 }}>Since tournament start</div>
             </div>
-            <span className="mono" style={{ fontSize: 18, fontWeight: 800, color: period_return >= 0 ? "var(--color-positive)" : "var(--color-negative)" }}>
+            <span className="mono" style={{ fontSize: 18, fontWeight: 800, color: color_for_sign(period_return) }}>
               {period_return >= 0 ? "+" : ""}{period_return.toFixed(1)}%
             </span>
           </div>
@@ -345,7 +345,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                     style={{
                       textAlign: "right",
                       fontWeight: 700,
-                      color: h.pnl >= 0 ? "var(--color-positive)" : "var(--color-negative)",
+                      color: color_for_sign(h.pnl),
                     }}
                   >
                     {h.pnl >= 0 ? "+" : ""}{h.return_pct.toFixed(1)}%
@@ -869,7 +869,7 @@ function ExposureView({ total_value }: { total_value: number }) {
         <ExposureCell
           label="Net"
           value={fmt_eur_m_signed(net_exposure)}
-          color={net_exposure >= 0 ? "var(--color-positive)" : "var(--color-negative)"}
+          color={color_for_sign(net_exposure)}
         />
       </div>
     </div>

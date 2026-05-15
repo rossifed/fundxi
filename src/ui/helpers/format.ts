@@ -12,3 +12,18 @@ export const fmt_eur_m_signed = (value_m: number): string =>
  * with no decimal; sub-shares show 2 decimals (e.g. 0.65). */
 export const fmt_shares = (n: number): string =>
   Number.isInteger(n) ? String(n) : n.toFixed(2);
+
+/** Format a signed percentage with a leading "+" / "-" and N decimals.
+ * Returns "—" when the value is null/undefined (no data). */
+export const fmt_signed_pct = (v: number | null | undefined, decimals = 1): string => {
+  if (v == null) return "—";
+  return `${v >= 0 ? "+" : ""}${v.toFixed(decimals)}%`;
+};
+
+/** Canonical sign-based color token (positive / negative / muted-neutral
+ * when null). Returns a ``var(--color-…)`` reference so the theme owns
+ * the actual hue. */
+export const color_for_sign = (v: number | null | undefined): string => {
+  if (v == null) return "rgba(255,255,255,.3)";
+  return v >= 0 ? "var(--color-positive)" : "var(--color-negative)";
+};

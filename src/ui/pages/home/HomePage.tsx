@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { color_for_sign } from "@/ui/helpers/format";
 import { compute_return_pct } from "@/domain/market/return";
 import { matches_api } from "@/api/matches_api";
 import { players_api } from "@/api/players_api";
@@ -247,7 +248,7 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match }: Hom
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div className="mono" style={{ fontSize: 16, fontWeight: 800 }}>{me.rank}</div>
-                    <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: me.return_pct >= 0 ? "var(--color-positive)" : "var(--color-negative)" }}>
+                    <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: color_for_sign(me.return_pct) }}>
                       {me.return_pct >= 0 ? "+" : ""}{me.return_pct}%
                     </div>
                   </div>

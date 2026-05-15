@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { color_for_sign } from "@/ui/helpers/format";
 import { leagues_api } from "@/api/leagues_api";
 import { Avatar } from "@/ui/components/Avatar";
 
@@ -361,7 +362,7 @@ export function LeaguesPage() {
               <span className="mono" style={{ textAlign: "right", color: "rgba(255,255,255,.55)" }}>
                 €{entry.value.toLocaleString()}
               </span>
-              <span className="mono" style={{ textAlign: "right", fontWeight: 700, color: entry.return_pct >= 0 ? "var(--color-positive)" : "var(--color-negative)" }}>
+              <span className="mono" style={{ textAlign: "right", fontWeight: 700, color: color_for_sign(entry.return_pct) }}>
                 {entry.return_pct >= 0 ? "+" : ""}{entry.return_pct}%
               </span>
             </div>
