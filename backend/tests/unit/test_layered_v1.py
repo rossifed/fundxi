@@ -2,16 +2,50 @@
 
 import pytest
 
+from src.domain.match.match_event import MatchEvent, MatchEventType
 from src.valuation.coefficients import DEFAULT_COEFFICIENTS as C
 from src.valuation.strategies.layered_v1 import (
     PlayingTimeKind,
     PositionBucket,
     StatSnapshot,
+    TeamRosters,
     continuous_stat_delta,
+    per_event_deltas,
     playing_time_delta,
     position_bucket,
     pressure_modulated,
     team_propagation_delta,
+)
+
+
+def _ev(
+    type: MatchEventType,
+    *,
+    player_id: int | None = None,
+    related: int | None = None,
+    team_id: str | None = None,
+) -> MatchEvent:
+    return MatchEvent(
+        id=1,
+        fixture_id=1,
+        minute=10,
+        extra_minute=None,
+        type=type,
+        player_id=player_id,
+        related_player_id=related,
+        team_id=team_id,
+        info=None,
+        sequence=1,
+    )
+
+
+_ROSTERS = TeamRosters(
+    by_team={
+        "ARG": [(1, "FW"), (2, "GK"), (10, "FW")],  # 10 = scorer
+        "FRA": [(3, "GK"), (4, "DEF")],
+    },
+    home_team_id="ARG",
+    away_team_id="FRA",
 )
 
 # --- position_bucket -------------------------------------------------
@@ -123,3 +157,42 @@ def test_playing_time_signs() -> None:
 def test_playing_time_values() -> None:
     assert playing_time_delta(PlayingTimeKind.OUT_OF_XI) == C.w_out_of_xi_pct
     assert playing_time_delta(PlayingTimeKind.SUBBED_ON) == C.w_subbed_on_pct
+
+
+# --- shared kernel: per_event_deltas ---------------------------------
+
+
+def test_kernel_goal_moves_scorer_and_whole_team() -> None:
+    ev = _ev(MatchEventType.GOAL, player_id=10, team_id="ARG")
+    out = dict(per_event_deltas(ev, rosters=_ROSTERS))
+    # Scorer gets the L1 goal delta (not the team-propagation one).
+    assert out[10] == C.w_goal_pct
+    # Other ARG players get a positive team-propagation nudge...
+    assert out[1] > 0 and out[2] > 0
+    # ...and the opponent (FRA) gets a negative one.
+    assert out[3] < 0 and out[4] < 0
+    # Scorer excluded from propagation (single entry, the L1 one).
+    assert out[10] == C.w_goal_pct
+
+
+def test_kernel_goal_without_rosters_only_scorer() -> None:
+    ev = _ev(MatchEventType.GOAL, player_id=10, team_id="ARG")
+    out = per_event_deltas(ev, rosters=None)
+    assert out == [(10, C.w_goal_pct)]
+
+
+def test_kernel_substitution_on_off() -> None:
+    ev = _ev(MatchEventType.SUBSTITUTION, player_id=7, related=8, team_id="ARG")
+    out = dict(per_event_deltas(ev, rosters=_ROSTERS))
+    assert out[7] == C.w_subbed_on_pct  # came on
+    assert out[8] == C.w_subbed_off_pct  # went off
+    # Substitution is not a scoring event → no team propagation.
+    assert set(out) == {7, 8}
+
+
+def test_kernel_assist_and_scorer_excluded_from_propagation() -> None:
+    ev = _ev(MatchEventType.GOAL, player_id=10, related=1, team_id="ARG")
+    out = dict(per_event_deltas(ev, rosters=_ROSTERS))
+    assert out[10] == C.w_goal_pct  # scorer L1
+    assert out[1] == C.w_assist_pct  # assist L1 (NOT team-prop, excluded)
+    assert out[3] < 0 and out[4] < 0  # opponents still propagated

@@ -31,18 +31,12 @@ from src.infrastructure.db.models.player_daily_snapshot import PlayerDailySnapsh
 from src.infrastructure.db.models.player_price_tick import PlayerPriceTickORM
 from src.infrastructure.valuation.synthetic_valuation_provider import synthesize_valuation
 from src.valuation.coefficients import DEFAULT_COEFFICIENTS
-from src.valuation.strategies.events_based_v0 import compute_event_delta
 from src.valuation.strategies.layered_v1 import (
     PlayingTimeKind,
+    TeamRosters,
+    per_event_deltas,
     playing_time_delta,
-    position_bucket,
-    team_propagation_delta,
 )
-
-# Scoring events that ripple to the whole team (layer 4). Own goals are
-# intentionally excluded until the provider's team_id semantics for OG
-# are verified on real data — we don't guess.
-_TEAM_SCORING_TYPES = {MatchEventType.GOAL, MatchEventType.PENALTY}
 
 log = structlog.get_logger(__name__)
 
@@ -191,67 +185,29 @@ async def replay_tournament(*, session: AsyncSession, tournament_start: datetime
         kickoff = fx.kickoff_at
         evs = events_by_fixture.get(fx_id, [])
         starters = starters_by_fixture.get(fx_id, set())
-        rosters = roster_by_fixture.get(fx_id, {})
         subbed_on: set[int] = set()
         # Track which starters had any negative event during this fixture
         # so we can emit a clean-game bonus tick at FT.
         had_negative: set[int] = set()
-        had_any: set[int] = set()
+        rosters_obj = TeamRosters(
+            by_team=roster_by_fixture.get(fx_id, {}),
+            home_team_id=fx.home_team_id,
+            away_team_id=fx.away_team_id,
+        )
 
         for ev in evs:
             # Timestamp = kickoff + minute*60s + sequence (avoids PK collisions
             # for two events at the same minute for the same player).
             ts = kickoff + timedelta(minutes=ev.minute, seconds=ev.sequence)
-            for affected_player in {ev.player_id, ev.related_player_id}:
-                if affected_player is None:
-                    continue
-                delta_pct = compute_event_delta(ev, affected_player)
-                if delta_pct == 0.0:
-                    continue
-                prev = current_price_by_player.get(affected_player, base_value_by_player.get(affected_player, 50.0))
-                new_price = round(prev * (1.0 + delta_pct / 100.0), 2)
-                current_price_by_player[affected_player] = new_price
-                impacted.add(affected_player)
-                had_any.add(affected_player)
-                if ev.type in _NEGATIVE_TYPES and ev.player_id == affected_player:
-                    had_negative.add(affected_player)
-                tick_rows.append(
-                    {
-                        "player_id": affected_player,
-                        "ts": ts,
-                        "fixture_id": fx_id,
-                        "current_price": new_price,
-                        "performance_rating": round(6.5 + delta_pct / 4.0, 2),
-                        "change_since_open": round(delta_pct, 2),
-                        "source": ValuationSource.ENGINE.value,
-                    }
-                )
-
-            # Layer 4 — team propagation: a team goal nudges every player
-            # of the scoring team (+) and the conceding team (-). The
-            # scorer/assist already moved individually this instant, so
-            # exclude them to avoid double-count + PK collision.
-            if ev.type in _TEAM_SCORING_TYPES and ev.team_id is not None and rosters:
-                scoring_team = ev.team_id
-                opponent_team = fx.away_team_id if scoring_team == fx.home_team_id else fx.home_team_id
-                actors = {ev.player_id, ev.related_player_id}
-                for pid, pos in rosters.get(scoring_team, []):
-                    if pid in actors:
-                        continue
-                    emit(pid, ts, fx_id, team_propagation_delta(scored=True, bucket=position_bucket(pos)))
-                for pid, pos in rosters.get(opponent_team, []):
-                    if pid in actors:
-                        continue
-                    emit(pid, ts, fx_id, team_propagation_delta(scored=False, bucket=position_bucket(pos)))
-
-            # Layer 5 — playing time on substitution: player_id comes on,
-            # related_player_id goes off.
-            if ev.type is MatchEventType.SUBSTITUTION:
-                if ev.player_id is not None:
-                    subbed_on.add(ev.player_id)
-                    emit(ev.player_id, ts, fx_id, playing_time_delta(PlayingTimeKind.SUBBED_ON))
-                if ev.related_player_id is not None:
-                    emit(ev.related_player_id, ts, fx_id, playing_time_delta(PlayingTimeKind.SUBBED_OFF))
+            if ev.type in _NEGATIVE_TYPES and ev.player_id is not None:
+                had_negative.add(ev.player_id)
+            if ev.type is MatchEventType.SUBSTITUTION and ev.player_id is not None:
+                subbed_on.add(ev.player_id)
+            # The shared kernel produces every (player, delta) for this
+            # event: L1 event + L5 sub + L4 team propagation. The same
+            # call powers the simulator sink, so the curves cannot diverge.
+            for pid, delta_pct in per_event_deltas(ev, rosters=rosters_obj):
+                emit(pid, ts, fx_id, delta_pct)
 
         # Layer 5 — unused subs: bench players who never came on take a
         # small one-off hit at FT (bounded, reversible: they recover by

@@ -45,10 +45,12 @@ from src.simulation.infrastructure.replay_context import (
     acquire_replay_lock,
     ensure_fixture_idle,
     load_fixture_kickoff,
+    load_fixture_rosters,
     load_initial_price_state,
     load_sportmonks_id_maps,
     release_replay_lock,
 )
+from src.valuation.strategies.layered_v1 import TeamRosters
 
 log = structlog.get_logger(__name__)
 
@@ -137,6 +139,7 @@ async def run(*, fixture_sportmonks_id: int, speed: float, from_minute: int, no_
             archive = SqlAlchemyReplayArchiveReader(session=session, fixtures=fixtures_repo)
             player_id_by_smk, team_id_by_smk = await load_sportmonks_id_maps(session)
             kickoff = await load_fixture_kickoff(session, fixture_sportmonks_id=fixture_sportmonks_id)
+            rosters = await load_fixture_rosters(session, fixture_sportmonks_id=fixture_sportmonks_id)
             price_state = await load_initial_price_state(session, as_of=kickoff)
             log.info(
                 "simulation.replay.context_loaded",
@@ -155,6 +158,7 @@ async def run(*, fixture_sportmonks_id: int, speed: float, from_minute: int, no_
                     kickoff=kickoff,
                     publisher=publisher,
                     progress_writer=progress_writer,
+                    rosters=rosters,
                 ),
                 session=session,
             )
@@ -189,6 +193,7 @@ def _build_replay_sink(
     kickoff: datetime,
     publisher: NotificationPublisher,
     progress_writer: SqlAlchemyFixtureProgressWriter,
+    rosters: TeamRosters,
 ) -> LiveDataSink:
     """Assemble the inner sink chain shared by the CLI and the Streamlit GUI:
     ProjectorSink → PriceTickEmittingSink → FixtureProgressSink → NatsPublishingSink.
@@ -211,6 +216,7 @@ def _build_replay_sink(
         fixture_kickoff=kickoff,
         player_id_by_sportmonks=player_id_by_smk,
         team_id_by_sportmonks=team_id_by_smk,
+        rosters=rosters,
     )
     progress_sink = FixtureProgressSink(inner=pricing_sink, progress=progress_writer)
     return NatsPublishingSink(inner=progress_sink, publisher=publisher)

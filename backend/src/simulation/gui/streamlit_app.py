@@ -63,6 +63,7 @@ from src.simulation.infrastructure.replay_context import (
     acquire_replay_lock,
     ensure_fixture_idle,
     load_fixture_kickoff,
+    load_fixture_rosters,
     load_initial_price_state,
     load_sportmonks_id_maps,
     release_replay_lock,
@@ -323,6 +324,7 @@ async def _run_replay(*, runtime: _ReplayRuntime, fixture_smk_id: int, speed: fl
                 archive = SqlAlchemyReplayArchiveReader(session=session, fixtures=fixtures_repo)
                 player_id_by_smk, team_id_by_smk = await load_sportmonks_id_maps(session)
                 kickoff = await load_fixture_kickoff(session, fixture_sportmonks_id=fixture_smk_id)
+                rosters = await load_fixture_rosters(session, fixture_sportmonks_id=fixture_smk_id)
                 price_state = await load_initial_price_state(session, as_of=kickoff)
 
                 projector_sink = ProjectorSink(
@@ -344,6 +346,7 @@ async def _run_replay(*, runtime: _ReplayRuntime, fixture_smk_id: int, speed: fl
                     fixture_kickoff=kickoff,
                     player_id_by_sportmonks=player_id_by_smk,
                     team_id_by_sportmonks=team_id_by_smk,
+                    rosters=rosters,
                 )
                 progress_writer = SqlAlchemyFixtureProgressWriter(session=session)
                 # FixtureProgressSink inside NatsPublishingSink: the fixture row

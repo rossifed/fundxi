@@ -6,15 +6,16 @@ keeps its single responsibility (project + upsert), this decorator
 adds the second responsibility (compute delta + write tick).
 
 For every ``MATCH_EVENT`` forwarded to the inner sink, the same
-payload is re-projected (cheap pure call) and ``compute_event_delta``
-is invoked for each affected player. A non-zero delta triggers one
-``valuation.player_price_tick`` row, derived from the running price
-in the injected ``PriceState``.
+payload is re-projected (cheap pure call) and the SHARED pricing
+kernel ``per_event_deltas`` is invoked. It returns every
+(player, delta) the event produces — L1 event + L5 substitution +
+L4 team propagation (the same kernel ``wc_replay`` uses), so the
+replayed curve is identical to a full batch rebuild. One non-zero
+delta → one ``valuation.player_price_tick`` row, derived from the
+running price in the injected ``PriceState``.
 
-The pricing kernel (``compute_event_delta``) and the timestamp
-convention (``kickoff + minute*60 + sequence``) are the exact same as
-the batch ``wc_replay`` job, so the replayed curve is identical to
-what a full rebuild would produce.
+The timestamp convention (``kickoff + minute*60 + sequence``) is the
+exact same as the batch job.
 """
 
 from collections.abc import Mapping
@@ -27,7 +28,7 @@ from src.infrastructure.sportmonks.projectors.match_event import project_match_e
 from src.simulation.domain.ports import LiveDataSink, PlayerPriceTickWriter
 from src.simulation.domain.price_state import PriceState
 from src.simulation.domain.replay_event import ReplayEvent, ReplayEventKind
-from src.valuation.strategies.events_based_v0 import compute_event_delta
+from src.valuation.strategies.layered_v1 import TeamRosters, per_event_deltas
 
 log = structlog.get_logger(__name__)
 
@@ -40,6 +41,9 @@ class PriceTickEmittingSink:
     fixture_kickoff: datetime
     player_id_by_sportmonks: Mapping[int, int]
     team_id_by_sportmonks: Mapping[int, str]
+    # Per-team rosters for layer-4 team propagation. None ⇒ no lineup
+    # context (propagation skipped, kernel still does L1 + L5).
+    rosters: TeamRosters | None = None
 
     async def emit(self, event: ReplayEvent, *, fixture_internal_id: int) -> None:
         # Persist the event first so any reader observes "event arrived,
@@ -61,12 +65,7 @@ class PriceTickEmittingSink:
             return
 
         ts = self.fixture_kickoff + timedelta(minutes=match_event.minute, seconds=match_event.sequence)
-        for affected_player in {match_event.player_id, match_event.related_player_id}:
-            if affected_player is None:
-                continue
-            delta_pct = compute_event_delta(match_event, affected_player)
-            if delta_pct == 0.0:
-                continue
+        for affected_player, delta_pct in per_event_deltas(match_event, rosters=self.rosters):
             try:
                 new_price = self.price_state.update(affected_player, delta_pct)
             except KeyError:

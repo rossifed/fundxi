@@ -18,10 +18,18 @@ isolation and reproducible between the batch replay and the live poller.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
+from src.domain.match.match_event import MatchEvent, MatchEventType
 from src.valuation.coefficients import DEFAULT_COEFFICIENTS, PricingCoefficients
+from src.valuation.strategies.events_based_v0 import compute_event_delta
+
+# Scoring events that ripple to the whole team (layer 4). Own goals are
+# excluded until the provider's team_id semantics for OG are verified on
+# real data — we don't guess.
+_TEAM_SCORING_TYPES = {MatchEventType.GOAL, MatchEventType.PENALTY}
 
 
 class PositionBucket(StrEnum):
@@ -166,3 +174,76 @@ def playing_time_delta(
             return coefficients.w_subbed_on_pct
         case PlayingTimeKind.UNUSED_SUB:
             return coefficients.w_unused_sub_pct
+
+
+@dataclass(frozen=True, slots=True)
+class TeamRosters:
+    """Per-fixture rosters for team-propagation (layer 4).
+
+    ``by_team`` maps an internal ``team_id`` to ``[(player_id, position)]``
+    for every player in that fixture's lineup (starters + bench).
+    """
+
+    by_team: Mapping[str, Sequence[tuple[int, str]]]
+    home_team_id: str
+    away_team_id: str
+
+
+def per_event_deltas(
+    event: MatchEvent,
+    *,
+    rosters: TeamRosters | None = None,
+    coefficients: PricingCoefficients = DEFAULT_COEFFICIENTS,
+) -> list[tuple[int, float]]:
+    """THE shared per-event pricing kernel.
+
+    Every (player_id, percent_delta) a single match event produces:
+      - L1 event delta for the actor / assist provider;
+      - L5 substitution (player on -> +, player off -> -);
+      - L4 team propagation on a team goal/penalty (every team player,
+        position-aware), excluding the actor/assist (already moved by
+        L1 this instant — avoids double-count + tick PK collision).
+
+    Pure & deterministic. ``wc_replay`` (batch), the simulator sink and
+    (later) the live poller ALL call this — so the three paths cannot
+    produce different curves. ``rosters=None`` ⇒ L4 skipped (caller has
+    no lineup context).
+    """
+    actors = {event.player_id, event.related_player_id}
+    out: list[tuple[int, float]] = []
+
+    # L1 — discrete event delta (actor / assist).
+    for pid in actors:
+        if pid is None:
+            continue
+        d = compute_event_delta(event, pid, coefficients=coefficients)
+        if d != 0.0:
+            out.append((pid, d))
+
+    # L5 — substitution: player_id comes on, related_player_id goes off.
+    if event.type is MatchEventType.SUBSTITUTION:
+        if event.player_id is not None:
+            out.append((event.player_id, playing_time_delta(PlayingTimeKind.SUBBED_ON, coefficients=coefficients)))
+        if event.related_player_id is not None:
+            out.append(
+                (event.related_player_id, playing_time_delta(PlayingTimeKind.SUBBED_OFF, coefficients=coefficients))
+            )
+
+    # L4 — team propagation on a team goal/penalty.
+    if rosters is not None and event.type in _TEAM_SCORING_TYPES and event.team_id is not None:
+        scoring_team = event.team_id
+        opponent_team = (
+            rosters.away_team_id if scoring_team == rosters.home_team_id else rosters.home_team_id
+        )
+        for pid, pos in rosters.by_team.get(scoring_team, ()):
+            if pid in actors:
+                continue
+            d = team_propagation_delta(scored=True, bucket=position_bucket(pos), coefficients=coefficients)
+            out.append((pid, d))
+        for pid, pos in rosters.by_team.get(opponent_team, ()):
+            if pid in actors:
+                continue
+            d = team_propagation_delta(scored=False, bucket=position_bucket(pos), coefficients=coefficients)
+            out.append((pid, d))
+
+    return out

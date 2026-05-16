@@ -14,10 +14,12 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.db.models.fixture import FixtureORM
+from src.infrastructure.db.models.lineup import LineupORM
 from src.infrastructure.db.models.player import PlayerORM
 from src.infrastructure.db.models.team import TeamORM
 from src.infrastructure.valuation.synthetic_valuation_provider import synthesize_valuation
 from src.simulation.domain.price_state import PriceState
+from src.valuation.strategies.layered_v1 import TeamRosters
 
 
 async def load_sportmonks_id_maps(session: AsyncSession) -> tuple[dict[int, int], dict[int, str]]:
@@ -51,6 +53,33 @@ async def load_initial_price_state(session: AsyncSession, *, as_of: datetime) ->
     return PriceState(
         current_price_by_player={pid: synthesize_valuation(pid, as_of=as_of).base_value for pid in player_ids}
     )
+
+
+async def load_fixture_rosters(session: AsyncSession, *, fixture_sportmonks_id: int) -> TeamRosters:
+    """Per-team rosters (player_id + position) for one fixture's lineup.
+
+    Feeds layer-4 team propagation in the shared pricing kernel so the
+    simulator reproduces exactly what the batch ``wc_replay`` produces.
+    Empty rosters (no lineup ingested) → propagation is simply skipped.
+    """
+    fx = (
+        await session.execute(
+            select(FixtureORM.id, FixtureORM.home_team_id, FixtureORM.away_team_id).where(
+                FixtureORM.sportmonks_id == fixture_sportmonks_id
+            )
+        )
+    ).first()
+    if fx is None:
+        raise LookupError(f"fixture sportmonks_id={fixture_sportmonks_id} not found in core.fixture")
+    rows = (
+        await session.execute(
+            select(LineupORM.team_id, LineupORM.player_id, LineupORM.position).where(LineupORM.fixture_id == fx.id)
+        )
+    ).all()
+    by_team: dict[str, list[tuple[int, str]]] = {}
+    for r in rows:
+        by_team.setdefault(r.team_id, []).append((r.player_id, r.position))
+    return TeamRosters(by_team=by_team, home_team_id=fx.home_team_id, away_team_id=fx.away_team_id)
 
 
 async def load_fixture_kickoff(session: AsyncSession, *, fixture_sportmonks_id: int) -> datetime:
