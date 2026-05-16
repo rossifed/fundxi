@@ -1,4 +1,3 @@
-import { matches_api } from "@/api/matches_api";
 import { players_api } from "@/api/players_api";
 import { teams_api } from "@/api/teams_api";
 import { valuations_api } from "@/api/valuations_api";
@@ -6,6 +5,7 @@ import type { Match } from "@/domain/match/match";
 import type { Player } from "@/domain/player/player";
 import { PlayerChip } from "@/ui/components/PlayerChip";
 import { SectionHeader } from "@/ui/components/SectionHeader";
+import { useLiveMatch } from "@/ui/hooks/use_live_match";
 
 interface RightRailProps {
   watchlist: Set<number>;
@@ -14,7 +14,7 @@ interface RightRailProps {
 }
 
 export function RightRail({ watchlist, on_open_player, on_open_match }: RightRailProps) {
-  const live = matches_api.get_live_match();
+  const live = useLiveMatch();
   const live_home = live ? teams_api.get(live.home_team_id) : undefined;
   const live_away = live ? teams_api.get(live.away_team_id) : undefined;
   const watched = players_api.list().filter(p => watchlist.has(p.id));

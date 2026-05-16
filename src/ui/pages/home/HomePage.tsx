@@ -16,11 +16,10 @@ import { spark_for_player } from "@/infrastructure/repositories/valuations_repos
 import { news_api } from "@/api/news_api";
 import { valuations_api } from "@/api/valuations_api";
 import {
-  useFixtureLiveVersion,
   useLiveRefetch,
-  useMatchesLiveVersion,
   usePricesLiveVersion,
 } from "@/ui/hooks/use_live_updates";
+import { useLiveMatch } from "@/ui/hooks/use_live_match";
 
 function news_icon(type: "prematch" | "postmatch"): string {
   return type === "postmatch" ? "🏁" : "📰";
@@ -40,36 +39,10 @@ interface HomePageProps {
 }
 
 export function HomePage({ on_open_player, on_navigate_tab, on_open_match }: HomePageProps) {
-  // The Match Center card mirrors the in-play match. Seeded from the boot-time
-  // snapshot; kept in step (clock / score / scorers) by the fixture SSE stream,
-  // and the global "matches" stream lets it appear when a match goes live mid-
-  // session (and clears it when there's no live match).
-  const [live, set_live] = useState<Match | null>(() => matches_api.get_live_match() ?? null);
-  const live_version = useFixtureLiveVersion(live?.fixture_id);
-  useLiveRefetch(live_version, () => {
-    if (!live?.fixture_id) return;
-    matches_api
-      .refresh_match_by_fixture_id(live.fixture_id)
-      .then(m => set_live(m && m.status === "live" ? m : null))
-      .catch(() => {
-        /* keep the current card on a transient error */
-      });
-  });
-  const matches_version = useMatchesLiveVersion();
-  useLiveRefetch(matches_version, () => {
-    if (live) return; // already showing one; the per-fixture stream handles updates
-    matches_api
-      .refresh_fixtures()
-      .then(fixtures => {
-        const live_fixture = fixtures.find(f => f.status === "live");
-        if (!live_fixture) return;
-        matches_api
-          .refresh_match_by_fixture_id(live_fixture.id)
-          .then(m => set_live(m && m.status === "live" ? m : null))
-          .catch(() => {});
-      })
-      .catch(() => {});
-  });
+  // The Match Center card mirrors the in-play match via the shared
+  // useLiveMatch hook — the SAME source/refresh path the RightRail ticker
+  // uses, so the minute/score can never diverge between widgets/pages.
+  const live = useLiveMatch();
   const upcoming = matches_api.list_fixtures().filter(f => f.status === "upcoming").slice(0, 3);
   const my_leagues = leagues_api.list_summaries();
 
