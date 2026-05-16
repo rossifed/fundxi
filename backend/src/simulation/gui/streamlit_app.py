@@ -49,6 +49,7 @@ from src.simulation.application.wipe_replay_state import wipe_fixture_replay_sta
 from src.simulation.domain.ports import LiveDataSink, PlayerPriceTickWriter
 from src.simulation.domain.replay_event import ReplayEvent, ReplayEventKind
 from src.simulation.domain.wipe_scope import WipeScope
+from src.simulation.infrastructure.buffering_publisher import BufferingPublisher
 from src.simulation.infrastructure.fixture_progress_sink import FixtureProgressSink
 from src.simulation.infrastructure.fixture_status_publisher import publish_fixture_status
 from src.simulation.infrastructure.nats_publishing_sink import NatsPublishingSink
@@ -180,26 +181,34 @@ def _reset_progress(runtime: _ReplayRuntime, *, fixture_label: str) -> None:
 
 @dataclass(slots=True)
 class _GuiSink:
-    """Commits per minute boundary and tallies comments / events."""
+    """Per game-minute: commit-then-publish that minute (live-faithful
+    ordering), then advance the displayed clock to the just-COMMITTED
+    minute. The GUI therefore shows exactly what the app can read — GUI,
+    Home and Fixtures stay in lockstep, no minute runs ahead."""
 
     inner: LiveDataSink
-    session: object  # AsyncSession, kept opaque to avoid an extra import
+    session: AsyncSession
     runtime: _ReplayRuntime
+    buffering: BufferingPublisher
     _last_minute: int | None = None
+    _last_extra: int | None = None
 
     async def emit(self, event: ReplayEvent, *, fixture_internal_id: int) -> None:
         if self._last_minute is not None and event.minute != self._last_minute:
-            await self.session.commit()  # type: ignore[attr-defined]
+            await self.buffering.flush(self.session)
+            with self.runtime.lock:
+                # Show only the minute now durably committed & published.
+                self.runtime.progress.current_minute = self._last_minute
+                self.runtime.progress.extra_minute = self._last_extra
         await self.inner.emit(event, fixture_internal_id=fixture_internal_id)
         with self.runtime.lock:
             p = self.runtime.progress
-            p.current_minute = event.minute
-            p.extra_minute = event.extra_minute
             if event.kind is ReplayEventKind.MATCH_COMMENT:
                 p.comments_emitted += 1
             elif event.kind is ReplayEventKind.MATCH_EVENT:
                 p.events_emitted += 1
         self._last_minute = event.minute
+        self._last_extra = event.extra_minute
 
 
 @dataclass(slots=True)
@@ -317,6 +326,8 @@ async def _run_replay(*, runtime: _ReplayRuntime, fixture_smk_id: int, speed: fl
             session_local() as session,
             NatsPublisher(servers=_nats_server_list(), name="fundxi-simulation-gui") as publisher,
         ):
+            # Buffer notifications; flush (commit-then-publish) per minute.
+            buffering = BufferingPublisher(inner=publisher)
             await acquire_replay_lock(session)
             try:
                 await ensure_fixture_idle(session, fixture_sportmonks_id=fixture_smk_id)
@@ -340,7 +351,7 @@ async def _run_replay(*, runtime: _ReplayRuntime, fixture_smk_id: int, speed: fl
                         inner=_CountingTickWriter(
                             inner=SqlAlchemyPlayerPriceTickWriter(session=session), runtime=runtime
                         ),
-                        publisher=publisher,
+                        publisher=buffering,
                     ),
                     price_state=price_state,
                     fixture_kickoff=kickoff,
@@ -354,10 +365,11 @@ async def _run_replay(*, runtime: _ReplayRuntime, fixture_smk_id: int, speed: fl
                 sink = _GuiSink(
                     inner=NatsPublishingSink(
                         inner=FixtureProgressSink(inner=pricing_sink, progress=progress_writer),
-                        publisher=publisher,
+                        publisher=buffering,
                     ),
                     session=session,
                     runtime=runtime,
+                    buffering=buffering,
                 )
 
                 report = await replay_match(
@@ -370,7 +382,12 @@ async def _run_replay(*, runtime: _ReplayRuntime, fixture_smk_id: int, speed: fl
                     controller=_GuiReplayController(stop_event=runtime.stop_event, pause_event=runtime.pause_event),
                 )
                 await progress_writer.finish(fixture_internal_id=report.fixture_internal_id)
-                await session.commit()
+                # Final flush: commit the last minute + drain its buffered
+                # notifications, then reflect the final committed minute.
+                await buffering.flush(session)
+                with runtime.lock:
+                    runtime.progress.current_minute = sink._last_minute or runtime.progress.current_minute
+                    runtime.progress.extra_minute = sink._last_extra
                 await publish_fixture_status(
                     publisher, fixture_internal_id=report.fixture_internal_id, status="finished"
                 )

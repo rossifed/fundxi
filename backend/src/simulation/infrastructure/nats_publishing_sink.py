@@ -15,12 +15,14 @@ Price-tick notifications are handled separately by
 ``NatsPublishingTickWriter`` (they originate inside the price-tick
 sink, not as ReplayEvents).
 
-Publish failures are swallowed: the DB already holds the truth and
-browsers self-heal on their next REST fetch. NATS-bus order vs DB:
-the inner sink writes; the surrounding ``_CliSink`` / ``_GuiSink``
-commits per minute; this decorator publishes after the inner emit, so
-by the time a notification lands the row is at worst about-to-be-
-committed within the same minute boundary — acceptable for a replay.
+Ordering vs DB: this decorator hands the notification to a
+``BufferingPublisher``, which only BUFFERS it. The surrounding
+``_CliSink`` / ``_GuiSink`` flushes once per game-minute —
+``session.commit()`` THEN drain the buffer — so a notification is
+published only after its minute's writes are durably committed and
+readable. Same commit-then-publish ordering as the live ingest worker.
+Publish failures are swallowed (the DB is the truth; browsers self-heal
+on the next REST fetch).
 """
 
 import json

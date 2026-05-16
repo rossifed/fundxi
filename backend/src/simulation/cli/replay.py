@@ -32,6 +32,7 @@ from src.simulation.application.replay_match import ReplayReport, replay_match
 from src.simulation.domain.ports import LiveDataSink
 from src.simulation.domain.price_state import PriceState
 from src.simulation.domain.replay_event import ReplayEvent
+from src.simulation.infrastructure.buffering_publisher import BufferingPublisher
 from src.simulation.infrastructure.fixture_progress_sink import FixtureProgressSink
 from src.simulation.infrastructure.fixture_status_publisher import publish_fixture_status
 from src.simulation.infrastructure.nats_publishing_sink import NatsPublishingSink
@@ -91,8 +92,10 @@ def _configure_logging() -> None:
 
 @dataclass(slots=True)
 class _CliSink:
-    """LiveDataSink wrapper that logs each emit and commits at every minute
-    boundary so the app sees the data fill up progressively.
+    """LiveDataSink wrapper that logs each emit and, at every game-minute
+    boundary, commit-then-publishes that minute (mirrors the live ingest
+    worker's poll-batch ordering: data durable BEFORE subscribers are
+    notified, so the app never sees a minute it cannot read).
 
     DDD role: Adapter (driving-side decoration). Private to the CLI:
     real-time visibility is a wiring-layer concern, not domain.
@@ -100,11 +103,12 @@ class _CliSink:
 
     inner: LiveDataSink
     session: AsyncSession
+    buffering: BufferingPublisher
     _last_minute: int | None = None
 
     async def emit(self, event: ReplayEvent, *, fixture_internal_id: int) -> None:
         if self._last_minute is not None and event.minute != self._last_minute:
-            await self.session.commit()
+            await self.buffering.flush(self.session)
         await self.inner.emit(event, fixture_internal_id=fixture_internal_id)
         log.info(
             "simulation.replay.emit",
@@ -132,6 +136,8 @@ async def run(*, fixture_sportmonks_id: int, speed: float, from_minute: int, no_
         nats=not no_nats,
     )
     async with SessionLocal() as session, _make_publisher(no_nats=no_nats) as publisher:
+        # Buffer notifications; flush (commit-then-publish) per minute.
+        buffering = BufferingPublisher(inner=publisher)
         await acquire_replay_lock(session)
         try:
             await ensure_fixture_idle(session, fixture_sportmonks_id=fixture_sportmonks_id)
@@ -156,11 +162,12 @@ async def run(*, fixture_sportmonks_id: int, speed: float, from_minute: int, no_
                     team_id_by_smk=team_id_by_smk,
                     price_state=price_state,
                     kickoff=kickoff,
-                    publisher=publisher,
+                    publisher=buffering,
                     progress_writer=progress_writer,
                     rosters=rosters,
                 ),
                 session=session,
+                buffering=buffering,
             )
             report = await replay_match(
                 fixture_sportmonks_id=fixture_sportmonks_id,
@@ -171,7 +178,9 @@ async def run(*, fixture_sportmonks_id: int, speed: float, from_minute: int, no_
                 sleep=asyncio.sleep,
             )
             await progress_writer.finish(fixture_internal_id=report.fixture_internal_id)
-            await session.commit()
+            # Final flush: commit the last minute + drain its buffered
+            # notifications, THEN the terminal status (post-commit).
+            await buffering.flush(session)
             await publish_fixture_status(publisher, fixture_internal_id=report.fixture_internal_id, status="finished")
         finally:
             await release_replay_lock(session)
