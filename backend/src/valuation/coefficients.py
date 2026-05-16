@@ -34,5 +34,44 @@ class PricingCoefficients:
     max_delta_pct_per_match: float = 25.0
     min_delta_pct_per_match: float = -15.0
 
+    # --- Layer 2: continuous performance (per-poll stat diff) -----------
+    # Applied to the diff of core.player_match_stat running totals between
+    # two polls. Small per poll; density comes from frequency, not size.
+    w_xg_per_0_1_pct: float = 0.45  # per +0.10 xG accrued since last poll
+    w_xa_per_0_1_pct: float = 0.30  # per +0.10 xA accrued since last poll
+    w_shot_on_target_pct: float = 0.20  # per shot on target
+    w_shot_off_target_pct: float = 0.06  # per off-target shot
+    w_key_pass_pct: float = 0.12  # per key pass
+    # Per-poll clamp — one 10-15s window can't move more than this.
+    max_delta_pct_per_poll: float = 2.0
+    min_delta_pct_per_poll: float = -2.0
+
+    # --- Layer 3: Pressure Index modulator -----------------------------
+    # delta *= clamp(pressure_factor, mod_min, mod_max). 1.0 = no-op.
+    pressure_mod_min: float = 0.7
+    pressure_mod_max: float = 1.3
+
+    # --- Layer 4: team propagation -------------------------------------
+    # Small nudge to EVERY player of a team on a team goal for/against.
+    w_team_goal_for_pct: float = 0.5
+    w_team_goal_against_pct: float = 0.5  # magnitude; applied negative
+    # Position multipliers. Conceding hits GK/DEF harder; scoring rewards
+    # FWD/MID a touch more. Indexed by PositionBucket value.
+    pos_mult_for_gk: float = 0.4
+    pos_mult_for_def: float = 0.7
+    pos_mult_for_mid: float = 1.0
+    pos_mult_for_fwd: float = 1.3
+    pos_mult_against_gk: float = 1.6
+    pos_mult_against_def: float = 1.3
+    pos_mult_against_mid: float = 1.0
+    pos_mult_against_fwd: float = 0.7
+
+    # --- Layer 5: playing time / bench ---------------------------------
+    # Bounded + reversible (per-fixture, no permanent penalty term).
+    w_out_of_xi_pct: float = -2.0  # not in announced XI (lineup publish)
+    w_subbed_off_pct: float = -0.4  # accrual ends early
+    w_subbed_on_pct: float = 0.8  # re-enters accrual
+    w_unused_sub_pct: float = -1.0  # bench, never came on (applied once at FT)
+
 
 DEFAULT_COEFFICIENTS = PricingCoefficients()

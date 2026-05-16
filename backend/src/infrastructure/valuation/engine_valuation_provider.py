@@ -38,17 +38,34 @@ class EngineValuationProvider:
         )
         return result.scalar_one_or_none()
 
-    async def _first_tick_price(self, player_id: int) -> float | None:
-        # FIXME: anchors base_value at the first *tick* price, which already
-        # includes that event's jump. The true "tournament-open" anchor is yet
-        # to be decided — until then ``change_since_inception`` is understated.
-        result = await self._session.execute(
+    async def _base_anchor_price(self, player_id: int) -> float | None:
+        """The tournament-open anchor for ``change_since_inception``.
+
+        The replay/live engines seed every player with a baseline tick
+        BEFORE any match (``fixture_id IS NULL``) at their pre-tournament
+        value. That is the correct anchor — it has not absorbed any event
+        jump. Prefer it; only if no such baseline exists (legacy data)
+        fall back to the earliest tick overall.
+        """
+        baseline = await self._session.execute(
+            select(PlayerPriceTickORM.current_price)
+            .where(
+                PlayerPriceTickORM.player_id == player_id,
+                PlayerPriceTickORM.fixture_id.is_(None),
+            )
+            .order_by(PlayerPriceTickORM.ts.asc())
+            .limit(1)
+        )
+        price = baseline.scalar_one_or_none()
+        if price is not None:
+            return float(price)
+        earliest = await self._session.execute(
             select(PlayerPriceTickORM.current_price)
             .where(PlayerPriceTickORM.player_id == player_id)
             .order_by(PlayerPriceTickORM.ts.asc())
             .limit(1)
         )
-        price = result.scalar_one_or_none()
+        price = earliest.scalar_one_or_none()
         return float(price) if price is not None else None
 
     async def _avg_change_per_match(self, player_id: int) -> float:
@@ -76,8 +93,8 @@ class EngineValuationProvider:
             # No tick yet → fall back to deterministic synthetic seed.
             return synthesize_valuation(player_id, as_of=datetime.now(UTC))
 
-        first_price = await self._first_tick_price(player_id)
-        base_value = first_price if first_price is not None else float(tick.current_price)
+        anchor_price = await self._base_anchor_price(player_id)
+        base_value = anchor_price if anchor_price is not None else float(tick.current_price)
         current_price = float(tick.current_price)
         change_since_inception = round((current_price / base_value - 1.0) * 100.0, 2) if base_value > 0 else 0.0
 
