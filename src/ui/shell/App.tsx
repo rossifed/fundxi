@@ -27,8 +27,21 @@ const APP_MAX_WIDTH = 1800;
 // Hidden on Match View (full bleed) and Profile (settings, no need).
 const PAGES_WITH_RAIL: TabId[] = ["home", "screener", "fixtures", "portfolio", "leagues"];
 
+// Read a one-shot ``?join=CODE`` invite param, then strip it from the URL
+// so a refresh doesn't replay it. Returns the code (uppercased) or null.
+function consume_join_code(): string | null {
+  if (typeof window === "undefined") return null;
+  const code = new URLSearchParams(window.location.search).get("join");
+  if (!code) return null;
+  const url = new URL(window.location.href);
+  url.searchParams.delete("join");
+  window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+  return code.trim().toUpperCase();
+}
+
 export function App() {
-  const [tab, set_tab] = useState<TabId>("home");
+  const [initial_join_code] = useState<string | null>(consume_join_code);
+  const [tab, set_tab] = useState<TabId>(initial_join_code ? "leagues" : "home");
   const [selected_player, set_selected_player] = useState<Player | null>(null);
   const [selected_match, set_selected_match] = useState<Match | null>(null);
   const [watchlist, set_watchlist] = useState<Set<number>>(DEFAULT_WATCHLIST);
@@ -94,7 +107,7 @@ export function App() {
   } else if (tab === "portfolio") {
     content = <PortfolioPage on_open_player={open_player} />;
   } else if (tab === "leagues") {
-    content = <LeaguesPage />;
+    content = <LeaguesPage initial_join_code={initial_join_code} />;
   } else {
     content = <ProfilePage on_navigate_tab={navigate} />;
   }

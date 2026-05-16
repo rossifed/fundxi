@@ -71,7 +71,7 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match }: Hom
       .catch(() => {});
   });
   const upcoming = matches_api.list_fixtures().filter(f => f.status === "upcoming").slice(0, 3);
-  const my_leagues = leagues_api.list();
+  const my_leagues = leagues_api.list_summaries();
 
   // Top gainers / losers: re-read after every live price tick.
   const prices_version = usePricesLiveVersion();
@@ -88,9 +88,10 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match }: Hom
       <header
         style={{
           display: "flex",
-          alignItems: "baseline",
+          flexDirection: "column",
+          alignItems: "center",
           justifyContent: "center",
-          gap: 18,
+          gap: 10,
           marginBottom: 8,
           marginTop: 4,
         }}
@@ -113,15 +114,15 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match }: Hom
         </h1>
         <span
           style={{
-            fontSize: 14,
-            fontWeight: 500,
+            fontSize: 13,
+            fontWeight: 700,
             color: "rgba(255,255,255,.4)",
-            letterSpacing: 0.3,
-            fontStyle: "italic",
-            paddingBottom: 4,
+            letterSpacing: 3,
+            textTransform: "uppercase",
           }}
         >
-          Trade the game.
+          Every touch has a{" "}
+          <span style={{ color: "var(--color-accent)" }}>price</span>
         </span>
       </header>
 
@@ -222,39 +223,52 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match }: Hom
         >
           <SectionHeader title="Your leagues" cta="See all →" on_cta={() => on_navigate_tab("leagues")} />
           <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
-            {my_leagues.map((l, i) => {
-              const me = l.leaderboard.find(e => e.is_me);
-              if (!me) return null;
-              return (
-                <div
-                  key={l.id}
-                  onClick={() => on_navigate_tab("leagues")}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 12,
-                    padding: "12px 18px",
-                    borderTop: i > 0 ? "1px solid rgba(255,255,255,.03)" : "none",
-                    cursor: "pointer",
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.02)")}
-                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700 }}>{l.name}</div>
-                    <div style={{ fontSize: 10, color: "rgba(255,255,255,.3)" }}>
-                      {l.member_count} {l.is_public ? "players" : "members"}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div className="mono" style={{ fontSize: 16, fontWeight: 800 }}>{me.rank}</div>
-                    <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: color_for_sign(me.return_pct) }}>
-                      {me.return_pct >= 0 ? "+" : ""}{me.return_pct}%
-                    </div>
+            {my_leagues.length === 0 && (
+              <div
+                style={{
+                  padding: "18px 20px",
+                  textAlign: "center",
+                  fontSize: 12,
+                  color: "rgba(255,255,255,.35)",
+                  lineHeight: 1.5,
+                }}
+              >
+                You have not joined any league yet.
+              </div>
+            )}
+            {my_leagues.map((l, i) => (
+              <div
+                key={l.id}
+                onClick={() => on_navigate_tab("leagues")}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "12px 18px",
+                  borderTop: i > 0 ? "1px solid rgba(255,255,255,.03)" : "none",
+                  cursor: "pointer",
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.02)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>{l.name}</div>
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,.3)" }}>
+                    {l.member_count} {l.is_public ? "players" : "members"}
                   </div>
                 </div>
-              );
-            })}
+                <div style={{ textAlign: "right" }}>
+                  <div className="mono" style={{ fontSize: 16, fontWeight: 800 }}>{l.my_rank}</div>
+                  <div
+                    className="mono"
+                    style={{ fontSize: 11, fontWeight: 700, color: color_for_sign(l.my_return_pct) }}
+                  >
+                    {l.my_return_pct >= 0 ? "+" : ""}
+                    {l.my_return_pct}%
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>

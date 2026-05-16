@@ -8,6 +8,7 @@
 //   ``/api/auth/me`` returns a user.
 
 import { init_fixtures_repository } from "@/infrastructure/repositories/fixtures_repository";
+import { init_leagues_repository } from "@/infrastructure/repositories/leagues_repository";
 import { init_matches_repository } from "@/infrastructure/repositories/matches_repository";
 import { init_news_repository } from "@/infrastructure/repositories/news_repository";
 import { init_players_repository } from "@/infrastructure/repositories/players_repository";
@@ -29,5 +30,9 @@ export async function init_public_repositories(): Promise<void> {
 }
 
 export async function init_authenticated_repositories(): Promise<void> {
-  await Promise.all([init_portfolio_repository(), init_trades_repository()]);
+  await Promise.all([
+    init_portfolio_repository(),
+    init_trades_repository(),
+    init_leagues_repository(),
+  ]);
 }

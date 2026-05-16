@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useAuth } from "@/ui/shell/AuthContext";
 
 export interface NavTab {
   id: string;
@@ -20,6 +21,8 @@ interface SidebarProps {
 }
 
 export function Sidebar({ active_tab, on_navigate }: SidebarProps) {
+  const { user, status } = useAuth();
+
   return (
     <aside
       style={{
@@ -48,14 +51,20 @@ export function Sidebar({ active_tab, on_navigate }: SidebarProps) {
 
       <div style={{ flex: 1 }} />
 
-      <div style={{ borderTop: "1px solid rgba(255,255,255,.04)", paddingTop: 8, marginTop: 8 }}>
-        <NavItem
-          tab={{ id: "profile", label: "Alex M.", icon: "A" }}
-          is_active={active_tab === "profile"}
-          on_click={() => on_navigate("profile")}
-          variant="profile"
-        />
-      </div>
+      {status === "authenticated" && user && (
+        <div style={{ borderTop: "1px solid rgba(255,255,255,.04)", paddingTop: 8, marginTop: 8 }}>
+          <NavItem
+            tab={{
+              id: "profile",
+              label: user.name,
+              icon: user.name.charAt(0).toUpperCase() || "?",
+            }}
+            is_active={active_tab === "profile"}
+            on_click={() => on_navigate("profile")}
+            variant="profile"
+          />
+        </div>
+      )}
     </aside>
   );
 }

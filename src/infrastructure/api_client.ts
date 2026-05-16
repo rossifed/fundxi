@@ -46,9 +46,17 @@ export async function api_post<T>(path: string, body?: unknown): Promise<T> {
     let detail: string = r.statusText;
     try {
       const data = await r.json();
-      if (typeof data?.detail === "string") detail = data.detail;
+      if (typeof data?.detail === "string") {
+        detail = data.detail;
+      } else if (Array.isArray(data?.detail)) {
+        // FastAPI / Pydantic 422 validation shape: list of {loc, msg, type}.
+        const msgs = (data.detail as Array<{ msg?: string; loc?: unknown[] }>)
+          .map(e => e?.msg ?? "validation error")
+          .filter(Boolean);
+        if (msgs.length > 0) detail = msgs.join(", ");
+      }
     } catch {
-      /* ignore */
+      /* body was not JSON — keep statusText */
     }
     throw new ApiError(r.status, path, detail);
   }

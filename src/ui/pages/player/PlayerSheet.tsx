@@ -17,6 +17,8 @@ import { PlayerChip } from "@/ui/components/PlayerChip";
 import { PositionBadge } from "@/ui/components/PositionBadge";
 import { usePlayerLiveVersion, useLiveRefetch } from "@/ui/hooks/use_live_updates";
 import { TradeDialog } from "@/ui/components/TradeDialog";
+import { AuthDialog } from "@/ui/components/AuthDialog";
+import { useAuth } from "@/ui/shell/AuthContext";
 
 // Wikipedia-style synthetic bio composed from the data we have. Until a
 // real biographical source (Wikipedia API / curated CMS) is wired in.
@@ -96,7 +98,17 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
   const performance_rating = valuation?.performance_rating ?? 0;
 
   const [trade_dialog_kind, set_trade_dialog_kind] = useState<"buy" | "sell" | null>(null);
+  const [auth_prompt_open, set_auth_prompt_open] = useState(false);
+  const { status: auth_status } = useAuth();
   const is_watched = watchlist?.has(player.id) ?? false;
+
+  const handle_trade_click = (kind: "buy" | "sell") => {
+    if (auth_status === "authenticated") {
+      set_trade_dialog_kind(kind);
+    } else if (auth_status === "anonymous") {
+      set_auth_prompt_open(true);
+    }
+  };
 
   // Per-match summary list for this player — replaces the stand-alone
   // commentary feed (which lacked match context). Each entry carries the
@@ -921,7 +933,7 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
 
           <div style={{ display: "flex", gap: 8 }}>
             <button
-              onClick={() => set_trade_dialog_kind("buy")}
+              onClick={() => handle_trade_click("buy")}
               style={{
                 flex: 1,
                 padding: "13px 0",
@@ -939,7 +951,7 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
               Buy
             </button>
             <button
-              onClick={() => set_trade_dialog_kind("sell")}
+              onClick={() => handle_trade_click("sell")}
               style={{
                 flex: 1,
                 padding: "13px 0",
@@ -972,6 +984,12 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
           go_portfolio?.();
         }}
       />
+      {auth_prompt_open && (
+        <AuthDialog
+          initial_mode="register"
+          on_close={() => set_auth_prompt_open(false)}
+        />
+      )}
     </Sheet>
   );
 }

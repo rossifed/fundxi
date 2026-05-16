@@ -2,6 +2,7 @@
  * Email + password. Defers everything else to a future Profile flow. */
 
 import { useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "@/ui/shell/AuthContext";
 import { ApiError } from "@/infrastructure/api_client";
 
@@ -27,14 +28,15 @@ export function AuthDialog({ initial_mode = "login", on_close }: AuthDialogProps
       else await register(email.trim(), password);
       on_close();
     } catch (err) {
-      if (err instanceof ApiError) set_error(err.message);
-      else set_error(err instanceof Error ? err.message : "unexpected error");
+      set_error(friendly_error_message(err, mode));
     } finally {
       set_busy(false);
     }
   };
 
-  return (
+  const can_submit = email.length > 0 && password.length >= 8 && !busy;
+
+  return createPortal(
     <div
       onClick={on_close}
       style={{
@@ -43,9 +45,11 @@ export function AuthDialog({ initial_mode = "login", on_close }: AuthDialogProps
         background: "rgba(0,0,0,.55)",
         backdropFilter: "blur(6px)",
         display: "flex",
-        alignItems: "center",
+        alignItems: "flex-start",
         justifyContent: "center",
-        zIndex: 100,
+        padding: "10vh 16px 32px",
+        overflowY: "auto",
+        zIndex: 1000,
       }}
     >
       <form
@@ -97,12 +101,26 @@ export function AuthDialog({ initial_mode = "login", on_close }: AuthDialogProps
         </label>
 
         {error && (
-          <div style={{ fontSize: 12, color: "var(--color-negative)", fontWeight: 600 }}>{error}</div>
+          <div
+            role="alert"
+            style={{
+              padding: "10px 12px",
+              background: "rgba(255,40,93,.1)",
+              border: "1px solid rgba(255,40,93,.35)",
+              borderRadius: 8,
+              color: "var(--color-negative)",
+              fontSize: 13,
+              fontWeight: 600,
+              lineHeight: 1.4,
+            }}
+          >
+            {error}
+          </div>
         )}
 
         <button
           type="submit"
-          disabled={busy || !email || password.length < 8}
+          disabled={!can_submit}
           style={{
             padding: "11px 16px",
             background: "var(--color-action-buy)",
@@ -111,8 +129,8 @@ export function AuthDialog({ initial_mode = "login", on_close }: AuthDialogProps
             borderRadius: 8,
             fontWeight: 800,
             fontSize: 14,
-            cursor: busy ? "default" : "pointer",
-            opacity: busy ? 0.5 : 1,
+            cursor: can_submit ? "pointer" : "not-allowed",
+            opacity: can_submit ? 1 : 0.5,
             marginTop: 4,
           }}
         >
@@ -142,8 +160,30 @@ export function AuthDialog({ initial_mode = "login", on_close }: AuthDialogProps
           </button>
         </div>
       </form>
-    </div>
+    </div>,
+    document.body,
   );
+}
+
+function friendly_error_message(err: unknown, mode: "login" | "register"): string {
+  if (err instanceof ApiError) {
+    if (err.status === 0 || err.status === 502 || err.status === 503 || err.status === 504) {
+      return "We could not reach the server. Check your connection and try again.";
+    }
+    if (err.status === 401) return "Wrong email or password.";
+    if (err.status === 409) return "An account with this email already exists. Try signing in instead.";
+    if (err.status === 422 || err.status === 400) {
+      // Bubble up the backend's own validation message — already cleaned by api_client.
+      return err.message || "Please check your email and password.";
+    }
+    return err.message || (mode === "login" ? "Could not sign you in." : "Could not create your account.");
+  }
+  if (err instanceof TypeError) {
+    // ``fetch`` throws TypeError on network failure / CORS / aborted.
+    return "We could not reach the server. Check your connection and try again.";
+  }
+  if (err instanceof Error) return err.message;
+  return "Unexpected error.";
 }
 
 const field_label: React.CSSProperties = {

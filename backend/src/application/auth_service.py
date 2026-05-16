@@ -17,6 +17,7 @@ from src.config import get_settings
 from src.domain.auth.auth import Email, Password
 from src.domain.portfolio.user import UserKind
 from src.infrastructure.db.models.user import UserORM
+from src.infrastructure.db.repositories.league import SqlAlchemyLeagueRepository
 from src.infrastructure.db.repositories.portfolio import SqlAlchemyPortfolioRepository
 from src.infrastructure.db.repositories.user import SqlAlchemyUserRepository
 from src.infrastructure.security.passwords import hash_password, verify_password
@@ -73,6 +74,13 @@ async def register_user(
         .where(UserORM.id == user.id)
         .values(email=email.value, password_hash=hash_password(password.value))
     )
+
+    # Every user is a member of the global league from day one.
+    league_repo = SqlAlchemyLeagueRepository(session)
+    global_league = await league_repo.get_global()
+    if global_league is not None:
+        await league_repo.add_member(league_id=global_league.id, user_id=user.id)
+
     await session.commit()
 
     return AuthenticatedUser(id=user.id, email=email.value, name=name)

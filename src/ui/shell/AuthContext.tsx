@@ -13,6 +13,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { auth_api, type AuthUser } from "@/api/auth_api";
 import { init_authenticated_repositories } from "@/infrastructure/repositories/init";
+import { clear_leagues } from "@/infrastructure/repositories/leagues_repository";
 
 interface AuthState {
   user: AuthUser | null;
@@ -77,6 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
   const logout = useCallback(async () => {
     await auth_api.logout();
+    clear_leagues();
     set_user(null);
     set_status("anonymous");
   }, []);
