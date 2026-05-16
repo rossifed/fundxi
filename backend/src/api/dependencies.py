@@ -10,8 +10,6 @@ from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import get_settings
-from src.infrastructure.security.jwt_tokens import JwtIssuer
-
 from src.domain.valuation.valuation_provider import ValuationProvider
 from src.infrastructure.db.repositories.fixture import SqlAlchemyFixtureRepository
 from src.infrastructure.db.repositories.match_comment import SqlAlchemyMatchCommentRepository
@@ -20,6 +18,7 @@ from src.infrastructure.db.repositories.player import SqlAlchemyPlayerRepository
 from src.infrastructure.db.repositories.standings import SqlAlchemyStandingRepository
 from src.infrastructure.db.repositories.team import SqlAlchemyTeamRepository
 from src.infrastructure.db.session import SessionLocal
+from src.infrastructure.security.jwt_tokens import JwtIssuer
 from src.infrastructure.valuation.engine_valuation_provider import EngineValuationProvider
 
 

@@ -23,9 +23,9 @@ from src.domain.match.lineup import Lineup, LineupRepository
 from src.domain.match.match_event import MatchEvent, MatchEventRepository
 from src.infrastructure.db.models.player import PlayerORM
 from src.infrastructure.db.models.team import TeamORM
-from src.infrastructure.sportmonks.client import SportmonksClient
 from src.infrastructure.db.repositories.team_match_stat import SqlAlchemyTeamMatchStatRepository
 from src.infrastructure.db.repositories.venue import SqlAlchemyVenueRepository
+from src.infrastructure.sportmonks.client import SportmonksClient
 from src.infrastructure.sportmonks.projectors.fixture_formation import project_fixture_formations
 from src.infrastructure.sportmonks.projectors.fixture_kit import project_fixture_kit_colors
 from src.infrastructure.sportmonks.projectors.lineup import project_lineup

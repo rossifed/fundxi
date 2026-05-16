@@ -40,10 +40,6 @@ def project_team_match_stats(payload: Any) -> list[TeamMatchStatProjection]:
         raw_value = data.get("value") if isinstance(data, dict) else None
         if not isinstance(smk_team_id, int) or not isinstance(type_code, str) or not type_code:
             continue
-        value: Decimal | None
-        if isinstance(raw_value, (int, float)):
-            value = Decimal(str(raw_value))
-        else:
-            value = None
+        value: Decimal | None = Decimal(str(raw_value)) if isinstance(raw_value, (int, float)) else None
         out.append(TeamMatchStatProjection(sportmonks_team_id=smk_team_id, type_code=type_code, value=value))
     return out

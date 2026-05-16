@@ -55,7 +55,7 @@ class MeResponse(BaseModel):
     name: str
 
     @classmethod
-    def of(cls, u: AuthenticatedUser) -> "MeResponse":
+    def of(cls, u: AuthenticatedUser) -> MeResponse:
         return cls(id=u.id, email=u.email, name=u.name)
 
 

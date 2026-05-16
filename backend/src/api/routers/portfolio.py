@@ -51,7 +51,10 @@ def _portfolio_dto(portfolio: Portfolio, holdings: list[HoldingResponse]) -> Por
 
 
 @router.get("/api/me", response_model=UserResponse)
-async def me(user_id: int = Depends(get_current_user_id), session: AsyncSession = Depends(get_session)) -> UserResponse:
+async def me(
+    user_id: int = Depends(get_current_user_id),
+    session: AsyncSession = Depends(get_session),
+) -> UserResponse:
     user_repo = SqlAlchemyUserRepository(session)
     user = await user_repo.get_by_id(user_id)
     if user is None:
@@ -60,7 +63,10 @@ async def me(user_id: int = Depends(get_current_user_id), session: AsyncSession 
 
 
 @router.get("/api/portfolio", response_model=PortfolioResponse)
-async def get_portfolio(user_id: int = Depends(get_current_user_id), session: AsyncSession = Depends(get_session)) -> PortfolioResponse:
+async def get_portfolio(
+    user_id: int = Depends(get_current_user_id),
+    session: AsyncSession = Depends(get_session),
+) -> PortfolioResponse:
     _, _, portfolio = await _resolve_user_and_portfolio(session, user_id)
     portfolio_repo = SqlAlchemyPortfolioRepository(session)
     holdings = await portfolio_repo.list_holdings(portfolio.id)
@@ -74,7 +80,11 @@ async def get_portfolio(user_id: int = Depends(get_current_user_id), session: As
 
 
 @router.post("/api/trades", response_model=TradeOutcomeResponse)
-async def post_trade(body: TradeRequestBody, user_id: int = Depends(get_current_user_id), session: AsyncSession = Depends(get_session)) -> TradeOutcomeResponse:
+async def post_trade(
+    body: TradeRequestBody,
+    user_id: int = Depends(get_current_user_id),
+    session: AsyncSession = Depends(get_session),
+) -> TradeOutcomeResponse:
     _, _, portfolio = await _resolve_user_and_portfolio(session, user_id)
     portfolio_repo = SqlAlchemyPortfolioRepository(session)
     trade_repo = SqlAlchemyTradeRepository(session)
@@ -125,7 +135,10 @@ async def post_trade(body: TradeRequestBody, user_id: int = Depends(get_current_
 
 
 @router.get("/api/trades", response_model=list[TradeResponse])
-async def list_trades(user_id: int = Depends(get_current_user_id), session: AsyncSession = Depends(get_session)) -> list[TradeResponse]:
+async def list_trades(
+    user_id: int = Depends(get_current_user_id),
+    session: AsyncSession = Depends(get_session),
+) -> list[TradeResponse]:
     _, _, portfolio = await _resolve_user_and_portfolio(session, user_id)
     trade_repo = SqlAlchemyTradeRepository(session)
     trades = await trade_repo.list_by_portfolio(portfolio.id)

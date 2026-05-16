@@ -31,8 +31,8 @@ from src.infrastructure.db.repositories.lineup import SqlAlchemyLineupRepository
 from src.infrastructure.db.repositories.match_comment import SqlAlchemyMatchCommentRepository
 from src.infrastructure.db.repositories.match_event import SqlAlchemyMatchEventRepository
 from src.infrastructure.db.repositories.player_match_stat import SqlAlchemyPlayerMatchStatRepository
-from src.infrastructure.db.repositories.team_match_stat import SqlAlchemyTeamMatchStatRepository
 from src.infrastructure.db.repositories.raw_sportmonks_event import SqlAlchemyRawSportmonksEventRepository
+from src.infrastructure.db.repositories.team_match_stat import SqlAlchemyTeamMatchStatRepository
 from src.infrastructure.sportmonks.client import SportmonksClient, SportmonksError
 from src.infrastructure.sportmonks.projectors.fixture import project_fixture
 from src.infrastructure.sportmonks.projectors.lineup import project_lineup

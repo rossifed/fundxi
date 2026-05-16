@@ -35,7 +35,7 @@ class Email:
             raise InvalidEmailError(f"invalid email format: {self.value!r}")
 
     @classmethod
-    def parse(cls, raw: str) -> "Email":
+    def parse(cls, raw: str) -> Email:
         return cls(value=raw.strip().lower())
 
 
