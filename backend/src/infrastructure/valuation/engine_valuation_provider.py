@@ -68,10 +68,21 @@ class EngineValuationProvider:
         price = earliest.scalar_one_or_none()
         return float(price) if price is not None else None
 
-    async def _avg_change_per_match(self, player_id: int) -> float:
-        # Per fixture (NULL fixture_id excluded), the latest tick's change_since_open
-        # is that fixture's net change; average those. Few ticks per player → the
-        # last-per-fixture reduction is cheap to do in Python.
+    async def _per_match_changes(self, player_id: int) -> tuple[float, float]:
+        """Return (avg_per_match, last_match) as NET price moves per fixture.
+
+        A tick's ``change_since_open`` is the delta of THAT single event,
+        not a running total. A fixture's real net change is therefore the
+        COMPOUND of all its ticks (product of (1 + d/100), minus 1), i.e.
+        its price at the last tick vs. the price it opened the match at
+        -- NOT the last tick's lone delta. Using the last tick made every
+        player of a team look red whenever the match's final event was a
+        goal conceded, even in a match they won.
+
+        Ticks for a player are chronological and a fixture's ticks form a
+        contiguous time block, so the last fixture seen (ts asc) is the
+        most recent match.
+        """
         rows = (
             await self._session.execute(
                 select(PlayerPriceTickORM.fixture_id, PlayerPriceTickORM.change_since_open)
@@ -79,13 +90,21 @@ class EngineValuationProvider:
                 .order_by(PlayerPriceTickORM.ts.asc())
             )
         ).all()
-        last_by_fixture: dict[int, float] = {}
+        factor_by_fixture: dict[int, float] = {}
+        order: list[int] = []
         for fixture_id, change in rows:
-            if fixture_id is not None:
-                last_by_fixture[fixture_id] = float(change)
-        if not last_by_fixture:
-            return 0.0
-        return round(sum(last_by_fixture.values()) / len(last_by_fixture), 2)
+            if fixture_id is None:
+                continue
+            if fixture_id not in factor_by_fixture:
+                factor_by_fixture[fixture_id] = 1.0
+                order.append(fixture_id)
+            factor_by_fixture[fixture_id] *= 1.0 + float(change) / 100.0
+        if not order:
+            return 0.0, 0.0
+        net_by_fixture = {fid: (f - 1.0) * 100.0 for fid, f in factor_by_fixture.items()}
+        avg = round(sum(net_by_fixture.values()) / len(net_by_fixture), 2)
+        last = round(net_by_fixture[order[-1]], 2)
+        return avg, last
 
     async def get_for_player(self, player_id: int) -> PlayerValuation:
         tick = await self._latest_tick(player_id)
@@ -97,14 +116,15 @@ class EngineValuationProvider:
         base_value = anchor_price if anchor_price is not None else float(tick.current_price)
         current_price = float(tick.current_price)
         change_since_inception = round((current_price / base_value - 1.0) * 100.0, 2) if base_value > 0 else 0.0
+        change_avg_per_match, change_last_match = await self._per_match_changes(player_id)
 
         return PlayerValuation(
             player_id=player_id,
             base_value=base_value,
             current_price=current_price,
             change_since_inception=change_since_inception,
-            change_avg_per_match=await self._avg_change_per_match(player_id),
-            change_last_match=round(float(tick.change_since_open), 2),
+            change_avg_per_match=change_avg_per_match,
+            change_last_match=change_last_match,
             performance_rating=float(tick.performance_rating),
             as_of=tick.ts,
             source=ValuationSource.ENGINE,

@@ -161,7 +161,8 @@ async def players_screener_view(
             SELECT
               p.id, p.name, p.full_name, p.jersey_number, p.team_id, p.position,
               p.detailed_position, p.age, p.foot, p.height, p.weight, p.club, p.image_path,
-              lt.current_price, lt.performance_rating, lt.change_since_open AS change_24h,
+              lt.current_price, lt.performance_rating,
+              COALESCE(lm.net_pct, 0.0) AS change_24h,
               lt.ts AS valuation_as_of, lt.source AS valuation_source,
               ft.first_price,
               CASE
@@ -169,27 +170,7 @@ async def players_screener_view(
                 THEN ((lt.current_price - ft.first_price) / ft.first_price) * 100.0
                 ELSE NULL
               END AS since_start_pct,
-              (
-                WITH lf AS (
-                  SELECT fixture_id
-                  FROM valuation.player_price_tick
-                  WHERE player_id = p.id AND fixture_id IS NOT NULL
-                  ORDER BY ts DESC
-                  LIMIT 1
-                ),
-                lf_ticks AS (
-                  SELECT current_price
-                  FROM valuation.player_price_tick
-                  WHERE player_id = p.id AND fixture_id = (SELECT fixture_id FROM lf)
-                  ORDER BY ts
-                )
-                SELECT CASE
-                  WHEN MIN(current_price) > 0 AND COUNT(*) > 1
-                  THEN ((MAX(current_price) - MIN(current_price)) / MIN(current_price)) * 100.0
-                  ELSE NULL
-                END
-                FROM lf_ticks
-              ) AS last_match_pct,
+              lm.net_pct AS last_match_pct,
               ts.appearances, ts.minutes_played, ts.goals, ts.assists,
               ts.yellow_cards, ts.red_cards, ts.shots_total, ts.shots_on_target,
               ts.key_passes, ts.rating_avg,
@@ -202,6 +183,23 @@ async def players_screener_view(
               ON ts.player_id = p.id AND ts.season_id = :season_id
             LEFT JOIN app.holding h
               ON h.player_id = p.id AND h.portfolio_id = :portfolio_id
+            LEFT JOIN LATERAL (
+              -- Net % of the player's MOST RECENT fixture: compound the
+              -- per-event deltas (product of (1+d/100), minus 1), i.e.
+              -- close-vs-open of that match -- NOT the last single
+              -- event's delta (which made a whole team look red when the
+              -- match's final event was a goal conceded, even in a win).
+              SELECT (EXP(SUM(LN(1 + t.change_since_open / 100.0))) - 1) * 100.0 AS net_pct
+              FROM valuation.player_price_tick t
+              WHERE t.player_id = p.id
+                AND t.fixture_id = (
+                  SELECT fixture_id
+                  FROM valuation.player_price_tick
+                  WHERE player_id = p.id AND fixture_id IS NOT NULL
+                  ORDER BY ts DESC
+                  LIMIT 1
+                )
+            ) lm ON TRUE
             ORDER BY lt.current_price DESC NULLS LAST, p.id
             """
         ),
