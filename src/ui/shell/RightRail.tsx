@@ -5,6 +5,7 @@ import type { Match } from "@/domain/match/match";
 import type { Player } from "@/domain/player/player";
 import { PlayerChip } from "@/ui/components/PlayerChip";
 import { SectionHeader } from "@/ui/components/SectionHeader";
+import { TickValue } from "@/ui/components/TickValue";
 import { useLiveMatch } from "@/ui/hooks/use_live_match";
 
 interface RightRailProps {
@@ -141,7 +142,9 @@ export function RightRail({ watchlist, on_open_player, on_open_match }: RightRai
                     </div>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <div className="mono" style={{ fontSize: 12, fontWeight: 700 }}>€{current_price}M</div>
+                    <div className="mono" style={{ fontSize: 12, fontWeight: 700 }}>
+                      <TickValue value={current_price}>€{current_price}M</TickValue>
+                    </div>
                     <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: up ? "var(--color-positive)" : "var(--color-negative)" }}>
                       {up ? "+" : ""}{change_pct}%
                     </div>
