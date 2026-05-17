@@ -357,6 +357,7 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
                   top: 16,
                   alignSelf: "start",
                   maxHeight: "calc(100vh - 32px)",
+                  overflowY: "auto",
                 }
               : { display: "flex", flexDirection: "column", gap: 14 }
           }
@@ -369,14 +370,15 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
             away_color={match.away_kit_color ?? away_team?.color}
             card={card}
           />
+          {/* Commentary: FIXED height, independent of content and of the
+              stats panel. The pane never resizes as live comments arrive
+              — only its inner list scrolls. */}
           <div
             style={{
               ...card,
               display: "flex",
               flexDirection: "column",
-              minHeight: 0,
-              flex: is_desktop ? 1 : "none",
-              maxHeight: is_desktop ? undefined : 480,
+              flex: "none",
             }}
           >
             <div
@@ -391,7 +393,13 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
             >
               Commentary
             </div>
-            <div style={{ overflowY: "auto", minHeight: 0, flex: 1 }}>
+            <div
+              style={{
+                overflowY: "auto",
+                height: is_desktop ? 460 : 360,
+                flexShrink: 0,
+              }}
+            >
               <Commentary comments={commentaries_chrono} loading={commentaries === null} />
             </div>
           </div>
