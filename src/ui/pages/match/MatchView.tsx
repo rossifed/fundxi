@@ -10,6 +10,7 @@ import { team_stats_api } from "@/api/team_stats_api";
 import { teams_api } from "@/api/teams_api";
 import { valuations_api } from "@/api/valuations_api";
 import type { TeamMatchStats } from "@/domain/match/team_match_stats";
+import { TickValue } from "@/ui/components/TickValue";
 import { useFixtureLiveVersion, useLiveRefetch, usePricesLiveVersion } from "@/ui/hooks/use_live_updates";
 import { PitchView } from "@/ui/pages/match/PitchView";
 
@@ -714,6 +715,9 @@ function RosterCard({
 }) {
   const ref_player = players_api.get(p.id);
   const valuation = valuations_api.get_for_player(p.id);
+  // Live price = the universe valuation (refreshed on the prices SSE
+  // topic), same source as Screener/Home so it can't disagree.
+  const live_price = valuation?.current_price ?? p.value;
   const total_change = valuation?.change_since_inception ?? 0;
   const match_change = p.change_last_match ?? 0;
   const exact_position = ref_player?.detailed_position ?? POSITION_FALLBACK_LABEL[p.position];
@@ -795,7 +799,9 @@ function RosterCard({
 
       {/* Stats: price + two labelled deltas, all right-aligned */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
-        <span className="mono" style={{ fontSize: 14, fontWeight: 800, lineHeight: 1, color: "#fff" }}>€{p.value}M</span>
+        <span className="mono" style={{ fontSize: 14, fontWeight: 800, lineHeight: 1, color: "#fff" }}>
+          <TickValue value={live_price}>€{live_price}M</TickValue>
+        </span>
         <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
           <Stat label="match" value={match_change} hint="Variation depuis le coup d'envoi de ce match" />
           <Stat label="total" value={total_change} hint="Variation cumulée depuis le début du tournoi" dim />

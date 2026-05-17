@@ -18,6 +18,7 @@ import { PositionBadge } from "@/ui/components/PositionBadge";
 import { usePlayerLiveVersion, useLiveRefetch } from "@/ui/hooks/use_live_updates";
 import { TradeDialog } from "@/ui/components/TradeDialog";
 import { AuthDialog } from "@/ui/components/AuthDialog";
+import { TickValue } from "@/ui/components/TickValue";
 import { useAuth } from "@/ui/shell/AuthContext";
 
 // Wikipedia-style synthetic bio composed from the data we have. Until a
@@ -356,7 +357,7 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
             return (
               <SectionCard title="Valuation">
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 0 }}>
-                  <SmallKpi label="Value" value={`€${current_price}M`} />
+                  <SmallKpi label="Value" value={<TickValue value={current_price}>€{current_price}M</TickValue>} />
                   <SmallKpi label="Rating" value={String(performance_rating)} color="rgba(255,255,255,.85)" />
                   <SmallKpi
                     label="P&L"
@@ -1185,7 +1186,7 @@ function SmallKpi({
   mono = true,
 }: {
   label: string;
-  value: string;
+  value: ReactNode;
   color?: string;
   mono?: boolean;
 }) {
