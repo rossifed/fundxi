@@ -12,6 +12,7 @@ import { LiveBadge } from "@/ui/components/LiveBadge";
 import { PlayerChip } from "@/ui/components/PlayerChip";
 import { SectionHeader } from "@/ui/components/SectionHeader";
 import { Spark } from "@/ui/components/Spark";
+import { TickValue } from "@/ui/components/TickValue";
 import { spark_for_player } from "@/infrastructure/repositories/valuations_repository";
 import { news_api } from "@/api/news_api";
 import { valuations_api } from "@/api/valuations_api";
@@ -456,7 +457,9 @@ function MoversColumn({
               height={22}
             />
             <div style={{ textAlign: "right", minWidth: 64 }}>
-              <div className="mono" style={{ fontSize: 12, fontWeight: 700 }}>€{p.valuation.current_price}M</div>
+              <div className="mono" style={{ fontSize: 12, fontWeight: 700 }}>
+                <TickValue value={p.valuation.current_price}>€{p.valuation.current_price}M</TickValue>
+              </div>
               <div className="mono" style={{ fontSize: 11, fontWeight: 800, color: up ? "var(--color-positive)" : "var(--color-negative)" }}>
                 {up ? "+" : ""}{tournament_return.toFixed(1)}%
               </div>

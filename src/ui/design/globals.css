@@ -134,30 +134,44 @@ body,
   color: var(--color-negative);
 }
 
-/* One-shot price tick pulse — Bloomberg style. A short tinted-background
-   flash that fades to transparent. Class is added on value change and
-   auto-removed ~700ms later by the ``usePulse`` hook. */
+/* One-shot price-tick flash — modern "balanced" style: a single brief
+   tinted-background + text-color pulse on the changed value, fading to
+   transparent (~450ms). Localised to the value that changed, never
+   looping. Class is added on value change and auto-removed by the
+   ``usePulse`` hook. Colours flow through the semantic tokens
+   (color-mix over --color-positive/negative), no hardcoded hex. */
 @keyframes price_pulse_up {
   0% {
-    background-color: color-mix(in srgb, var(--color-positive) 25%, transparent);
+    background-color: color-mix(in srgb, var(--color-positive) 22%, transparent);
+    color: var(--color-positive);
   }
   100% {
     background-color: transparent;
+    color: inherit;
   }
 }
 @keyframes price_pulse_down {
   0% {
-    background-color: color-mix(in srgb, var(--color-negative) 25%, transparent);
+    background-color: color-mix(in srgb, var(--color-negative) 22%, transparent);
+    color: var(--color-negative);
   }
   100% {
     background-color: transparent;
+    color: inherit;
   }
 }
 .price-pulse-up {
-  animation: price_pulse_up 700ms ease-out;
+  animation: price_pulse_up 450ms ease-out;
   border-radius: 4px;
 }
 .price-pulse-down {
-  animation: price_pulse_down 700ms ease-out;
+  animation: price_pulse_down 450ms ease-out;
   border-radius: 4px;
+}
+/* Respect reduced-motion: no animation, value just updates silently. */
+@media (prefers-reduced-motion: reduce) {
+  .price-pulse-up,
+  .price-pulse-down {
+    animation: none;
+  }
 }

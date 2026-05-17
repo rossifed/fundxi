@@ -1,13 +1,14 @@
 /* usePulse — single-shot price-tick pulse signal.
  *
  * Tracks the previous value across renders and returns ``"up"`` /
- * ``"down"`` for ~700ms each time the value changes. Returns ``null``
+ * ``"down"`` for ~450ms each time the value changes. Returns ``null``
  * otherwise. The consumer just toggles a className (``price-pulse-up``
  * / ``price-pulse-down``) defined in ``globals.css``. */
 
 import { useEffect, useRef, useState } from "react";
 
-const PULSE_MS = 700;
+// Matches the 450ms CSS animation in globals.css (.price-pulse-*).
+const PULSE_MS = 450;
 
 export function usePulse(value: number): "up" | "down" | null {
   const prev = useRef<number>(value);
