@@ -18,6 +18,8 @@ _SIMULATION_TABLES: tuple[str, ...] = (
     "core.match_comment_player_mention",
     "core.match_comment",
     "core.match_event",
+    "core.player_match_stat",
+    "core.team_match_stat",
     "core.player_tournament_stat",
     "valuation.player_daily_snapshot",
     "valuation.player_price_tick",
@@ -39,6 +41,8 @@ _USER_SESSION_TABLES: tuple[str, ...] = (
 _FIXTURE_SCOPED_TABLES: tuple[str, ...] = (
     "core.match_comment",
     "core.match_event",
+    "core.player_match_stat",
+    "core.team_match_stat",
     "valuation.player_price_tick",
 )
 
