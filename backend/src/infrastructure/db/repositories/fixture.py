@@ -44,6 +44,7 @@ def _to_domain(
         venue_name=venue_name,
         stage_name=orm.stage_name,
         round_name=orm.round_name,
+        season_id=orm.season_id,
     )
 
 
@@ -58,6 +59,7 @@ class SqlAlchemyFixtureRepository:
             away_team_id=fixture.away_team_id,
             status=fixture.status.value,
             group=fixture.group,
+            season_id=fixture.season_id,
             home_score=fixture.home_score,
             away_score=fixture.away_score,
             kickoff_at=fixture.kickoff_at,
@@ -69,6 +71,7 @@ class SqlAlchemyFixtureRepository:
             "away_team_id": stmt.excluded.away_team_id,
             "status": stmt.excluded.status,
             "group": stmt.excluded.group,
+            "season_id": stmt.excluded.season_id,
             "home_score": stmt.excluded.home_score,
             "away_score": stmt.excluded.away_score,
             "kickoff_at": stmt.excluded.kickoff_at,
@@ -78,8 +81,11 @@ class SqlAlchemyFixtureRepository:
         stmt = stmt.on_conflict_do_update(index_elements=["sportmonks_id"], set_=update_payload)
         await self._session.execute(stmt)
 
-    async def list_all(self) -> list[Fixture]:
-        rows = await self._session.execute(self._select_enriched().order_by(FixtureORM.kickoff_at))
+    async def list_all(self, *, season_id: int | None = None) -> list[Fixture]:
+        query = self._select_enriched()
+        if season_id is not None:
+            query = query.where(FixtureORM.season_id == season_id)
+        rows = await self._session.execute(query.order_by(FixtureORM.kickoff_at))
         return [_to_domain(fx, group_override=grp, venue_name=vn) for fx, grp, vn in rows.all()]
 
     async def get_by_id(self, fixture_id: int) -> Fixture | None:
@@ -90,10 +96,11 @@ class SqlAlchemyFixtureRepository:
         fx, grp, vn = row
         return _to_domain(fx, group_override=grp, venue_name=vn)
 
-    async def list_by_status(self, status: FixtureStatus) -> list[Fixture]:
-        rows = await self._session.execute(
-            self._select_enriched().where(FixtureORM.status == status.value).order_by(FixtureORM.kickoff_at)
-        )
+    async def list_by_status(self, status: FixtureStatus, *, season_id: int | None = None) -> list[Fixture]:
+        query = self._select_enriched().where(FixtureORM.status == status.value)
+        if season_id is not None:
+            query = query.where(FixtureORM.season_id == season_id)
+        rows = await self._session.execute(query.order_by(FixtureORM.kickoff_at))
         return [_to_domain(fx, group_override=grp, venue_name=vn) for fx, grp, vn in rows.all()]
 
     @staticmethod

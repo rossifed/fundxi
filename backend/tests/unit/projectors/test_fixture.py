@@ -32,6 +32,24 @@ def test_project_fixture_upcoming() -> None:
     assert fixture.group == "A"
     assert fixture.kickoff_at == datetime(2026, 6, 12, 20, 0, 0)
     assert fixture.minute is None
+    assert fixture.season_id is None  # absent in payload → None
+
+
+def test_project_fixture_reads_native_season_id() -> None:
+    """season_id is taken verbatim from the Sportmonks payload (it is a
+    native field on every fixture) — scopes the fixture to its tournament."""
+    payload = {
+        "id": 18452325,
+        "season_id": 18017,
+        "starting_at": "2022-12-18 15:00:00",
+        "state": {"id": 1, "state": "NS"},
+        "participants": _participants(),
+    }
+    fixture, _ = project_fixture(payload, group="")
+    assert fixture.season_id == 18017
+    # non-int / garbage → None, never raises (pricing/ingest must not break)
+    bad = {**payload, "season_id": "oops"}
+    assert project_fixture(bad, group="")[0].season_id is None
 
 
 def test_project_fixture_live() -> None:

@@ -93,16 +93,16 @@ async def search_players_with_valuation(
 # --- fixtures -------------------------------------------------------------
 
 
-async def list_fixtures(fixture_repo: FixtureRepository) -> list[Fixture]:
-    return await fixture_repo.list_all()
+async def list_fixtures(fixture_repo: FixtureRepository, *, season_id: int | None = None) -> list[Fixture]:
+    return await fixture_repo.list_all(season_id=season_id)
 
 
 async def get_fixture(fixture_repo: FixtureRepository, fixture_id: int) -> Fixture | None:
     return await fixture_repo.get_by_id(fixture_id)
 
 
-async def get_live_fixture(fixture_repo: FixtureRepository) -> Fixture | None:
-    live = await fixture_repo.list_by_status(FixtureStatus.LIVE)
+async def get_live_fixture(fixture_repo: FixtureRepository, *, season_id: int | None = None) -> Fixture | None:
+    live = await fixture_repo.list_by_status(FixtureStatus.LIVE, season_id=season_id)
     return live[0] if live else None
 
 

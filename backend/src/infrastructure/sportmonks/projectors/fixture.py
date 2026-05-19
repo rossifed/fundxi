@@ -121,6 +121,9 @@ def project_fixture(payload: dict[str, Any], *, group: str) -> tuple[Fixture, in
     home_score = _final_score(scores_payload, "home")
     away_score = _final_score(scores_payload, "away")
 
+    season_raw = payload.get("season_id")
+    season_id = season_raw if isinstance(season_raw, int) else None
+
     fixture = Fixture(
         id=0,
         home_team_id=home_team_id,
@@ -131,5 +134,6 @@ def project_fixture(payload: dict[str, Any], *, group: str) -> tuple[Fixture, in
         away_score=away_score,
         kickoff_at=_parse_kickoff(payload.get("starting_at")),
         minute=minute,
+        season_id=season_id,
     )
     return fixture, sportmonks_id

@@ -18,6 +18,10 @@ class FixtureORM(Base, AuditMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     sportmonks_id: Mapped[int | None] = mapped_column(unique=True, index=True)
+    # Sportmonks season id (native in every fixture payload). Scopes a
+    # fixture to its tournament so the API shows one competition at a
+    # time (WC2022 and WC2026 coexist in this table).
+    season_id: Mapped[int | None] = mapped_column(index=True)
     home_team_id: Mapped[str] = mapped_column(ForeignKey("core.team.id", ondelete="RESTRICT"), index=True)
     away_team_id: Mapped[str] = mapped_column(ForeignKey("core.team.id", ondelete="RESTRICT"), index=True)
     status: Mapped[str] = mapped_column(String(16), index=True)

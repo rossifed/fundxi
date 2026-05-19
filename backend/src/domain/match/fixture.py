@@ -46,3 +46,7 @@ class Fixture:
     venue_name: str | None = None
     stage_name: str | None = None
     round_name: str | None = None
+    # Sportmonks season id — which tournament this fixture belongs to
+    # (e.g. 18017 = WC2022, 26618 = WC2026). Native in the provider
+    # payload; used to scope the GUI to one competition.
+    season_id: int | None = None

@@ -16,6 +16,7 @@ from src.api.dtos.match_comment import MatchCommentResponse
 from src.api.dtos.news import NewsResponse
 from src.application.get_match import MatchPlayerView, get_match_view
 from src.application.queries import get_fixture, get_live_fixture, list_fixtures
+from src.config import get_settings
 from src.domain.match.match_event import MatchEvent, MatchEventType
 from src.domain.valuation.valuation_provider import ValuationProvider
 from src.infrastructure.db.repositories.fixture import SqlAlchemyFixtureRepository
@@ -83,13 +84,18 @@ def _event_dto(ev: MatchEvent, player_names: dict[int, str]) -> MatchEventDTO:
 
 @router.get("", response_model=list[FixtureResponse])
 async def fixtures_list(repo: SqlAlchemyFixtureRepository = Depends(get_fixture_repo)) -> list[FixtureResponse]:
-    fixtures = await list_fixtures(repo)
+    # Scope to the active tournament so the GUI never mixes WC2022 +
+    # WC2026 (both coexist in core.fixture). active_season_id <= 0 means
+    # "unset" → no filter (return everything, dev fallback).
+    season = get_settings().active_season_id
+    fixtures = await list_fixtures(repo, season_id=season if season > 0 else None)
     return [FixtureResponse.from_domain(f) for f in fixtures]
 
 
 @router.get("/live", response_model=FixtureResponse | None)
 async def fixtures_live(repo: SqlAlchemyFixtureRepository = Depends(get_fixture_repo)) -> FixtureResponse | None:
-    live = await get_live_fixture(repo)
+    season = get_settings().active_season_id
+    live = await get_live_fixture(repo, season_id=season if season > 0 else None)
     return FixtureResponse.from_domain(live) if live else None
 
 
