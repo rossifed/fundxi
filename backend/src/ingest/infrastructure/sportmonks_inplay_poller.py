@@ -21,11 +21,16 @@ import asyncio
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
+from sqlalchemy import text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.domain.match.player_match_stat import PlayerMatchStat
+from src.infrastructure.db.models.player_price_tick import PlayerPriceTickORM
 from src.infrastructure.db.repositories.fixture import SqlAlchemyFixtureRepository
 from src.infrastructure.db.repositories.lineup import SqlAlchemyLineupRepository
 from src.infrastructure.db.repositories.match_comment import SqlAlchemyMatchCommentRepository
@@ -40,18 +45,19 @@ from src.infrastructure.sportmonks.projectors.match_comment import project_match
 from src.infrastructure.sportmonks.projectors.match_event import project_match_event
 from src.infrastructure.sportmonks.projectors.player_match_stat import project_player_match_stat
 from src.infrastructure.sportmonks.projectors.team_match_stat import project_team_match_stats
+from src.infrastructure.valuation.synthetic_valuation_provider import synthesize_valuation
 from src.ingest.application.commit_then_publish import commit_then_publish
 from src.ingest.domain.ports import NotificationPublisher
 from src.ingest.infrastructure.sportmonks_id_maps import SportmonksIdMaps
+from src.valuation.pricing import price as kernel_price
+from src.valuation.snapshot import build_snapshot, tournament_delta_from
 
 log = structlog.get_logger(__name__)
 
 # State + scores + participants come back by default with /fixtures/{id}
 # in v3, but listing them explicitly makes the contract self-documenting
 # and lets us add fields without ambiguity later.
-_INPLAY_INCLUDE = (
-    "state;participants;scores;events.type;comments;lineups.position;lineups.details;statistics.type"
-)
+_INPLAY_INCLUDE = "state;participants;scores;events.type;comments;lineups.position;lineups.details;statistics.type"
 
 
 @dataclass(slots=True)
@@ -129,7 +135,12 @@ class SportmonksInplayPoller:
             comments_payload=_array(data.get("comments")),
         )
         lineups_count = await self._project_lineups(session=session, lineups_payload=lineups_payload)
-        player_stats_count = await self._project_player_match_stats(session=session, lineups_payload=lineups_payload)
+        player_stats_count, curr_stats, prev_by_player = await self._project_player_match_stats(
+            session=session, lineups_payload=lineups_payload
+        )
+        price_ticks_count = await self._price_players(
+            session=session, curr_stats=curr_stats, prev_by_player=prev_by_player
+        )
         team_stats_count = await self._project_team_match_stats(
             session=session, stats_payload=_array(data.get("statistics"))
         )
@@ -146,6 +157,8 @@ class SportmonksInplayPoller:
             notifications.append(self._notif("lineup", {"fixture_id": fix_id, "count": lineups_count}))
         if player_stats_count > 0:
             notifications.append(self._notif("player_match_stat", {"fixture_id": fix_id, "count": player_stats_count}))
+        if price_ticks_count > 0:
+            notifications.append(self._notif("player_price_tick", {"fixture_id": fix_id, "count": price_ticks_count}))
         if team_stats_count > 0:
             notifications.append(self._notif("team_match_stat", {"fixture_id": fix_id, "count": team_stats_count}))
 
@@ -159,6 +172,7 @@ class SportmonksInplayPoller:
             comments=comments_count,
             lineups=lineups_count,
             player_stats=player_stats_count,
+            price_ticks=price_ticks_count,
             team_stats=team_stats_count,
         )
 
@@ -237,9 +251,14 @@ class SportmonksInplayPoller:
 
     async def _project_player_match_stats(
         self, *, session: AsyncSession, lineups_payload: list[dict[str, Any]]
-    ) -> int:
+    ) -> tuple[int, list[PlayerMatchStat], dict[int, PlayerMatchStat]]:
+        """Project this poll's per-player stats. Also returns the just-
+        projected ``curr`` rows and a snapshot of the PREVIOUS rows
+        (taken before the upsert) so the pricing kernel can see only the
+        increment since the last poll."""
         repo = SqlAlchemyPlayerMatchStatRepository(session)
-        upserted = 0
+        prev_by_player = {s.player_id: s for s in await repo.list_by_fixture(self.fixture_internal_id)}
+        curr_stats: list[PlayerMatchStat] = []
         for payload in lineups_payload:
             result = project_player_match_stat(
                 payload,
@@ -250,12 +269,72 @@ class SportmonksInplayPoller:
                 continue
             stat, raw_details = result
             await repo.upsert(stat, raw_details=raw_details)
-            upserted += 1
-        return upserted
+            curr_stats.append(stat)
+        return len(curr_stats), curr_stats, prev_by_player
 
-    async def _project_team_match_stats(
-        self, *, session: AsyncSession, stats_payload: list[dict[str, Any]]
+    async def _carried_in_price(self, session: AsyncSession, player_id: int) -> float | None:
+        """The player's price as he WALKED INTO this match — the most
+        recent tick from a prior fixture (or the pre-tournament
+        baseline). Stable for the whole match, so the persistent
+        'balance' the kernel adds the live move on top of never
+        double-counts the current match."""
+        row = await session.execute(
+            text(
+                """
+                SELECT current_price FROM valuation.player_price_tick
+                WHERE player_id = :p AND (fixture_id IS NULL OR fixture_id <> :fx)
+                ORDER BY ts DESC LIMIT 1
+                """
+            ),
+            {"p": player_id, "fx": self.fixture_internal_id},
+        )
+        price = row.scalar_one_or_none()
+        return float(price) if price is not None else None
+
+    async def _price_players(
+        self,
+        *,
+        session: AsyncSession,
+        curr_stats: list[PlayerMatchStat],
+        prev_by_player: dict[int, PlayerMatchStat],
     ) -> int:
+        """Run the canonical kernel for every player priced this poll and
+        append one ``valuation.player_price_tick`` row. The kernel is the
+        SAME pure function the spec defines and the replay uses — live
+        and replay cannot diverge. Pressure modulation is left None for
+        now (trends ingestion is a separate step); the kernel treats
+        None as a no-op."""
+        ts = datetime.now(UTC)
+        written = 0
+        for curr in curr_stats:
+            base_value = synthesize_valuation(curr.player_id, as_of=ts).base_value
+            carried = await self._carried_in_price(session, curr.player_id)
+            tournament_delta = tournament_delta_from(carried, base_value)
+            snapshot = build_snapshot(
+                curr,
+                prev_by_player.get(curr.player_id),
+                pressure_factor=None,
+                is_live=True,
+            )
+            result = kernel_price(base_value, tournament_delta, snapshot)
+            stmt = (
+                pg_insert(PlayerPriceTickORM)
+                .values(
+                    player_id=curr.player_id,
+                    ts=ts,
+                    fixture_id=self.fixture_internal_id,
+                    current_price=result.price,
+                    performance_rating=round(curr.rating, 2) if curr.rating is not None else 6.0,
+                    change_since_open=round(result.live_delta * 100.0, 2),
+                    source="engine",
+                )
+                .on_conflict_do_nothing(index_elements=["player_id", "ts"])
+            )
+            await session.execute(stmt)
+            written += 1
+        return written
+
+    async def _project_team_match_stats(self, *, session: AsyncSession, stats_payload: list[dict[str, Any]]) -> int:
         if not stats_payload:
             return 0
         repo = SqlAlchemyTeamMatchStatRepository(session)
