@@ -46,6 +46,20 @@ class PricingCoefficients:
     max_delta_pct_per_poll: float = 2.0
     min_delta_pct_per_poll: float = -2.0
 
+    # --- Model A: rating-driven live multiplier ------------------------
+    # LiveDelta = clamp(rating_level + stat_bonus, live_floor, live_ceil)
+    #             * volatility(base) * pressure_mod
+    # rating_level(r) = (r - rating_baseline) * k_rating  — a LEVEL, not a
+    # delta: recomputed from the CURRENT rating every poll, so the price
+    # FALLS when the rating falls (reversible by construction). Frozen v1
+    # calibration items; tuned on the first real recorded match
+    # (context/FUNDXI-VALUATION-MODEL.md).
+    rating_baseline: float = 6.0
+    k_rating: float = 0.04  # +4% of price per rating point above 6.0
+    live_floor_frac: float = -0.30  # one match can't pull a player below -30%
+    live_ceil_frac: float = 0.40  # ...nor above +40%
+    multiplier_floor: float = 0.05  # price stays strictly positive
+
     # --- Layer 3: Pressure Index modulator -----------------------------
     # delta *= clamp(pressure_factor, mod_min, mod_max). 1.0 = no-op.
     pressure_mod_min: float = 0.7

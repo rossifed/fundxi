@@ -64,18 +64,29 @@ The BaseValue absorbs everything we do not want to model dynamically: age, contr
 
 ### 3.3. Multiplier(t) — the live engine
 
-Starts at **1.00** for every player at kickoff of the tournament. Moves with events. Always positive.
+Starts at **1.00** for every player at kickoff of the tournament. Always positive. It is the sum of two parts:
 
 ```
-Multiplier(t) = 1.00 + Σ (all event impacts up to time t)
+Multiplier(t) = 1.00 + TournamentDelta(t) + LiveDelta(t)
 ```
 
-Events come from two streams:
+**TournamentDelta — persistent.** Accumulates across the whole tournament, never decays. Changes only at discrete settled moments:
 
-- **Performance events** during matches: goals, assists, the player's match rating, cards, injuries
-- **Tournament events** between matches: qualification to next round, elimination, news (transfers, scandals, awards)
+- **Match settlement** (at full-time): the match the player just played is "cashed in" once — its realised performance becomes permanent.
+- **Tournament events** between matches: qualification (+), knockout elimination (−), news (transfer / injury / scandal), suspension.
 
-Every event contributes a delta. The deltas accumulate. There is no decay function, no exponential moving average, no time-based erosion. The price moves only when something happens.
+Between matches `LiveDelta = 0`, so the price sits flat at `BaseValue × (1 + TournamentDelta)` and moves only on tournament events.
+
+**LiveDelta — transient, reversible.** Non-zero only while the player's match is in progress. Recomputed from the player's **current live rating** every poll, so:
+
+- plays well → rating up → price **goes up**;
+- plays badly — a card, a missed penalty, a lost ball — → Sportmonks **lowers his live rating** → price **goes back down, during the match**.
+
+This is the core requirement: the price tracks live performance **in both directions**, like a real tradable asset. At full-time `LiveDelta` is folded into `TournamentDelta` (cashed in once) and reset to 0 for the next match.
+
+**No double-count rule.** During the match a goal or a card moves the price **only through the live rating** Sportmonks updates (rating up on a goal, down on a card / miss). We never *also* add a separate per-event percentage on top — that would count the same goal twice. An event's durable, narrative value enters `TournamentDelta` once, at settlement (discrete consequences such as a suspension are applied once there too).
+
+No time decay, no moving average: `TournamentDelta` changes only when something settles; `LiveDelta` only reflects the current live rating.
 
 ### 3.4. Why no time decay
 
@@ -190,7 +201,7 @@ Three reasons, in order of importance.
 
 **1. The live player rating is the single most important input to our model.**
 
-Our formula is `Price = BaseValue × Multiplier`, and the multiplier is driven by the rating delta every minute. Without a live rating, we are stuck reconstructing one ourselves from raw events (goals, cards, passes) — which means re-doing 10+ years of Opta calibration work badly.
+Our formula is `Price = BaseValue × Multiplier`, and the live part of the multiplier is driven by the player's live rating every minute (see §3.3). Without a live rating, we are stuck reconstructing one ourselves from raw events (goals, cards, passes) — which means re-doing 10+ years of Opta calibration work badly.
 
 API-Football fails this test: their rating is only available *after* the match ends. That means during the 90 minutes when users are most engaged, we would have no smooth rating signal — only discrete events. The price would jump on every goal or card and stay flat in between, which feels broken.
 
