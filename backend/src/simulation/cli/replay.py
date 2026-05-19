@@ -36,11 +36,8 @@ from src.simulation.infrastructure.buffering_publisher import BufferingPublisher
 from src.simulation.infrastructure.fixture_progress_sink import FixtureProgressSink
 from src.simulation.infrastructure.fixture_status_publisher import publish_fixture_status
 from src.simulation.infrastructure.nats_publishing_sink import NatsPublishingSink
-from src.simulation.infrastructure.nats_publishing_tick_writer import NatsPublishingTickWriter
 from src.simulation.infrastructure.pg_archive_reader import SqlAlchemyReplayArchiveReader
 from src.simulation.infrastructure.pg_fixture_progress_writer import SqlAlchemyFixtureProgressWriter
-from src.simulation.infrastructure.pg_price_tick_writer import SqlAlchemyPlayerPriceTickWriter
-from src.simulation.infrastructure.price_tick_sink import PriceTickEmittingSink
 from src.simulation.infrastructure.projector_sink import ProjectorSink
 from src.simulation.infrastructure.replay_context import (
     acquire_replay_lock,
@@ -52,6 +49,7 @@ from src.simulation.infrastructure.replay_context import (
     release_replay_lock,
     seed_baseline_ticks,
 )
+from src.simulation.infrastructure.synthetic_minute_pricing_sink import SyntheticMinutePricingSink
 from src.valuation.strategies.layered_v1 import TeamRosters
 
 log = structlog.get_logger(__name__)
@@ -158,20 +156,17 @@ async def run(*, fixture_sportmonks_id: int, speed: float, from_minute: int, no_
             )
 
             progress_writer = SqlAlchemyFixtureProgressWriter(session=session)
-            sink = _CliSink(
-                inner=_build_replay_sink(
-                    session=session,
-                    player_id_by_smk=player_id_by_smk,
-                    team_id_by_smk=team_id_by_smk,
-                    price_state=price_state,
-                    kickoff=kickoff,
-                    publisher=buffering,
-                    progress_writer=progress_writer,
-                    rosters=rosters,
-                ),
+            inner_sink, pricing_sink = _build_replay_sink(
                 session=session,
-                buffering=buffering,
+                player_id_by_smk=player_id_by_smk,
+                team_id_by_smk=team_id_by_smk,
+                price_state=price_state,
+                kickoff=kickoff,
+                publisher=buffering,
+                progress_writer=progress_writer,
+                rosters=rosters,
             )
+            sink = _CliSink(inner=inner_sink, session=session, buffering=buffering)
             report = await replay_match(
                 fixture_sportmonks_id=fixture_sportmonks_id,
                 speed=speed,
@@ -180,6 +175,8 @@ async def run(*, fixture_sportmonks_id: int, speed: float, from_minute: int, no_
                 sink=sink,
                 sleep=asyncio.sleep,
             )
+            # Price the final minute (no later event triggers its boundary).
+            await pricing_sink.finalize(report.fixture_internal_id)
             await progress_writer.finish(fixture_internal_id=report.fixture_internal_id)
             # Final flush: commit the last minute + drain its buffered
             # notifications, THEN the terminal status (post-commit).
@@ -206,32 +203,32 @@ def _build_replay_sink(
     publisher: NotificationPublisher,
     progress_writer: SqlAlchemyFixtureProgressWriter,
     rosters: TeamRosters,
-) -> LiveDataSink:
+) -> tuple[LiveDataSink, SyntheticMinutePricingSink]:
     """Assemble the inner sink chain shared by the CLI and the Streamlit GUI:
-    ProjectorSink → PriceTickEmittingSink → FixtureProgressSink → NatsPublishingSink.
-    FixtureProgressSink sits *inside* NatsPublishingSink so the fixture row is
-    updated before the per-event notification is published. The outermost
-    decorator (commit-per-minute + logging/progress) is added by the caller."""
+    ProjectorSink → SyntheticMinutePricingSink → FixtureProgressSink →
+    NatsPublishingSink. FixtureProgressSink sits *inside* NatsPublishingSink
+    so the fixture row is updated before the per-event notification is
+    published. The outermost decorator (commit-per-minute + logging/progress)
+    is added by the caller. Returns the pricing sink too so the caller can
+    ``finalize()`` the last minute after the replay loop."""
     projector_sink = ProjectorSink(
         comments=SqlAlchemyMatchCommentRepository(session),
         events=SqlAlchemyMatchEventRepository(session),
         player_id_by_sportmonks=player_id_by_smk,
         team_id_by_sportmonks=team_id_by_smk,
     )
-    pricing_sink = PriceTickEmittingSink(
+    pricing_sink = SyntheticMinutePricingSink(
         inner=projector_sink,
-        price_ticks=NatsPublishingTickWriter(
-            inner=SqlAlchemyPlayerPriceTickWriter(session=session),
-            publisher=publisher,
-        ),
-        price_state=price_state,
+        session=session,
+        publisher=publisher,
+        rosters=rosters,
+        base_price_by_player=price_state.current_price_by_player,
         fixture_kickoff=kickoff,
         player_id_by_sportmonks=player_id_by_smk,
         team_id_by_sportmonks=team_id_by_smk,
-        rosters=rosters,
     )
     progress_sink = FixtureProgressSink(inner=pricing_sink, progress=progress_writer)
-    return NatsPublishingSink(inner=progress_sink, publisher=publisher)
+    return NatsPublishingSink(inner=progress_sink, publisher=publisher), pricing_sink
 
 
 def main() -> int:

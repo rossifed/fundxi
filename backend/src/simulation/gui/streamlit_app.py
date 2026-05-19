@@ -46,19 +46,16 @@ from src.infrastructure.db.session import SessionLocal
 from src.infrastructure.messaging.nats_publisher import NatsPublisher
 from src.simulation.application.replay_match import replay_match
 from src.simulation.application.wipe_replay_state import wipe_fixture_replay_state, wipe_replay_state
-from src.simulation.domain.ports import LiveDataSink, PlayerPriceTickWriter
+from src.simulation.domain.ports import LiveDataSink
 from src.simulation.domain.replay_event import ReplayEvent, ReplayEventKind
 from src.simulation.domain.wipe_scope import WipeScope
 from src.simulation.infrastructure.buffering_publisher import BufferingPublisher
 from src.simulation.infrastructure.fixture_progress_sink import FixtureProgressSink
 from src.simulation.infrastructure.fixture_status_publisher import publish_fixture_status
 from src.simulation.infrastructure.nats_publishing_sink import NatsPublishingSink
-from src.simulation.infrastructure.nats_publishing_tick_writer import NatsPublishingTickWriter
 from src.simulation.infrastructure.pg_archive_reader import SqlAlchemyReplayArchiveReader
 from src.simulation.infrastructure.pg_fixture_progress_writer import SqlAlchemyFixtureProgressWriter
-from src.simulation.infrastructure.pg_price_tick_writer import SqlAlchemyPlayerPriceTickWriter
 from src.simulation.infrastructure.pg_wipe_executor import SqlAlchemyWipeExecutor
-from src.simulation.infrastructure.price_tick_sink import PriceTickEmittingSink
 from src.simulation.infrastructure.projector_sink import ProjectorSink
 from src.simulation.infrastructure.replay_context import (
     acquire_replay_lock,
@@ -70,6 +67,7 @@ from src.simulation.infrastructure.replay_context import (
     release_replay_lock,
     seed_baseline_ticks,
 )
+from src.simulation.infrastructure.synthetic_minute_pricing_sink import SyntheticMinutePricingSink
 
 _DEFAULT_NATS_SERVERS = "nats://localhost:4222"
 
@@ -213,35 +211,6 @@ class _GuiSink:
 
 
 @dataclass(slots=True)
-class _CountingTickWriter:
-    """Decorates a ``PlayerPriceTickWriter`` to count inserts."""
-
-    inner: PlayerPriceTickWriter
-    runtime: _ReplayRuntime
-
-    async def insert(
-        self,
-        *,
-        player_id: int,
-        ts: datetime,
-        fixture_id: int | None,
-        current_price: float,
-        performance_rating: float,
-        change_since_open: float,
-    ) -> None:
-        await self.inner.insert(
-            player_id=player_id,
-            ts=ts,
-            fixture_id=fixture_id,
-            current_price=current_price,
-            performance_rating=performance_rating,
-            change_since_open=change_since_open,
-        )
-        with self.runtime.lock:
-            self.runtime.progress.ticks_emitted += 1
-
-
-@dataclass(slots=True)
 class _GuiReplayController:
     """``ReplayController`` adapter driven by two ``threading.Event``s.
 
@@ -346,20 +315,18 @@ async def _run_replay(*, runtime: _ReplayRuntime, fixture_smk_id: int, speed: fl
                     player_id_by_sportmonks=player_id_by_smk,
                     team_id_by_sportmonks=team_id_by_smk,
                 )
-                pricing_sink = PriceTickEmittingSink(
+                # Per-minute synthetic-rating pricing through THE canonical
+                # kernel (WC2022 has no real per-minute rating; ticks tagged
+                # source="rehearsal"). Same kernel the live poller uses.
+                pricing_sink = SyntheticMinutePricingSink(
                     inner=projector_sink,
-                    # write to DB → count for the progress panel → publish on NATS
-                    price_ticks=NatsPublishingTickWriter(
-                        inner=_CountingTickWriter(
-                            inner=SqlAlchemyPlayerPriceTickWriter(session=session), runtime=runtime
-                        ),
-                        publisher=buffering,
-                    ),
-                    price_state=price_state,
+                    session=session,
+                    publisher=buffering,
+                    rosters=rosters,
+                    base_price_by_player=price_state.current_price_by_player,
                     fixture_kickoff=kickoff,
                     player_id_by_sportmonks=player_id_by_smk,
                     team_id_by_sportmonks=team_id_by_smk,
-                    rosters=rosters,
                 )
                 progress_writer = SqlAlchemyFixtureProgressWriter(session=session)
                 # FixtureProgressSink inside NatsPublishingSink: the fixture row
@@ -383,6 +350,8 @@ async def _run_replay(*, runtime: _ReplayRuntime, fixture_smk_id: int, speed: fl
                     sleep=asyncio.sleep,
                     controller=_GuiReplayController(stop_event=runtime.stop_event, pause_event=runtime.pause_event),
                 )
+                # Price the final minute (no later event triggers its boundary).
+                await pricing_sink.finalize(report.fixture_internal_id)
                 await progress_writer.finish(fixture_internal_id=report.fixture_internal_id)
                 # Final flush: commit the last minute + drain its buffered
                 # notifications, then reflect the final committed minute.
