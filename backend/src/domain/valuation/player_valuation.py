@@ -12,6 +12,7 @@ from enum import StrEnum
 class ValuationSource(StrEnum):
     SYNTHETIC = "synthetic"  # M3 placeholder: deterministic pseudo-random
     ENGINE = "engine"  # M5+: output of XGBasedStrategyV0
+    REHEARSAL = "rehearsal"  # synthetic-rating UI/UX rehearsal — NEVER real data
 
 
 @dataclass(frozen=True, slots=True)
