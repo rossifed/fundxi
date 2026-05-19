@@ -20,7 +20,6 @@ export interface ScreenerEntry {
 
   current_price: number;
   performance_rating: number;
-  change_24h: number;
   valuation_as_of: string;
   valuation_source: string;
 
@@ -51,7 +50,7 @@ export async function init_screener_repository(): Promise<void> {
 }
 
 /** Cache-busting re-fetch — call on a live SSE price tick to pick up the
- * latest current_price / change_24h / per-match deltas. */
+ * latest current_price / total / per-match deltas. */
 export async function refresh_screener_repository(): Promise<void> {
   SCREENER_ENTRIES = await api_get<ScreenerEntry[]>("/api/players/screener-view");
 }

@@ -30,7 +30,6 @@ class PlayerScreenerEntryResponse(BaseModel):
     # Market (valuation engine — latest tick)
     current_price: float
     performance_rating: float
-    change_24h: float
     valuation_as_of: datetime
     valuation_source: str
 

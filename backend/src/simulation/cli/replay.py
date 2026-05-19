@@ -50,6 +50,7 @@ from src.simulation.infrastructure.replay_context import (
     load_initial_price_state,
     load_sportmonks_id_maps,
     release_replay_lock,
+    seed_baseline_ticks,
 )
 from src.valuation.strategies.layered_v1 import TeamRosters
 
@@ -147,8 +148,10 @@ async def run(*, fixture_sportmonks_id: int, speed: float, from_minute: int, no_
             kickoff = await load_fixture_kickoff(session, fixture_sportmonks_id=fixture_sportmonks_id)
             rosters = await load_fixture_rosters(session, fixture_sportmonks_id=fixture_sportmonks_id)
             price_state = await load_initial_price_state(session, as_of=kickoff)
+            seeded = await seed_baseline_ticks(session, price_state)
             log.info(
                 "simulation.replay.context_loaded",
+                baseline_ticks_seeded=seeded,
                 players=len(player_id_by_smk),
                 teams=len(team_id_by_smk),
                 kickoff=kickoff.isoformat(),

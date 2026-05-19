@@ -8,18 +8,38 @@ avoids private-import coupling between adapters.
 """
 
 import contextlib
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import select, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.db.models.fixture import FixtureORM
 from src.infrastructure.db.models.lineup import LineupORM
 from src.infrastructure.db.models.player import PlayerORM
+from src.infrastructure.db.models.player_price_tick import PlayerPriceTickORM
 from src.infrastructure.db.models.team import TeamORM
 from src.infrastructure.valuation.synthetic_valuation_provider import synthesize_valuation
 from src.simulation.domain.price_state import PriceState
 from src.valuation.strategies.layered_v1 import TeamRosters
+
+
+async def _tournament_open_ts(session: AsyncSession) -> datetime | None:
+    """The pre-tournament anchor timestamp: earliest fixture kickoff
+    minus 1 day. MUST match ``wc_replay``'s ``tournament_start`` derivation
+    (``src/application/wc_replay.py``) so the baseline tick this seeds
+    and the one the batch job seeds collide on the (player_id, ts) PK
+    and dedupe instead of producing two anchors. ``None`` when no
+    fixture has a kickoff (nothing to anchor against)."""
+    earliest = (
+        await session.execute(
+            select(FixtureORM.kickoff_at)
+            .where(FixtureORM.kickoff_at.is_not(None))
+            .order_by(FixtureORM.kickoff_at)
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    return earliest - timedelta(days=1) if earliest is not None else None
 
 
 async def load_sportmonks_id_maps(session: AsyncSession) -> tuple[dict[int, int], dict[int, str]]:
@@ -53,6 +73,46 @@ async def load_initial_price_state(session: AsyncSession, *, as_of: datetime) ->
     return PriceState(
         current_price_by_player={pid: synthesize_valuation(pid, as_of=as_of).base_value for pid in player_ids}
     )
+
+
+async def seed_baseline_ticks(session: AsyncSession, price_state: PriceState) -> int:
+    """Write the pre-tournament anchor tick for every player.
+
+    One tick per player at the pre-tournament anchor ts (earliest
+    kickoff minus 1 day, see ``_tournament_open_ts``), ``fixture_id IS
+    NULL``, ``current_price = base_value``, ``change_since_open = 0.0``.
+    This is the anchor ``EngineValuationProvider`` (and the screener)
+    divide by for the total-change metric; without it the first
+    *post-event* tick is mistaken for the baseline and the total is
+    understated.
+
+    Idempotent: ``ON CONFLICT (player_id, ts) DO NOTHING`` — re-runs,
+    multi-fixture replays, and the batch ``wc_replay`` (same ts formula)
+    seed it exactly once, so the running total accumulates across
+    matches instead of resetting. Written straight to PG (no NATS
+    fan-out): a flat 0% baseline is not a price move. Returns 0 when
+    there is no fixture to anchor against.
+    """
+    anchor_ts = await _tournament_open_ts(session)
+    if anchor_ts is None:
+        return 0
+    rows = [
+        {
+            "player_id": player_id,
+            "ts": anchor_ts,
+            "fixture_id": None,
+            "current_price": round(base_value, 2),
+            "performance_rating": 6.5,
+            "change_since_open": 0.0,
+            "source": "engine",
+        }
+        for player_id, base_value in price_state.current_price_by_player.items()
+    ]
+    if not rows:
+        return 0
+    stmt = pg_insert(PlayerPriceTickORM).values(rows).on_conflict_do_nothing(index_elements=["player_id", "ts"])
+    await session.execute(stmt)
+    return len(rows)
 
 
 async def load_fixture_rosters(session: AsyncSession, *, fixture_sportmonks_id: int) -> TeamRosters:

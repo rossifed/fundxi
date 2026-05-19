@@ -191,3 +191,43 @@ async def test_fixture_comments_for_final(client: httpx.AsyncClient) -> None:
     # The 3-3 Mbappé equaliser is recorded as a goal at minute >= 117.
     goals = [c for c in comments if c["is_goal"]]
     assert any("Mbappé" in c["comment"] for c in goals)
+
+
+@pytest.mark.anyio
+async def test_screener_dropped_change_24h(client: httpx.AsyncClient) -> None:
+    """The misnamed `change_24h` is gone — the screener exposes only the
+    two reconcilable metrics: total (`since_start_pct`) + last match."""
+    body = (await client.get("/api/players/screener-view")).json()
+    assert body, "screener must return players"
+    sample = body[0]
+    assert "change_24h" not in sample
+    assert {"current_price", "since_start_pct", "last_match_pct"}.issubset(sample.keys())
+
+
+@pytest.mark.anyio
+async def test_screener_total_reconciles_with_valuation_provider(client: httpx.AsyncClient) -> None:
+    """The user-stated invariant: the three displayed numbers derive from
+    ONE series, so the screener's total must equal the valuation
+    provider's total for the same player (same anchor, same current
+    price). Asserted on every player carrying real ticks.
+    """
+    from src.infrastructure.db.session import SessionLocal
+    from src.infrastructure.valuation.engine_valuation_provider import EngineValuationProvider
+
+    body = (await client.get("/api/players/screener-view")).json()
+    priced = [e for e in body if e["valuation_source"] != "synthetic" and e["since_start_pct"] is not None]
+    assert priced, "at least one player must have a real price tick (run a replay first)"
+
+    async with SessionLocal() as session:
+        provider = EngineValuationProvider(session)
+        for entry in priced[:25]:  # bound the DB round-trips
+            v = await provider.get_for_player(entry["id"])
+            # current price identical (same latest tick).
+            assert entry["current_price"] == pytest.approx(v.current_price, abs=0.01)
+            # total identical: both = (current / base_anchor - 1) * 100,
+            # within the documented 2-decimal rounding tolerance.
+            assert entry["since_start_pct"] == pytest.approx(v.change_since_inception, abs=0.05)
+            # and the total reconciles against current vs base by definition.
+            assert v.current_price == pytest.approx(
+                v.base_value * (1.0 + v.change_since_inception / 100.0), rel=1e-4
+            )

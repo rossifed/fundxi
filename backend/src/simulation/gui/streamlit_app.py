@@ -68,6 +68,7 @@ from src.simulation.infrastructure.replay_context import (
     load_initial_price_state,
     load_sportmonks_id_maps,
     release_replay_lock,
+    seed_baseline_ticks,
 )
 
 _DEFAULT_NATS_SERVERS = "nats://localhost:4222"
@@ -337,6 +338,7 @@ async def _run_replay(*, runtime: _ReplayRuntime, fixture_smk_id: int, speed: fl
                 kickoff = await load_fixture_kickoff(session, fixture_sportmonks_id=fixture_smk_id)
                 rosters = await load_fixture_rosters(session, fixture_sportmonks_id=fixture_smk_id)
                 price_state = await load_initial_price_state(session, as_of=kickoff)
+                await seed_baseline_ticks(session, price_state)
 
                 projector_sink = ProjectorSink(
                     comments=SqlAlchemyMatchCommentRepository(session),

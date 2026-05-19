@@ -122,8 +122,8 @@ async def players_screener_view(
 
     Joined / computed:
       - core.player          (identity, personal attrs)
-      - latest valuation tick (current_price, rating, 24h proxy from change_since_open)
-      - first valuation tick  (since_start_pct baseline)
+      - latest valuation tick (current_price, performance_rating)
+      - baseline anchor tick  (since_start_pct = current vs base_value)
       - per-fixture deltas    (last_match_pct from the most recent fixture's ticks)
       - core.player_tournament_stat (tournament aggregate)
       - app.holding          (default user's position → pnl, average_buy_price)
@@ -152,22 +152,26 @@ async def players_screener_view(
               FROM valuation.player_price_tick
               ORDER BY player_id, ts DESC
             ),
-            first_tick AS (
+            anchor AS (
+              -- Pre-tournament baseline: the earliest fixture_id IS NULL
+              -- tick (base_value, 0%). Falls back to the earliest tick
+              -- overall for legacy data with no baseline. Same anchor
+              -- EngineValuationProvider divides by, so screener and the
+              -- valuation provider report an identical total.
               SELECT DISTINCT ON (player_id)
-                player_id, current_price AS first_price
+                player_id, current_price AS anchor_price
               FROM valuation.player_price_tick
-              ORDER BY player_id, ts ASC
+              ORDER BY player_id, (fixture_id IS NOT NULL) ASC, ts ASC
             )
             SELECT
               p.id, p.name, p.full_name, p.jersey_number, p.team_id, p.position,
               p.detailed_position, p.age, p.foot, p.height, p.weight, p.club, p.image_path,
               lt.current_price, lt.performance_rating,
-              COALESCE(lm.net_pct, 0.0) AS change_24h,
               lt.ts AS valuation_as_of, lt.source AS valuation_source,
-              ft.first_price,
+              an.anchor_price,
               CASE
-                WHEN ft.first_price IS NOT NULL AND ft.first_price > 0
-                THEN ((lt.current_price - ft.first_price) / ft.first_price) * 100.0
+                WHEN an.anchor_price IS NOT NULL AND an.anchor_price > 0
+                THEN ((lt.current_price - an.anchor_price) / an.anchor_price) * 100.0
                 ELSE NULL
               END AS since_start_pct,
               lm.net_pct AS last_match_pct,
@@ -178,7 +182,7 @@ async def players_screener_view(
               h.average_buy_price
             FROM core.player p
             LEFT JOIN latest_tick lt ON lt.player_id = p.id
-            LEFT JOIN first_tick ft ON ft.player_id = p.id
+            LEFT JOIN anchor an ON an.player_id = p.id
             LEFT JOIN core.player_tournament_stat ts
               ON ts.player_id = p.id AND ts.season_id = :season_id
             LEFT JOIN app.holding h
@@ -217,14 +221,12 @@ async def players_screener_view(
         if raw_price is not None:
             current_price = float(raw_price)
             performance_rating = float(r["performance_rating"])
-            change_24h = float(r["change_24h"])
             valuation_as_of = r["valuation_as_of"]
             valuation_source = r["valuation_source"]
         else:
             synth = synthesize_valuation(r["id"], as_of=now)
             current_price = synth.base_value
             performance_rating = 6.5
-            change_24h = 0.0
             valuation_as_of = now
             valuation_source = "synthetic"
 
@@ -256,7 +258,6 @@ async def players_screener_view(
                 image_path=r["image_path"],
                 current_price=current_price,
                 performance_rating=performance_rating,
-                change_24h=change_24h,
                 valuation_as_of=valuation_as_of,
                 valuation_source=valuation_source,
                 since_start_pct=float(since_start) if since_start is not None else None,

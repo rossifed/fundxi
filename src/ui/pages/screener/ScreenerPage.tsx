@@ -36,7 +36,6 @@ type SortKey =
   | "team"
   | "position"
   | "value"
-  | "change_24h"
   | "pnl"
   | "since_start"
   | "last_match"
@@ -113,7 +112,7 @@ export function ScreenerPage({ on_open_player, watchlist, toggle_watch }: Screen
   const [sort_dir, set_sort_dir] = useState<SortDir>("desc");
 
   // Live: re-fetch screener data on every global price tick so prices /
-  // change_24h / per-match deltas reflect what just happened on the pitch.
+  // total / per-match deltas reflect what just happened on the pitch.
   const [data_version, set_data_version] = useState(0);
   useLiveRefetch(usePricesLiveVersion(), () => {
     void refresh_screener_repository().then(() => set_data_version(v => v + 1));
@@ -664,8 +663,6 @@ function pluck(e: ScreenerEntry, key: SortKey): number | string | null {
       return e.position;
     case "value":
       return e.current_price;
-    case "change_24h":
-      return e.change_24h;
     case "pnl":
       return e.pnl;
     case "since_start":
