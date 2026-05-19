@@ -9,15 +9,37 @@ Assumed shape:
   "comment": str,
   "minute": int,
   "extra_minute": int | null,
-  "is_goal": bool,
+  "is_goal": bool,        # provider flag — UNRELIABLE, deliberately ignored
   "is_important": bool,
   "order": int
 }
+
+`is_goal` is NOT taken from the provider boolean: Sportmonks' comment
+`is_goal` is wrong in both directions in the WC data — true on "won a
+free kick", "Fouled by", yellow cards; false on the actual "Goal! ..."
+lines (verified, see `analysis/comment-is-goal.md`). The authoritative
+provider signal for "this line is a goal" is the comment TEXT itself,
+which is deterministic: real goals read ``Goal! <team> x, <team> y.
+<scorer> ...`` or ``Own Goal by <player>, <team>.``; a VAR-cancelled
+goal reads ``GOAL OVERTURNED BY VAR`` (no ``!``). We re-derive the flag
+from the text — parsing the provider's own content, not inventing it.
 """
 
 from typing import Any
 
 from src.domain.match.match_comment import MatchComment
+
+
+def is_goal_comment(comment_text: str) -> bool:
+    """True iff the commentary line reports an actual goal.
+
+    Pure, deterministic, case/whitespace-insensitive. ``Goal!`` covers
+    open-play, penalties and shootout lines; ``Own Goal by`` covers own
+    goals (they never start with ``Goal!``). ``GOAL OVERTURNED BY VAR``
+    is excluded for free — it has no ``!`` and is not an own-goal line.
+    """
+    head = comment_text.strip().lower()
+    return head.startswith("goal!") or head.startswith("own goal by")
 
 
 def project_match_comment(payload: dict[str, Any], *, fixture_id: int) -> tuple[MatchComment, int]:
@@ -45,7 +67,7 @@ def project_match_comment(payload: dict[str, Any], *, fixture_id: int) -> tuple[
         minute=minute,
         extra_minute=extra_minute,
         comment=comment_text,
-        is_goal=bool(payload.get("is_goal")),
+        is_goal=is_goal_comment(comment_text),
         is_important=bool(payload.get("is_important")),
         sequence=sequence,
     )
