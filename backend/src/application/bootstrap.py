@@ -89,13 +89,27 @@ async def bootstrap_teams(
     """Fetch + upsert teams for the season. Returns (sportmonks_id, internal_id) pairs."""
     endpoint = f"/teams/seasons/{season_id}"
     pairs: list[tuple[int, str]] = []
+    skipped = 0
     async for params, envelope in _paginate_pages(client, endpoint):
         await raw_archive.insert_if_new(endpoint=endpoint, params=params, response=envelope)
         for item in _data_items(envelope):
-            team, sportmonks_id = project_team(item)
+            # Future tournaments expose TBD bracket slots flagged by
+            # Sportmonks' own ``placeholder: true`` (no short_code, e.g.
+            # "Winner Quarter-final 1"). Not real teams — skip them
+            # (provider's own flag, not our invention). They turn real
+            # on later bootstrap re-runs as qualification resolves.
+            if item.get("placeholder") is True:
+                skipped += 1
+                continue
+            try:
+                team, sportmonks_id = project_team(item)
+            except (ValueError, TypeError) as exc:
+                log.debug("bootstrap.teams.skip", reason=str(exc))
+                skipped += 1
+                continue
             await team_repo.upsert(team, sportmonks_id=sportmonks_id)
             pairs.append((sportmonks_id, team.id))
-    log.info("bootstrap.teams.done", count=len(pairs), season_id=season_id)
+    log.info("bootstrap.teams.done", count=len(pairs), skipped=skipped, season_id=season_id)
     return pairs
 
 
@@ -114,14 +128,24 @@ async def bootstrap_fixtures(
         "include": "participants;state;scores",
     }
     count = 0
+    skipped = 0
     async for params, envelope in _paginate_pages(client, endpoint, base_params=base_params):
         await raw_archive.insert_if_new(endpoint=endpoint, params=params, response=envelope)
         for item in _data_items(envelope):
             # Group A..L is not natively in /fixtures; enrichment overlay applied later.
-            fixture, sportmonks_id = project_fixture(item, group="")
+            # Knockout fixtures of a future tournament have TBD placeholder
+            # participants (no short_code) until qualification resolves —
+            # unprojectable, skip them. Real group-stage fixtures (qualified
+            # nations) project fine. Idempotent re-runs fill knockouts later.
+            try:
+                fixture, sportmonks_id = project_fixture(item, group="")
+            except (ValueError, TypeError) as exc:
+                log.debug("bootstrap.fixtures.skip", reason=str(exc))
+                skipped += 1
+                continue
             await fixture_repo.upsert_by_sportmonks_id(fixture, sportmonks_id=sportmonks_id)
             count += 1
-    log.info("bootstrap.fixtures.done", count=count, season_id=season_id)
+    log.info("bootstrap.fixtures.done", count=count, skipped=skipped, season_id=season_id)
     return count
 
 
