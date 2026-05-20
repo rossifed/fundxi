@@ -846,28 +846,27 @@ function RosterCard({
         </span>
       </div>
 
-      {/* Name + position. Goal / card badge sits next to the name —
-          SAME component as the pitch token, so the two surfaces show
-          the same icons for the same player by construction. */}
+      {/* Name + position. Goal / card / sub badges live in a SIBLING
+          flex item with flexShrink: 0 so they're never clipped by the
+          name's overflow:hidden + ellipsis. Same components as the
+          pitch token → coherent display by construction. */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            fontSize: 13,
-            fontWeight: 700,
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            lineHeight: 1.25,
-          }}
-        >
-          <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, lineHeight: 1.25 }}>
+          <span
+            style={{
+              flex: "1 1 auto",
+              minWidth: 0,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
             {p.name}
           </span>
-          <MatchEventBadge events={events} variant="inline" />
-          <SubBadge sub={sub_info} variant="inline" />
+          <span style={{ flexShrink: 0, display: "inline-flex", gap: 4 }}>
+            <MatchEventBadge events={events} variant="inline" />
+            <SubBadge sub={sub_info} variant="inline" />
+          </span>
         </div>
         <div style={{ fontSize: 11, color: "rgba(255,255,255,.4)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.3, marginTop: 2 }}>
           {exact_position}
