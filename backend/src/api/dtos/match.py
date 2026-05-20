@@ -32,6 +32,11 @@ class MatchEventDTO(BaseModel):
     type: str  # emoji-friendly label
     player_id: int | None
     player_name: str | None
+    # The "other" player in a substitution (player coming OFF) or the
+    # assist provider on a goal. Required by the frontend to render the
+    # substitution swap on the pitch and to attribute the assist.
+    related_player_id: int | None
+    related_player_name: str | None
     team_id: str | None
     headline: str | None
     info: str | None

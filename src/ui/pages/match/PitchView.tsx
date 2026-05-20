@@ -11,7 +11,8 @@ import { compute_pitch_positions, type PitchPosition } from "@/domain/match/form
 import { players_api } from "@/api/players_api";
 import { teams_api } from "@/api/teams_api";
 import { fmt_eur_m, fmt_signed_pct } from "@/ui/helpers/format";
-import { count_match_events, MatchEventBadge, type MatchEventCounts } from "./event_badge";
+import { count_match_events, MatchEventBadge, SubBadge, type MatchEventCounts } from "./event_badge";
+import { apply_subs, type SubInfo } from "@/domain/match/substitutions";
 
 // SVG canvas. Aspect ≈ 1.6:1 — landscape, slightly taller for breathing room.
 const SVG_W = 200;
@@ -88,11 +89,16 @@ const TEAM_SELECT_STORAGE_KEY = "fundxi.pitch.team_select";
 
 export function PitchView({
   match,
+  subs,
   on_open_player,
   home_color,
   away_color,
 }: {
   match: Match;
+  /** Per-player sub annotations (computed once at the MatchView
+   * level). Drives the swap on the pitch + the sub badge on the
+   * entering player. Same map fed to the list view → no drift. */
+  subs?: Map<number, SubInfo>;
   on_open_player: (player_id: number) => void;
   home_color?: string;
   away_color?: string;
@@ -110,11 +116,24 @@ export function PitchView({
     }
   };
 
+  // Effective on-field XI per team: starters with subbed-off players
+  // REPLACED by the entering subs (inheriting their formation slot so
+  // the pitch shape stays consistent). Same helper as the list view.
+  const empty_subs = useMemo<Map<number, SubInfo>>(() => new Map(), []);
+  const effective_subs = subs ?? empty_subs;
   const home_xi = useMemo(
-    () => match.home_xi.filter((x): x is MatchPlayer => typeof x !== "number"),
-    [match.home_xi],
+    () =>
+      apply_subs(
+        match.home_xi.filter((x): x is MatchPlayer => typeof x !== "number"),
+        match.home_bench ?? [],
+        effective_subs,
+      ).on_field,
+    [match.home_xi, match.home_bench, effective_subs],
   );
-  const away_xi = match.away_xi;
+  const away_xi = useMemo(
+    () => apply_subs(match.away_xi, match.away_bench ?? [], effective_subs).on_field,
+    [match.away_xi, match.away_bench, effective_subs],
+  );
 
   const selected_xi = team_select === "home" ? home_xi : away_xi;
   const selected_formation =
@@ -186,6 +205,7 @@ export function PitchView({
             pos={pos}
             color={selected_color}
             events={event_counts.get(pos.player.id)}
+            sub={effective_subs.get(pos.player.id)}
             on_open={on_open_player}
           />
         ))}
@@ -415,11 +435,13 @@ function PlayerToken({
   pos,
   color,
   events,
+  sub,
   on_open,
 }: {
   pos: PitchPosition;
   color: string;
   events?: MatchEventCounts;
+  sub?: SubInfo;
   on_open: (player_id: number) => void;
 }) {
   const p = pos.player;
@@ -520,6 +542,11 @@ function PlayerToken({
             two surfaces cannot drift. Top-left corner, off the jersey
             badge (bottom-right). */}
         <MatchEventBadge events={events} variant="corner" />
+        {/* Substitution badge — bottom-left corner, opposite the
+            jersey number. Only the entering player ends up shown on
+            the pitch (apply_subs has swapped him in), so this badge
+            is effectively "↘ minute" with the partner in the title. */}
+        <SubBadge sub={sub} variant="corner" />
       </span>
       <span
         style={{

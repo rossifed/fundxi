@@ -23,6 +23,8 @@ interface MatchEventDTO {
   type: string;
   player_id: number | null;
   player_name: string | null;
+  related_player_id: number | null;
+  related_player_name: string | null;
   team_id: string | null;
   headline: string | null;
   info: string | null;
@@ -67,9 +69,12 @@ function dto_player(p: MatchPlayerDTO): MatchPlayer {
 function dto_event(e: MatchEventDTO): MatchEvent {
   return {
     minute: e.minute,
+    extra_minute: e.extra_minute ?? undefined,
     type: e.type,
     player_id: e.player_id ?? 0,
     player_name: e.player_name ?? undefined,
+    related_player_id: e.related_player_id ?? undefined,
+    related_player_name: e.related_player_name ?? undefined,
     team_id: e.team_id ?? undefined,
     headline: e.headline ?? undefined,
     comment: e.info ?? undefined,

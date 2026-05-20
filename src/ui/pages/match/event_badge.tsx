@@ -15,6 +15,7 @@
 
 import type { CSSProperties } from "react";
 import type { MatchEvent } from "@/domain/match/match";
+import type { SubInfo } from "@/domain/match/substitutions";
 
 export interface MatchEventCounts {
   goals: number;
@@ -78,6 +79,42 @@ export function MatchEventBadge({ events, variant }: MatchEventBadgeProps) {
     <span style={style} title={title}>
       {events.red > 0 ? "🟥" : events.yellow > 0 ? "🟨" : null}
       {events.goals > 0 ? (events.goals === 1 ? "⚽" : `⚽×${events.goals}`) : null}
+    </span>
+  );
+}
+
+interface SubBadgeProps {
+  sub: SubInfo | undefined;
+  variant: "corner" | "inline";
+}
+
+/** "Came on" / "went off" arrow with the minute and the partner name
+ * in the tooltip. Uses the same visual base as MatchEventBadge so the
+ * two badges look like a coherent family on the same row. Nothing
+ * renders when the player has not been subbed. */
+export function SubBadge({ sub, variant }: SubBadgeProps) {
+  if (!sub) return null;
+  const style: CSSProperties =
+    variant === "corner"
+      // Sub badge in a different corner from MatchEventBadge so both
+      // can coexist on the same avatar (e.g. a scorer subbed off).
+      ? { ..._base_style, position: "absolute", bottom: -4, left: -6 }
+      : _base_style;
+  // ↘ entered (on), ↗ exited (off). Reads naturally next to the name.
+  const arrow = sub.direction === "on" ? "↘" : "↗";
+  const minute_label = sub.extra_minute ? `${sub.minute}+${sub.extra_minute}'` : `${sub.minute}'`;
+  const title = [
+    sub.direction === "on" ? "subbed on" : "subbed off",
+    sub.partner_name ? `for ${sub.partner_name}` : null,
+    `at ${minute_label}`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return (
+    <span style={style} title={title}>
+      🔄
+      <span style={{ marginLeft: 2 }}>{arrow}</span>
+      <span className="mono" style={{ marginLeft: 2, fontSize: 10 }}>{minute_label}</span>
     </span>
   );
 }

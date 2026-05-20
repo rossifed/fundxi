@@ -13,7 +13,8 @@ import type { TeamMatchStats } from "@/domain/match/team_match_stats";
 import { TickValue } from "@/ui/components/TickValue";
 import { useFixtureLiveVersion, useLiveRefetch, usePricesLiveVersion } from "@/ui/hooks/use_live_updates";
 import { PitchView } from "@/ui/pages/match/PitchView";
-import { count_match_events, MatchEventBadge, type MatchEventCounts } from "@/ui/pages/match/event_badge";
+import { count_match_events, MatchEventBadge, SubBadge, type MatchEventCounts } from "@/ui/pages/match/event_badge";
+import { apply_subs, compute_subs, type SubInfo } from "@/domain/match/substitutions";
 
 const LINEUP_VIEW_STORAGE_KEY = "fundxi.lineup_view";
 type LineupView = "list" | "pitch";
@@ -118,6 +119,20 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
   // list cards (DualRoster→RosterCard) so the two surfaces show the
   // exact same icons for the same player — coherence by construction.
   const event_counts = useMemo(() => count_match_events(match.events), [match.events]);
+
+  // Substitution state: the backend ships the STARTING XI; we walk
+  // the SUBSTITUTION events to know who actually entered / exited and
+  // reshape the on-field XI accordingly (entering player inherits the
+  // formation slot of the exiting one). Same helper for pitch & list.
+  const subs = useMemo(() => compute_subs(match.events), [match.events]);
+  const home_effective = useMemo(
+    () => apply_subs(only_match_players(match.home_xi), match.home_bench ?? [], subs),
+    [match.home_xi, match.home_bench, subs],
+  );
+  const away_effective = useMemo(
+    () => apply_subs(only_match_players(match.away_xi), match.away_bench ?? [], subs),
+    [match.away_xi, match.away_bench, subs],
+  );
 
   // Commentary feed.
   const fixture_live_version = useFixtureLiveVersion(match.fixture_id);
@@ -344,15 +359,16 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
 
           {view_mode === "list" ? (
             <DualRoster
-              home_xi={only_match_players(match.home_xi)}
-              away_xi={match.away_xi}
-              home_bench={match.home_bench ?? []}
-              away_bench={match.away_bench ?? []}
+              home_xi={home_effective.on_field}
+              away_xi={away_effective.on_field}
+              home_bench={home_effective.bench}
+              away_bench={away_effective.bench}
               home_title={`${home_team?.flag ?? ""} ${home_team?.name ?? match.home_team_id}`.trim()}
               away_title={`${away_team?.flag ?? ""} ${away_team?.name ?? match.away_team_id}`.trim()}
               home_color={match.home_kit_color ?? home_team?.color}
               away_color={match.away_kit_color ?? away_team?.color}
               event_counts={event_counts}
+              subs={subs}
               card={card}
               on_open_player={on_open_player_profile}
             />
@@ -360,6 +376,7 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
             <div>
               <PitchView
                 match={match}
+                subs={subs}
                 home_color={match.home_kit_color ?? home_team?.color}
                 away_color={match.away_kit_color ?? away_team?.color}
                 on_open_player={on_open_player_profile}
@@ -625,6 +642,7 @@ function DualRoster({
   home_color,
   away_color,
   event_counts,
+  subs,
   card,
   on_open_player,
 }: {
@@ -637,6 +655,7 @@ function DualRoster({
   home_color?: string;
   away_color?: string;
   event_counts: Map<number, MatchEventCounts>;
+  subs: Map<number, SubInfo>;
   card: CSSProperties;
   on_open_player: (player_id: number) => void;
 }) {
@@ -702,12 +721,12 @@ function DualRoster({
               <div style={grid_2col}>
                 <div style={col_stack}>
                   {home_ps.map(p => (
-                    <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={home_color} events={event_counts.get(p.id)} />
+                    <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={home_color} events={event_counts.get(p.id)} sub_info={subs.get(p.id)} />
                   ))}
                 </div>
                 <div style={col_stack}>
                   {away_ps.map(p => (
-                    <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={away_color} events={event_counts.get(p.id)} />
+                    <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={away_color} events={event_counts.get(p.id)} sub_info={subs.get(p.id)} />
                   ))}
                 </div>
               </div>
@@ -720,12 +739,12 @@ function DualRoster({
             <div style={grid_2col}>
               <div style={col_stack}>
                 {home_subs.map(p => (
-                  <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={home_color} events={event_counts.get(p.id)} sub />
+                  <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={home_color} events={event_counts.get(p.id)} sub_info={subs.get(p.id)} sub />
                 ))}
               </div>
               <div style={col_stack}>
                 {away_subs.map(p => (
-                  <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={away_color} events={event_counts.get(p.id)} sub />
+                  <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={away_color} events={event_counts.get(p.id)} sub_info={subs.get(p.id)} sub />
                 ))}
               </div>
             </div>
@@ -741,12 +760,16 @@ function RosterCard({
   on_open,
   team_color,
   events,
+  sub_info,
   sub,
 }: {
   p: MatchPlayer;
   on_open: (player_id: number) => void;
   team_color?: string;
   events?: MatchEventCounts;
+  sub_info?: SubInfo;
+  /** ``true`` when this card is in the bench section (visual dim).
+   * Distinct from ``sub_info`` which marks any swapped player. */
   sub?: boolean;
 }) {
   const ref_player = players_api.get(p.id);
@@ -844,6 +867,7 @@ function RosterCard({
             {p.name}
           </span>
           <MatchEventBadge events={events} variant="inline" />
+          <SubBadge sub={sub_info} variant="inline" />
         </div>
         <div style={{ fontSize: 11, color: "rgba(255,255,255,.4)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.3, marginTop: 2 }}>
           {exact_position}

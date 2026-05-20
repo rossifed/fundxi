@@ -20,9 +20,14 @@ export interface MatchPlayer {
 
 export interface MatchEvent {
   minute: number;
+  extra_minute?: number;
   type: string; // emoji discriminator: ⚽ 🟨 🔄 🧤 📊
   player_id: number;
   player_name?: string;
+  // The "other" player in a substitution (player going OFF) or the
+  // assist provider on a goal. Drives the pitch swap + sub badges.
+  related_player_id?: number;
+  related_player_name?: string;
   team_id?: string;
   headline?: string;
   comment?: string;

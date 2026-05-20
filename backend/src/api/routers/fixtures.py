@@ -76,6 +76,8 @@ def _event_dto(ev: MatchEvent, player_names: dict[int, str]) -> MatchEventDTO:
         type=_TYPE_LABEL.get(ev.type, "▫️"),
         player_id=ev.player_id,
         player_name=player_name,
+        related_player_id=ev.related_player_id,
+        related_player_name=related_name,
         team_id=ev.team_id,
         headline=headline,
         info=ev.info,
