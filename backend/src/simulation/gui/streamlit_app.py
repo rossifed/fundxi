@@ -33,7 +33,7 @@ if str(_BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(_BACKEND_ROOT))
 
 import streamlit as st
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -253,6 +253,21 @@ async def _load_fixture_choices() -> list[_FixtureChoice]:
                 )
                 .where(FixtureORM.sportmonks_id.is_not(None))
                 .where(FixtureORM.kickoff_at.is_not(None))
+                # Only fixtures actually replayable: their raw archive
+                # must hold BOTH includes the replay reader loads
+                # (events.type;lineups.position AND comments). Future
+                # tournaments live in core.fixture too but have only the
+                # comments include (from bootstrap_comments) — they
+                # would 'LookupError: no raw archive...' on launch.
+                .where(
+                    text(
+                        "EXISTS (SELECT 1 FROM raw.sportmonks_event e "
+                        "WHERE e.endpoint = '/fixtures/' || core.fixture.sportmonks_id::text "
+                        "AND e.params->>'include' IN ('events.type;lineups.position','comments') "
+                        "GROUP BY e.endpoint "
+                        "HAVING count(DISTINCT e.params->>'include') = 2)"
+                    )
+                )
                 .order_by(FixtureORM.kickoff_at)
             )
         ).all()
