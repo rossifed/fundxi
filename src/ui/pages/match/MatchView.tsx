@@ -13,6 +13,7 @@ import type { TeamMatchStats } from "@/domain/match/team_match_stats";
 import { TickValue } from "@/ui/components/TickValue";
 import { useFixtureLiveVersion, useLiveRefetch, usePricesLiveVersion } from "@/ui/hooks/use_live_updates";
 import { PitchView } from "@/ui/pages/match/PitchView";
+import { count_match_events, MatchEventBadge, type MatchEventCounts } from "@/ui/pages/match/event_badge";
 
 const LINEUP_VIEW_STORAGE_KEY = "fundxi.lineup_view";
 type LineupView = "list" | "pitch";
@@ -111,6 +112,12 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
         .sort((a, b) => a.minute - b.minute),
     [match.events],
   );
+
+  // Per-player event counts (goals + cards). Built once via the shared
+  // helper and passed to both the pitch tokens (PitchView) and the
+  // list cards (DualRoster→RosterCard) so the two surfaces show the
+  // exact same icons for the same player — coherence by construction.
+  const event_counts = useMemo(() => count_match_events(match.events), [match.events]);
 
   // Commentary feed.
   const fixture_live_version = useFixtureLiveVersion(match.fixture_id);
@@ -345,6 +352,7 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
               away_title={`${away_team?.flag ?? ""} ${away_team?.name ?? match.away_team_id}`.trim()}
               home_color={match.home_kit_color ?? home_team?.color}
               away_color={match.away_kit_color ?? away_team?.color}
+              event_counts={event_counts}
               card={card}
               on_open_player={on_open_player_profile}
             />
@@ -616,6 +624,7 @@ function DualRoster({
   away_title,
   home_color,
   away_color,
+  event_counts,
   card,
   on_open_player,
 }: {
@@ -627,6 +636,7 @@ function DualRoster({
   away_title: string;
   home_color?: string;
   away_color?: string;
+  event_counts: Map<number, MatchEventCounts>;
   card: CSSProperties;
   on_open_player: (player_id: number) => void;
 }) {
@@ -692,12 +702,12 @@ function DualRoster({
               <div style={grid_2col}>
                 <div style={col_stack}>
                   {home_ps.map(p => (
-                    <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={home_color} />
+                    <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={home_color} events={event_counts.get(p.id)} />
                   ))}
                 </div>
                 <div style={col_stack}>
                   {away_ps.map(p => (
-                    <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={away_color} />
+                    <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={away_color} events={event_counts.get(p.id)} />
                   ))}
                 </div>
               </div>
@@ -710,12 +720,12 @@ function DualRoster({
             <div style={grid_2col}>
               <div style={col_stack}>
                 {home_subs.map(p => (
-                  <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={home_color} sub />
+                  <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={home_color} events={event_counts.get(p.id)} sub />
                 ))}
               </div>
               <div style={col_stack}>
                 {away_subs.map(p => (
-                  <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={away_color} sub />
+                  <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={away_color} events={event_counts.get(p.id)} sub />
                 ))}
               </div>
             </div>
@@ -730,11 +740,13 @@ function RosterCard({
   p,
   on_open,
   team_color,
+  events,
   sub,
 }: {
   p: MatchPlayer;
   on_open: (player_id: number) => void;
   team_color?: string;
+  events?: MatchEventCounts;
   sub?: boolean;
 }) {
   const ref_player = players_api.get(p.id);
@@ -811,10 +823,27 @@ function RosterCard({
         </span>
       </div>
 
-      {/* Name + position */}
+      {/* Name + position. Goal / card badge sits next to the name —
+          SAME component as the pitch token, so the two surfaces show
+          the same icons for the same player by construction. */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.25 }}>
-          {p.name}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: 13,
+            fontWeight: 700,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            lineHeight: 1.25,
+          }}
+        >
+          <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
+            {p.name}
+          </span>
+          <MatchEventBadge events={events} variant="inline" />
         </div>
         <div style={{ fontSize: 11, color: "rgba(255,255,255,.4)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.3, marginTop: 2 }}>
           {exact_position}
