@@ -11,6 +11,11 @@ export async function api_post<TResponse, TBody = unknown>(
   const r = await fetch(`${API_BASE}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    // Send the HTTP-only session cookie (fundxi_session) — same as
+    // api_get / api_client. Without this, authenticated POSTs (e.g.
+    // /api/trades, /api/leagues) hit the backend without a cookie
+    // and get 401 'not authenticated'.
+    credentials: "include",
     body: JSON.stringify(body),
   });
   if (!r.ok) {
