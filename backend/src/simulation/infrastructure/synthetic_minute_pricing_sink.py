@@ -116,6 +116,16 @@ class SyntheticMinutePricingSink:
                 .on_conflict_do_nothing(index_elements=["player_id", "ts"])
             )
             await self._publish(pid, fixture_internal_id, result.price, result.live_delta)
+        # Bucketed portfolio-value snapshot for every holder of any
+        # player priced this minute. Same session ⇒ atomic with the
+        # tick writes; bucket is `date_trunc('minute', ts)` ⇒ N ticks in
+        # the same minute collapse to one row.
+        from src.application.portfolio_snapshot_service import PortfolioSnapshotService
+        pvs_service = PortfolioSnapshotService.from_session(self.session)
+        await pvs_service.materialize_for_player_ticks(
+            ticked_player_ids=self._roster(),
+            ts=ts,
+        )
         self._bumps = {}
 
     async def _publish(self, player_id: int, fixture_id: int, price: float, live_delta: float) -> None:

@@ -12,6 +12,8 @@ from src.api.dtos.portfolio import (
     TradeResponse,
     UserResponse,
 )
+from src.api.dtos.portfolio_history import PortfolioHistoryPoint, PortfolioHistoryResponse
+from src.application.portfolio_history_service import HistoryRange, PortfolioHistoryService
 from src.application.trade_execution import (
     TradeError,
     TradeRequest,
@@ -21,6 +23,13 @@ from src.domain.portfolio.portfolio import Portfolio, TradeKind
 from src.infrastructure.db.repositories.portfolio import (
     SqlAlchemyPortfolioRepository,
     SqlAlchemyTradeRepository,
+)
+from src.infrastructure.db.repositories.portfolio_snapshot import (
+    SqlAlchemyPortfolioSnapshotRepository,
+)
+from src.infrastructure.db.repositories.portfolio_snapshot_adapters import (
+    SqlAlchemyLatestPriceProvider,
+    SqlAlchemyPortfolioReader,
 )
 from src.infrastructure.db.repositories.user import SqlAlchemyUserRepository
 
@@ -131,6 +140,41 @@ async def post_trade(
                 for h in holdings
             ],
         ),
+    )
+
+
+@router.get("/api/portfolio/history", response_model=PortfolioHistoryResponse)
+async def get_portfolio_history(
+    range: str = "24h",
+    user_id: int = Depends(get_current_user_id),
+    session: AsyncSession = Depends(get_session),
+) -> PortfolioHistoryResponse:
+    _, _, portfolio = await _resolve_user_and_portfolio(session, user_id)
+    try:
+        range_ = HistoryRange(range)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"invalid range={range!r}") from exc
+
+    service = PortfolioHistoryService(
+        portfolio_repo=SqlAlchemyPortfolioRepository(session),
+        snapshot_repo=SqlAlchemyPortfolioSnapshotRepository(session),
+        price_provider=SqlAlchemyLatestPriceProvider(session),
+        portfolio_reader=SqlAlchemyPortfolioReader(session),
+    )
+    snapshots = await service.read(portfolio_id=portfolio.id, range_=range_)
+    return PortfolioHistoryResponse(
+        portfolio_id=portfolio.id,
+        range=range_.value,
+        points=[
+            PortfolioHistoryPoint(
+                ts=s.ts,
+                cash=s.cash,
+                holdings_value=s.holdings_value,
+                value=s.value,
+                pnl_vs_open=s.pnl_vs_open,
+            )
+            for s in snapshots
+        ],
     )
 
 

@@ -6,12 +6,11 @@ import {
   type HoldingMetrics,
   type PortfolioTotals,
 } from "@/domain/portfolio/portfolio_metrics";
-import { compute_portfolio_history } from "@/domain/portfolio/portfolio_history";
 import { compute_trade_outcome, type TradeOutcome } from "@/domain/portfolio/trade_outcome";
 import { players_repository } from "@/infrastructure/repositories/players_repository";
 import { portfolio_repository } from "@/infrastructure/repositories/portfolio_repository";
 import { trades_repository } from "@/infrastructure/repositories/trades_repository";
-import { spark_for_player, valuations_repository } from "@/infrastructure/repositories/valuations_repository";
+import { valuations_repository } from "@/infrastructure/repositories/valuations_repository";
 
 export interface HoldingDetail extends HoldingMetrics {
   player: Player;
@@ -49,19 +48,6 @@ export const portfolio_service = {
 
   get_my_cash(): number {
     return portfolio_repository.find_my_cash();
-  },
-
-  /** Portfolio value curve reconstructed from the holdings × each
-   * player's historical price sparkline. Reflects the user's actual
-   * book (concentration in a single player → curve looks like that
-   * player's price). Recompute on every price tick to see live moves. */
-  get_my_portfolio_history(length = 120): number[] {
-    return compute_portfolio_history(
-      portfolio_repository.find_my_holdings(),
-      portfolio_repository.find_my_cash(),
-      spark_for_player,
-      length,
-    );
   },
 
   /** Trade history enriched with the live "price-vs-trade" outcome,

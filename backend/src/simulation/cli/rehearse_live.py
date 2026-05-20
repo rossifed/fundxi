@@ -153,6 +153,16 @@ async def run(*, fixture_smk_id: int, interval: float, minutes: int, seed: int, 
                     except Exception as exc:
                         log.debug("rehearsal.publish_failed", error=str(exc))
                     ticks += 1
+                # Materialise portfolio snapshots in the same transaction
+                # as the ticks: every holder of any priced player in this
+                # minute gets a fresh bucket. Same session ⇒ atomic with
+                # the tick write (cf. portfolio-history design memo).
+                from src.application.portfolio_snapshot_service import PortfolioSnapshotService
+                pvs_service = PortfolioSnapshotService.from_session(session)
+                await pvs_service.materialize_for_player_ticks(
+                    ticked_player_ids=[pid for pid, _pos in roster],
+                    ts=ts,
+                )
                 await session.commit()
                 log.info("rehearsal.minute.SIMULATED", minute=minute, ticks=ticks)
                 await asyncio.sleep(interval)

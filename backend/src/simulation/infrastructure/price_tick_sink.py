@@ -18,7 +18,7 @@ The timestamp convention (``kickoff + minute*60 + sequence``) is the
 exact same as the batch job.
 """
 
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -44,6 +44,11 @@ class PriceTickEmittingSink:
     # Per-team rosters for layer-4 team propagation. None ⇒ no lineup
     # context (propagation skipped, kernel still does L1 + L5).
     rosters: TeamRosters | None = None
+    # Optional post-batch hook: receives the list of ticked players + ts
+    # so the caller can materialise portfolio-value snapshots in the
+    # same transaction. ``None`` ⇒ snapshot writing is skipped (tests,
+    # standalone runs that don't need the portfolio side-effect).
+    snapshot_materializer: Callable[[list[int], datetime], Awaitable[None]] | None = None
 
     async def emit(self, event: ReplayEvent, *, fixture_internal_id: int) -> None:
         # Persist the event first so any reader observes "event arrived,
@@ -65,6 +70,7 @@ class PriceTickEmittingSink:
             return
 
         ts = self.fixture_kickoff + timedelta(minutes=match_event.minute, seconds=match_event.sequence)
+        ticked_players: list[int] = []
         for affected_player, delta_pct in per_event_deltas(match_event, rosters=self.rosters):
             try:
                 new_price = self.price_state.update(affected_player, delta_pct)
@@ -81,3 +87,6 @@ class PriceTickEmittingSink:
                 performance_rating=round(6.5 + delta_pct / 4.0, 2),
                 change_since_open=round(delta_pct, 2),
             )
+            ticked_players.append(affected_player)
+        if ticked_players and self.snapshot_materializer is not None:
+            await self.snapshot_materializer(ticked_players, ts)

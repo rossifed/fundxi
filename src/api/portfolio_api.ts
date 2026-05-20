@@ -3,6 +3,11 @@ import { simulate_trade, type TradePreview, type TradePreviewInput } from "@/app
 import type { Holding } from "@/domain/portfolio/holding";
 import type { Trade } from "@/domain/portfolio/trade";
 import type { PortfolioTotals } from "@/domain/portfolio/portfolio_metrics";
+import {
+  fetch_portfolio_history,
+  type HistoryRange,
+  type PortfolioHistoryDTO,
+} from "@/infrastructure/repositories/portfolio_history_repository";
 import { refresh_portfolio, subscribe_portfolio } from "@/infrastructure/repositories/portfolio_repository";
 import { trades_repository } from "@/infrastructure/repositories/trades_repository";
 
@@ -25,9 +30,12 @@ export const portfolio_api = {
   list_trades(): Trade[] {
     return trades_repository.find_all();
   },
-  /** Live portfolio value history (cash + Σ shares × price_t for held players). */
-  get_portfolio_history(length?: number): number[] {
-    return portfolio_service.get_my_portfolio_history(length);
+  /** Portfolio value history. Served by the backend BFF — all math
+   * and storage are server-side (``valuation.portfolio_value_snapshot``
+   * hypertable + ``PortfolioHistoryService``). The web client, the
+   * future mobile client and any other surface consume the same DTO. */
+  async fetch_history(range: HistoryRange = "24h"): Promise<PortfolioHistoryDTO> {
+    return fetch_portfolio_history(range);
   },
   /** Async — re-fetch the portfolio (holdings + cash) from the BFF. */
   refresh(): Promise<void> {

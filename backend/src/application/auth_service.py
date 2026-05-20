@@ -68,7 +68,13 @@ async def register_user(
         name = f"{base_name}-{suffix}"[:64]
 
     user = await user_repo.create(name=name, kind=UserKind.HUMAN)
-    await portfolio_repo.create_for_user(user_id=user.id, cash=settings.initial_cash)
+    portfolio = await portfolio_repo.create_for_user(user_id=user.id, cash=settings.initial_cash)
+    # Seed the first portfolio-value snapshot so the chart has a
+    # zero point. Same session ⇒ atomic with the portfolio insert.
+    from src.application.portfolio_snapshot_service import PortfolioSnapshotService
+    await PortfolioSnapshotService.from_session(session).bootstrap(
+        portfolio.id, opened_at=portfolio.created_at
+    )
     await session.execute(
         update(UserORM)
         .where(UserORM.id == user.id)

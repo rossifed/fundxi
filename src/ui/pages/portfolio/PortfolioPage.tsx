@@ -111,14 +111,28 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
 
   const [positions_tab, set_positions_tab] = useState<PositionsTab>("positions");
 
-  // Real portfolio curve: cash + Σ shares × price_t for each held
-  // player, derived from per-player sparklines in the domain layer
-  // (``compute_portfolio_history``). Reflects the user's actual book —
-  // a concentration on Messi makes the curve look like Messi's price.
-  const performance_data = useMemo(
-    () => portfolio_api.get_portfolio_history(120).map(v => ({ v })),
-    [data_version],
-  );
+  // Real portfolio curve: served by the backend
+  // (``GET /api/portfolio/history``). All math + storage are server-side
+  // (hypertable ``valuation.portfolio_value_snapshot``). Web + mobile +
+  // any future surface read from the same DTO. We re-fetch on every
+  // price-tick wave so the chart stays in sync with the KPIs above.
+  const [performance_data, set_performance_data] = useState<{ v: number; label?: string; pnl?: number }[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void portfolio_api.fetch_history("24h").then(dto => {
+      if (cancelled) return;
+      set_performance_data(
+        dto.points.map(p => {
+          const dt = new Date(p.ts);
+          const label = `${dt.toLocaleDateString(undefined, { day: "2-digit", month: "short" })} · ${dt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
+          return { v: p.value, label, pnl: p.pnl_vs_open };
+        }),
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [data_version]);
   const period_return = useMemo(
     () => compute_period_return(performance_data.map(p => p.v)),
     [performance_data],
@@ -271,7 +285,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "280px 70px 80px 100px 80px 100px 100px 90px",
+                gridTemplateColumns: "280px 70px 80px 100px 80px 100px 100px 100px 120px",
                 padding: "10px 18px",
                 borderBottom: "1px solid rgba(255,255,255,.04)",
                 fontSize: 10,
@@ -288,6 +302,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
               <span>Opened</span>
               <span style={{ textAlign: "right" }}>Shares</span>
               <span style={{ textAlign: "right" }}>Avg buy</span>
+              <span style={{ textAlign: "right" }}>Price</span>
               <span style={{ textAlign: "right" }}>Value</span>
               <span style={{ textAlign: "right" }}>P&L</span>
             </div>
@@ -300,7 +315,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                   onClick={() => on_open_player(h.player)}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "280px 70px 80px 100px 80px 100px 100px 90px",
+                    gridTemplateColumns: "280px 70px 80px 100px 80px 100px 100px 100px 120px",
                     padding: "11px 18px",
                     borderBottom: "1px solid rgba(255,255,255,.025)",
                     cursor: "pointer",
@@ -337,17 +352,22 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                   <span className="mono" style={{ textAlign: "right", color: "rgba(255,255,255,.55)" }}>
                     €{h.average_buy_price}M
                   </span>
+                  <PulseValueCell value={h.current_price} display={fmt_eur_m(h.current_price)} />
                   <PulseValueCell value={h.market_value} display={fmt_eur_m(h.market_value)} />
-                  <span
+                  <div
                     className="mono"
                     style={{
                       textAlign: "right",
-                      fontWeight: 700,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-end",
+                      lineHeight: 1.2,
                       color: color_for_sign(h.pnl),
                     }}
                   >
-                    {h.pnl >= 0 ? "+" : ""}{h.return_pct.toFixed(1)}%
-                  </span>
+                    <span style={{ fontWeight: 700 }}>{fmt_eur_m_signed(h.pnl)}</span>
+                    <span style={{ fontSize: 11, opacity: 0.75 }}>{fmt_signed_pct(h.return_pct, 1)}</span>
+                  </div>
                 </div>
               );
             })}

@@ -15,6 +15,7 @@ from src.infrastructure.db.models.player_daily_snapshot import PlayerDailySnapsh
 from src.infrastructure.db.models.player_match_stat import PlayerMatchStatORM
 from src.infrastructure.db.models.player_price_tick import PlayerPriceTickORM
 from src.infrastructure.db.models.portfolio import HoldingORM, PortfolioORM, TradeORM
+from src.infrastructure.db.models.portfolio_value_snapshot import PortfolioValueSnapshotORM
 from src.infrastructure.db.models.pricing_progress import PricingProgressORM
 from src.infrastructure.db.models.raw_sportmonks_event import RawSportmonksEventORM
 from src.infrastructure.db.models.standings import StandingORM
@@ -36,6 +37,7 @@ __all__ = [
     "PlayerORM",
     "PlayerPriceTickORM",
     "PortfolioORM",
+    "PortfolioValueSnapshotORM",
     "PricingProgressORM",
     "RawSportmonksEventORM",
     "StandingORM",
