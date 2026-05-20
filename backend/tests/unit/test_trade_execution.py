@@ -324,9 +324,18 @@ def test_property_round_trip_buy_then_sell_is_cash_neutral(shares: float, price:
 
 
 @given(shares=_shares, price=_price)
-def test_property_cash_delta_equals_total_for_buy(shares: float, price: float) -> None:
-    """Cash conservation: delta cash on a buy = -total (rounded). Catches
-    a sign flip or a wrong column being mutated."""
+def test_property_cash_delta_equals_trade_total_for_buy(shares: float, price: float) -> None:
+    """Cash conservation: the cash DEBITED by a buy equals the trade
+    total exactly — they are the two numbers the user sees and they
+    must agree on every input.
+
+    We compare delta to ``out.trade.total`` and NOT to a recomputed
+    ``round(shares*price, 2)``: the kernel rounds ``total`` to 2 dp
+    monetary precision BEFORE debiting cash; recomputing the expected
+    from raw inputs uses a single global rounding and diverges on the
+    .005 boundary (caught by hypothesis on shares=1.5 price=0.01).
+    The invariant we care about is the two-numbers-agree property.
+    """
     pr, tr, p = _repos(cash=1_000_000.0)
     out = _run(
         execute_trade(
@@ -336,8 +345,8 @@ def test_property_cash_delta_equals_total_for_buy(shares: float, price: float) -
             trade_repo=tr,
         )
     )
-    expected_cash = round(1_000_000.0 - shares * price, 2)
-    assert out.portfolio.cash == expected_cash
+    cash_delta = round(1_000_000.0 - out.portfolio.cash, 2)
+    assert cash_delta == out.trade.total
 
 
 @given(prev_shares=st.floats(min_value=0.0, max_value=50.0), prev_avg=_price, qty=_shares, price=_price)
