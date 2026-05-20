@@ -858,29 +858,28 @@ function RosterCard({
         </span>
       </div>
 
-      {/* Goal / card / sub badges in a FIXED-width column between the
-          avatar and the name, right-aligned. Same X anchor on every
-          row → eye scans down a clean column instead of badges
-          floating after variable-length names. Empty when the player
-          has no event. Pitch view keeps its corner placement. */}
-      <div
-        style={{
-          flexShrink: 0,
-          width: 64,
-          display: "flex",
-          justifyContent: "flex-end",
-          alignItems: "center",
-          gap: 4,
-        }}
-      >
-        <MatchEventBadge events={events} variant="inline" />
-        <SubBadge sub={sub_info} variant="inline" />
-      </div>
-
-      {/* Name + position */}
+      {/* Name + position. Badges sit IMMEDIATELY to the right of the
+          name (sibling flex item, flexShrink: 0 so they never get
+          clipped by the name ellipsis). No other element is moved. */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.25 }}>
-          {p.name}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, lineHeight: 1.25 }}>
+          <span
+            style={{
+              flex: "0 1 auto",
+              minWidth: 0,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              fontSize: 13,
+              fontWeight: 700,
+            }}
+          >
+            {p.name}
+          </span>
+          <span style={{ flexShrink: 0, display: "inline-flex", gap: 4 }}>
+            <MatchEventBadge events={events} variant="inline" />
+            <SubBadge sub={sub_info} variant="inline" />
+          </span>
         </div>
         <div style={{ fontSize: 11, color: "rgba(255,255,255,.4)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.3, marginTop: 2 }}>
           {exact_position}
