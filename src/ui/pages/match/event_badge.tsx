@@ -88,23 +88,25 @@ interface SubBadgeProps {
   variant: "corner" | "inline";
 }
 
-/** "Came on" / "went off" arrow with the minute and the partner name
- * in the tooltip. Uses the same visual base as MatchEventBadge so the
- * two badges look like a coherent family on the same row. Nothing
- * renders when the player has not been subbed. */
+/** Football-standard substitution mark: green ▲ for "subbed on",
+ * red ▼ for "subbed off", with the minute in mono. Convention used
+ * by FotMob, BBC Sport, OneFootball, etc. — no emoji. Same dark chip
+ * base as MatchEventBadge so the two read as a coherent family on
+ * the same row / corner. Tooltip carries the partner name. */
 export function SubBadge({ sub, variant }: SubBadgeProps) {
   if (!sub) return null;
   const style: CSSProperties =
     variant === "corner"
-      // Sub badge in a different corner from MatchEventBadge so both
-      // can coexist on the same avatar (e.g. a scorer subbed off).
+      // Bottom-left so it doesn't collide with the jersey badge
+      // (bottom-right) nor with MatchEventBadge (top-left).
       ? { ..._base_style, position: "absolute", bottom: -4, left: -6 }
       : _base_style;
-  // ↘ entered (on), ↗ exited (off). Reads naturally next to the name.
-  const arrow = sub.direction === "on" ? "↘" : "↗";
+  const is_on = sub.direction === "on";
+  const arrow = is_on ? "▲" : "▼";
+  const arrow_color = is_on ? "var(--color-positive)" : "var(--color-negative)";
   const minute_label = sub.extra_minute ? `${sub.minute}+${sub.extra_minute}'` : `${sub.minute}'`;
   const title = [
-    sub.direction === "on" ? "subbed on" : "subbed off",
+    is_on ? "subbed on" : "subbed off",
     sub.partner_name ? `for ${sub.partner_name}` : null,
     `at ${minute_label}`,
   ]
@@ -112,9 +114,8 @@ export function SubBadge({ sub, variant }: SubBadgeProps) {
     .join(" ");
   return (
     <span style={style} title={title}>
-      🔄
-      <span style={{ marginLeft: 2 }}>{arrow}</span>
-      <span className="mono" style={{ marginLeft: 2, fontSize: 10 }}>{minute_label}</span>
+      <span style={{ color: arrow_color, fontWeight: 800 }}>{arrow}</span>
+      <span className="mono" style={{ marginLeft: 3, fontSize: 10 }}>{minute_label}</span>
     </span>
   );
 }
