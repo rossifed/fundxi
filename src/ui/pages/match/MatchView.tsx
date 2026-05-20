@@ -168,10 +168,22 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
     };
   }, [match.fixture_id]);
 
-  // Live: a fixture event/comment ping → re-fetch the match (clock / score /
-  // scorers / per-player prices), the commentary feed AND the team stats.
+  // Live: a fixture event/comment ping → re-fetch the match (clock /
+  // score / scorers / per-player prices), the commentary feed AND the
+  // team stats. Leading-edge throttle (750ms) so a burst of events
+  // doesn't spawn dozens of parallel requests — at extreme replay
+  // speeds (Streamlit speed=92 ≈ 0.65s per simulated minute) the
+  // unthrottled version saturated the browser's fetch queue and the
+  // streaming worker's SSE subscriber queue (100 msg), producing
+  // visible freeze-then-jump catch-ups. 750ms ≈ up to 1.5 frames/s
+  // on the slowest reasonable network — still smooth, never
+  // overwhelms.
+  const last_fixture_refresh = useRef(0);
   useLiveRefetch(fixture_live_version, () => {
     if (!match.fixture_id) return;
+    const now = Date.now();
+    if (now - last_fixture_refresh.current < 750) return;
+    last_fixture_refresh.current = now;
     matches_api
       .refresh_match_by_fixture_id(match.fixture_id)
       .then(m => {
