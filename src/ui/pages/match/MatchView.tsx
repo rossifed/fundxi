@@ -858,27 +858,29 @@ function RosterCard({
         </span>
       </div>
 
-      {/* Name + position. Goal / card / sub badges live in a SIBLING
-          flex item with flexShrink: 0 so they're never clipped by the
-          name's overflow:hidden + ellipsis. Same components as the
-          pitch token → coherent display by construction. */}
+      {/* Goal / card / sub badges in a FIXED-width column between the
+          avatar and the name, right-aligned. Same X anchor on every
+          row → eye scans down a clean column instead of badges
+          floating after variable-length names. Empty when the player
+          has no event. Pitch view keeps its corner placement. */}
+      <div
+        style={{
+          flexShrink: 0,
+          width: 64,
+          display: "flex",
+          justifyContent: "flex-end",
+          alignItems: "center",
+          gap: 4,
+        }}
+      >
+        <MatchEventBadge events={events} variant="inline" />
+        <SubBadge sub={sub_info} variant="inline" />
+      </div>
+
+      {/* Name + position */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, lineHeight: 1.25 }}>
-          <span
-            style={{
-              flex: "1 1 auto",
-              minWidth: 0,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {p.name}
-          </span>
-          <span style={{ flexShrink: 0, display: "inline-flex", gap: 4 }}>
-            <MatchEventBadge events={events} variant="inline" />
-            <SubBadge sub={sub_info} variant="inline" />
-          </span>
+        <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.25 }}>
+          {p.name}
         </div>
         <div style={{ fontSize: 11, color: "rgba(255,255,255,.4)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.3, marginTop: 2 }}>
           {exact_position}
