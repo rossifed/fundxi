@@ -309,6 +309,8 @@ Later
 - `src/api/*.ts` — UI contract surface (entry points the UI calls).
 - `src/infrastructure/repositories/*.ts` — swap point for backend.
 - `context/FUNDXI-BRIEF.md` — original design brief, color rules.
+- `context/FUNDXI-VALUATION-MODEL.md` — pricing formula (Model A) spec, single source.
+- `context/COHERENCE-INVARIANT.md` — single-source rule for every displayed number (NON-NEGOTIABLE).
 - `context/fundxi-v6.jsx` — original 1700-line prototype (reference only).
 - `backend/docs/architecture.md` — backend data-architecture, provider
   choice, API budget, operating costs, pre-sales questions.
