@@ -10,7 +10,7 @@ import type { Match, MatchPlayer } from "@/domain/match/match";
 import { compute_pitch_positions, type PitchPosition } from "@/domain/match/formation_layout";
 import { players_api } from "@/api/players_api";
 import { teams_api } from "@/api/teams_api";
-import { fmt_signed_pct } from "@/ui/helpers/format";
+import { fmt_eur_m, fmt_signed_pct } from "@/ui/helpers/format";
 
 // SVG canvas. Aspect ≈ 1.6:1 — landscape, slightly taller for breathing room.
 const SVG_W = 200;
@@ -130,6 +130,24 @@ export function PitchView({
     [selected_xi, selected_formation, team_select],
   );
 
+  // Per-player event tally (goals, yellows, reds) from the real match
+  // events feed. Used to render small badges on the pitch token. Event
+  // ``type`` comes from the backend as an emoji glyph (see fixtures
+  // router _TYPE_LABEL): "⚽"/"🎯" for goals/penalties (own goals also
+  // map to "⚽"), "🟨" yellow, "🟥" red (single + yellow-then-red).
+  const event_counts: Map<number, { goals: number; yellow: number; red: number }> = useMemo(() => {
+    const m = new Map<number, { goals: number; yellow: number; red: number }>();
+    for (const ev of match.events) {
+      if (!ev.player_id) continue;
+      const c = m.get(ev.player_id) ?? { goals: 0, yellow: 0, red: 0 };
+      if (ev.type === "⚽" || ev.type === "🎯") c.goals += 1;
+      else if (ev.type === "🟨") c.yellow += 1;
+      else if (ev.type === "🟥") c.red += 1;
+      m.set(ev.player_id, c);
+    }
+    return m;
+  }, [match.events]);
+
   const home_fill = home_color ?? match.home_kit_color ?? "rgba(255,255,255,.5)";
   const away_fill = away_color ?? match.away_kit_color ?? "rgba(255,255,255,.5)";
   const selected_color = team_select === "home" ? home_fill : away_fill;
@@ -180,6 +198,7 @@ export function PitchView({
             key={pos.player.id}
             pos={pos}
             color={selected_color}
+            events={event_counts.get(pos.player.id)}
             on_open={on_open_player}
           />
         ))}
@@ -408,16 +427,19 @@ function PitchSurface() {
 function PlayerToken({
   pos,
   color,
+  events,
   on_open,
 }: {
   pos: PitchPosition;
   color: string;
+  events?: { goals: number; yellow: number; red: number };
   on_open: (player_id: number) => void;
 }) {
   const p = pos.player;
   const ref = players_api.get(p.id);
   const photo = ref?.image_path;
   const change = p.change_last_match ?? 0;
+  const value = p.value;
 
   // Project pitch (x, y) ∈ [0, 100] to screen via the trapezoid.
   const u = pos.x / 100;
@@ -507,6 +529,36 @@ function PlayerToken({
             {p.jersey_number}
           </span>
         ) : null}
+        {/* Match-event badge — only shown when the real match event feed
+            reports a goal / card for this player. Top-left of the avatar
+            so it does NOT collide with the jersey badge (bottom-right). */}
+        {events && (events.goals > 0 || events.yellow > 0 || events.red > 0) ? (
+          <span
+            style={{
+              position: "absolute",
+              top: -4,
+              left: -6,
+              display: "flex",
+              gap: 2,
+              fontSize: 11,
+              background: "#0b0f14",
+              borderRadius: 8,
+              padding: "2px 5px",
+              border: "1px solid rgba(255,255,255,.25)",
+              lineHeight: 1.2,
+            }}
+            title={[
+              events.goals ? `${events.goals} goal${events.goals > 1 ? "s" : ""}` : null,
+              events.yellow ? "yellow card" : null,
+              events.red ? "red card" : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          >
+            {events.red > 0 ? "🟥" : events.yellow > 0 ? "🟨" : null}
+            {events.goals > 0 ? (events.goals === 1 ? "⚽" : `⚽×${events.goals}`) : null}
+          </span>
+        ) : null}
       </span>
       <span
         style={{
@@ -523,20 +575,26 @@ function PlayerToken({
       >
         {short_name(p.name)}
       </span>
-      {change !== 0 && (
-        <span
-          className="mono"
-          style={{
-            fontSize: 12,
-            fontWeight: 700,
-            color: change >= 0 ? POS : NEG,
-            textShadow: "0 1px 2px rgba(0,0,0,.9)",
-            lineHeight: 1.1,
-          }}
-        >
-          {fmt_pct_token(change)}
-        </span>
-      )}
+      {/* Live valo + per-match % on the same row, mono, dense. The value
+          always shows; the % only when there's been a move (zero is
+          visually noise). */}
+      <span
+        className="mono"
+        style={{
+          display: "flex",
+          gap: 6,
+          alignItems: "baseline",
+          fontSize: 12,
+          fontWeight: 700,
+          textShadow: "0 1px 2px rgba(0,0,0,.9)",
+          lineHeight: 1.1,
+        }}
+      >
+        <span style={{ color: "rgba(255,255,255,.95)" }}>{fmt_eur_m(value)}</span>
+        {change !== 0 ? (
+          <span style={{ color: change >= 0 ? POS : NEG }}>{fmt_pct_token(change)}</span>
+        ) : null}
+      </span>
     </button>
   );
 }

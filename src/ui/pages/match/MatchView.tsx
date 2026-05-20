@@ -173,12 +173,28 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
   });
 
   // Live: a price tick anywhere → refresh the universe valuations so the
-  // roster's "total change" column stays current. The setter call alone
-  // re-renders (RosterRow then reads the fresh, synchronously-cached valuation).
+  // roster's "total change" column stays current (synchronous re-render via
+  // bump). ALSO refresh the match payload so the PITCH tile's baked-in
+  // per-player ``value`` / ``change_last_match`` reflect the new prices —
+  // throttled to 3s because prices tick ~5/s during a live match and
+  // refresh_match returns a full payload; no need to hammer it.
   const prices_live_version = usePricesLiveVersion();
   const [, bump_valuations] = useState(0);
+  const last_pitch_refresh = useRef(0);
   useLiveRefetch(prices_live_version, () => {
     void valuations_api.refresh().then(() => bump_valuations(v => v + 1));
+    const now = Date.now();
+    if (now - last_pitch_refresh.current < 3000) return;
+    last_pitch_refresh.current = now;
+    if (!match.fixture_id) return;
+    matches_api
+      .refresh_match_by_fixture_id(match.fixture_id)
+      .then(m => {
+        if (m) set_live_match(m);
+      })
+      .catch(() => {
+        /* keep the current match on a transient error */
+      });
   });
 
   const commentaries_chrono = useMemo(
