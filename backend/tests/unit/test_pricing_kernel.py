@@ -11,16 +11,13 @@ import math
 
 import pytest
 
-from src.valuation.coefficients import DEFAULT_COEFFICIENTS as C
 from src.valuation.pricing import (
     PriceSnapshot,
     apply_tournament_event,
     live_delta,
-    multiplier,
     price,
     rating_level,
     settle,
-    volatility,
 )
 from src.valuation.strategies.layered_v1 import StatSnapshot
 
@@ -59,22 +56,43 @@ def test_negative_performance_pulls_price_down(rating: float) -> None:
     assert price(BASE, 0.0, _snap(rating)).price < BASE
 
 
-# 3. No double-count — a goal moves price ONLY via the rating it raises
+# 3. No double-count — a goal moves price ONLY via the rating it raises.
+# Spec §3.3 + §4.1: rating_level(8.0) = (8 - 6) * 4% = +8%; vol(50) = 1.00
+# (spec §4.2 reference table); pressure absent ⇒ identity. Hand-computed:
+# price = 50 * (1 + 0 + 0.08) = 54.00. The OLD events-only model would
+# also add the per-event goal weight (+5%) → 50 * 1.13 = 56.50; that
+# must NOT happen.
 def test_no_double_count_on_goal() -> None:
-    # "scored": Sportmonks lifts the rating 6.0 -> 8.0. The price move
-    # must be EXACTLY the rating-level move, never rating + w_goal_pct.
     after_goal = price(BASE, 0.0, _snap(8.0))
-    expected = BASE * (1.0 + rating_level(8.0) * volatility(BASE))
-    assert after_goal.price == pytest.approx(round(expected, 2))
-    # the legacy per-event goal % must NOT be added on top
-    assert after_goal.price < BASE * (1.0 + rating_level(8.0) + C.w_goal_pct / 100.0)
+    assert after_goal.price == 54.00  # literal, hand-derived from spec
+    assert after_goal.price < 56.50  # the legacy goal % is NOT added on top
 
 
-# 4. Volatility — same rating, %-move scales by (50/base)^0.4
-@pytest.mark.parametrize("base", [10.0, 25.0, 50.0, 100.0, 195.0])
-def test_volatility_scaling(base: float) -> None:
-    ld = live_delta(_snap(8.0), base)
-    assert ld == pytest.approx(rating_level(8.0) * (50.0 / base) ** 0.4)
+# 4. Volatility — anchored on the spec FORMULA `(50/base)^0.4` (§4.2,
+# the authoritative equation, not the illustrative table which rounds
+# loosely at some points). Values below were computed by hand with a
+# calculator from the formula, NOT by running ``volatility()``:
+#   (50/50)^0.4  = 1.0000 exactly
+#   (50/25)^0.4  = 2^0.4    ≈ 1.3195
+#   (50/10)^0.4  = 5^0.4    ≈ 1.9037
+#   (50/100)^0.4 = 0.5^0.4  ≈ 0.7579
+#   (50/200)^0.4 = 0.25^0.4 ≈ 0.5743
+# Rating 8 ⇒ rating_level = 0.08, pressure absent ⇒ identity, so
+# ld = 0.08 * vol. A bug in the formula (wrong exponent, wrong anchor)
+# or in the multiplication chain would surface here.
+@pytest.mark.parametrize(
+    ("base", "expected_ld"),
+    [
+        (50.0, 0.08 * 1.0000),  # exact: 1.0
+        (25.0, 0.08 * 1.3195),
+        (10.0, 0.08 * 1.9037),
+        (100.0, 0.08 * 0.7579),
+        (200.0, 0.08 * 0.5743),
+    ],
+)
+def test_volatility_scaling_matches_spec_formula(base: float, expected_ld: float) -> None:
+    # rel=5e-4: I computed each vol to 4 decimals manually → tight tol.
+    assert live_delta(_snap(8.0), base) == pytest.approx(expected_ld, rel=5e-4)
 
 
 def test_small_cap_moves_harder_than_blue_chip() -> None:
@@ -83,37 +101,61 @@ def test_small_cap_moves_harder_than_blue_chip() -> None:
     assert small > blue
 
 
-# 5. Pressure modulator — clamped, 1.0 = identity
+# 5. Pressure modulator — clamp [0.7, 1.3] (spec L3 / coefficients).
+# Hand-computed: base ld pre-pressure = rating_level(8) * vol(50) = 0.08.
+# Then multiplied by clamp(p, 0.7, 1.3).
 @pytest.mark.parametrize(
-    ("p", "expected_factor"),
-    [(0.5, C.pressure_mod_min), (0.7, 0.7), (1.0, 1.0), (1.3, 1.3), (1.5, C.pressure_mod_max), (None, 1.0)],
+    ("p", "expected_ld"),
+    [
+        (0.5, 0.08 * 0.7),  # below floor → clamped to 0.7
+        (0.7, 0.08 * 0.7),
+        (1.0, 0.08 * 1.0),  # identity
+        (1.3, 0.08 * 1.3),
+        (1.5, 0.08 * 1.3),  # above ceil → clamped to 1.3
+        (None, 0.08 * 1.0),  # absent ⇒ no-op
+    ],
 )
-def test_pressure_mod_clamped(p: float | None, expected_factor: float) -> None:
-    ld = live_delta(_snap(8.0, pressure=p), BASE)
-    assert ld == pytest.approx(rating_level(8.0) * volatility(BASE) * expected_factor)
+def test_pressure_mod_clamped(p: float | None, expected_ld: float) -> None:
+    assert live_delta(_snap(8.0, pressure=p), BASE) == pytest.approx(expected_ld)
 
 
-# 6. Bounds — extreme inputs are clamped before volatility/pressure
+# 6. Bounds — spec floor = -0.30, ceil = +0.40 (literal, NOT from C).
+# Extreme rating ⇒ should clamp BEFORE volatility/pressure scaling.
 def test_live_delta_bounded() -> None:
-    assert live_delta(_snap(50.0), BASE) == pytest.approx(C.live_ceil_frac * volatility(BASE))
-    assert live_delta(_snap(-50.0), BASE) == pytest.approx(C.live_floor_frac * volatility(BASE))
+    # rating 50 → would be (50-6)*0.04 = 1.76, clamped to +0.40; vol(50)=1.
+    assert live_delta(_snap(50.0), BASE) == pytest.approx(0.40)
+    # rating -50 → would be -2.24, clamped to -0.30; vol(50)=1.
+    assert live_delta(_snap(-50.0), BASE) == pytest.approx(-0.30)
 
 
 def test_multiplier_strictly_positive() -> None:
-    # catastrophic tournament delta cannot drive price <= 0
-    assert multiplier(-10.0, 0.0) == C.multiplier_floor
-    assert price(BASE, -10.0, _snap(None, is_live=False)).price == round(BASE * C.multiplier_floor, 2)
+    # Even with a catastrophic tournament delta, price must stay > 0
+    # (spec invariant; floor = 0.05). Literal: 50 * 0.05 = 2.50.
+    assert price(BASE, -10.0, _snap(None, is_live=False)).price == 2.50
 
 
-# 7. Settlement — cash in once, then LiveDelta resets to 0
+# 7. Settlement — cash in once, then LiveDelta resets to 0.
+# Literal: rating 7.0 ⇒ rating_level = (7-6)*0.04 = +0.04, vol(50)=1,
+# no pressure → ld_at_ft = 0.04. settle(0, 0.04) must be 0.04. Then
+# between matches the price must be exactly 50 * 1.04 = 52.00.
 def test_settlement_then_flat_between_matches() -> None:
-    live_at_ft = live_delta(_snap(7.5), BASE)
-    td = settle(0.0, live_at_ft)
-    assert td == pytest.approx(live_at_ft)
-    # between matches: not live → price flat at base*(1+td)
-    between = price(BASE, td, _snap(None, is_live=False))
+    assert settle(0.0, 0.04) == 0.04  # pure sum, literal
+    between = price(BASE, 0.04, _snap(None, is_live=False))
     assert between.live_delta == 0.0
-    assert between.price == pytest.approx(round(BASE * (1.0 + td), 2))
+    assert between.price == 52.00  # literal
+
+
+# 7b. Round-trip — what the kernel actually computes for a settled state
+# must match the literal end-to-end value (catches a bug in either ld
+# computation OR settlement folding).
+def test_full_settlement_round_trip_literal() -> None:
+    # Live at FT: rating 7 ⇒ ld 0.04 (computed by the kernel).
+    ld_at_ft = live_delta(_snap(7.0), BASE)
+    assert ld_at_ft == pytest.approx(0.04)
+    # Settled into tournament_delta and observed between matches:
+    td = settle(0.0, ld_at_ft)
+    between = price(BASE, td, _snap(None, is_live=False))
+    assert between.price == 52.00  # literal end-to-end check
 
 
 # 8. Accumulation, no decay — pure sum, time-independent
@@ -128,24 +170,23 @@ def test_accumulation_no_decay() -> None:
     assert flat.price == pytest.approx(round(BASE * 1.08, 2))
 
 
-# 9. Metric coherence — everything derives from the one result
-@pytest.mark.parametrize("rating", [6.0, 7.3, 5.1, 9.0])
-def test_metric_coherence(rating: float) -> None:
-    td = 0.03
-    r = price(BASE, td, _snap(rating))
-    assert r.price == pytest.approx(round(BASE * r.multiplier, 2))
-    assert r.multiplier == pytest.approx(1.0 + r.tournament_delta + r.live_delta)
-    total_pct = r.price / BASE - 1.0
-    assert total_pct == pytest.approx(r.multiplier - 1.0, abs=1e-3)
+# 9. Metric coherence — total% derived from THE price series must equal
+# (price / base - 1). Literal end-to-end: rating 7 ⇒ ld 0.04, td 0.03
+# ⇒ price = 50 * 1.07 = 53.50; total% = (53.50 / 50) - 1 = 0.07.
+def test_metric_coherence_literal_end_to_end() -> None:
+    r = price(BASE, 0.03, _snap(7.0))
+    assert r.price == 53.50  # literal
+    assert (r.price / BASE) - 1.0 == pytest.approx(0.07)
 
 
-# 10. Tournament events persist across subsequent live polls
+# 10. Tournament events persist. Literal: elim -0.40, then live rating 7
+# (ld 0.04) ⇒ price = 50 * (1 - 0.40 + 0.04) = 50 * 0.64 = 32.00.
 def test_tournament_event_persists() -> None:
-    td = apply_tournament_event(0.0, -0.40)  # knockout elimination
-    # still live somehow afterwards: the -40% stays under the live move
+    td = apply_tournament_event(0.0, -0.40)
+    assert td == -0.40  # pure sum
     live = price(BASE, td, _snap(7.0))
-    assert live.tournament_delta == pytest.approx(-0.40)
-    assert live.price == pytest.approx(round(BASE * (1.0 - 0.40 + live.live_delta), 2))
+    assert live.tournament_delta == -0.40
+    assert live.price == 32.00  # literal end-to-end
 
 
 def test_snapshot_defaults_are_safe() -> None:

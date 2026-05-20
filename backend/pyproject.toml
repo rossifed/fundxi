@@ -26,6 +26,7 @@ dev = [
     "anyio>=4.7",
     "ruff>=0.8",
     "pyright>=1.1.390",
+    "hypothesis>=6.152.9",
 ]
 # Heavy optional group — installed only when running the simulation
 # control panel: `uv sync --group simulation-gui`.
