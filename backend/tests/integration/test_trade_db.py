@@ -10,10 +10,8 @@ so the suite leaves the DB exactly as it found it. The repos use
 ``flush()`` (not ``commit()``), so the rollback wipes everything.
 """
 
-from collections.abc import AsyncIterator
-
 import pytest
-from sqlalchemy.exc import OperationalError
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.trade_execution import TradeError, TradeRequest, execute_trade
@@ -23,38 +21,16 @@ from src.infrastructure.db.repositories.portfolio import (
     SqlAlchemyPortfolioRepository,
     SqlAlchemyTradeRepository,
 )
-from src.infrastructure.db.session import SessionLocal
 
-
-async def _db_is_up() -> bool:
-    try:
-        async with SessionLocal() as session:
-            await session.execute(__import__("sqlalchemy").text("SELECT 1"))
-        return True
-    except (OperationalError, ConnectionRefusedError, OSError):
-        return False
+# ``isolated_session`` fixture is shared via tests/integration/conftest.py.
 
 
 async def _player_id_with_quote(session: AsyncSession) -> int:
     """A core.player id that exists (so the holding FK to core.player resolves)."""
-    from sqlalchemy import text
-
     row = (await session.execute(text("SELECT id FROM core.player ORDER BY id LIMIT 1"))).first()
     if row is None:  # pragma: no cover — bootstrap should have populated players
         pytest.skip("core.player is empty — bootstrap WC data first")
     return int(row[0])
-
-
-@pytest.fixture
-async def isolated_session() -> AsyncIterator[AsyncSession]:
-    """A session whose work is rolled back at teardown — zero DB pollution."""
-    if not await _db_is_up():
-        pytest.skip("local Postgres not reachable")
-    async with SessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.rollback()
 
 
 @pytest.mark.anyio
