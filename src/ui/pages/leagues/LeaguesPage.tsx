@@ -1,10 +1,11 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { color_for_sign } from "@/ui/helpers/format";
 import { leagues_api } from "@/api/leagues_api";
-import { subscribe_leagues } from "@/infrastructure/repositories/leagues_repository";
+import { refresh_leagues, subscribe_leagues } from "@/infrastructure/repositories/leagues_repository";
 import { ApiError } from "@/infrastructure/api_client";
 import { Avatar } from "@/ui/components/Avatar";
 import { useAuth } from "@/ui/shell/AuthContext";
+import { useLiveRefetch, usePricesLiveVersion } from "@/ui/hooks/use_live_updates";
 import type { League } from "@/domain/league/league";
 
 type View = "board" | "create" | "join";
@@ -24,10 +25,26 @@ export function LeaguesPage({ initial_join_code }: LeaguesPageProps = {}) {
   // Re-render when the cached summary list changes (after create/join).
   useEffect(() => subscribe_leagues(() => force(n => n + 1)), []);
 
+  // Live coherence: a price tick changes every member's portfolio
+  // value (cash + sum shares * latest_price), which can shift ranks.
+  // Throttle to once per 5s — prices tick ~5/s during a live match,
+  // and a re-fetch on every tick would hammer /api/leagues/mine for
+  // little user value (ranks don't change that fast). Trailing edge
+  // is fine: the user pulls the latest state on their next click.
+  const last_refresh_ts = useRef(0);
+  const [leaderboard_version, set_leaderboard_version] = useState(0);
+  useLiveRefetch(usePricesLiveVersion(), () => {
+    const now = Date.now();
+    if (now - last_refresh_ts.current < 5000) return;
+    last_refresh_ts.current = now;
+    void refresh_leagues().then(() => set_leaderboard_version(v => v + 1));
+  });
+
   const summaries = leagues_api.list_summaries();
   const selected_id = active_id ?? summaries[0]?.id ?? null;
 
-  // Fetch the full leaderboard for the selected league on demand.
+  // Fetch the full leaderboard for the selected league on demand;
+  // re-fetch whenever ``leaderboard_version`` ticks (price-driven).
   useEffect(() => {
     if (status !== "authenticated" || !selected_id) {
       set_detail(null);
@@ -49,7 +66,7 @@ export function LeaguesPage({ initial_join_code }: LeaguesPageProps = {}) {
     return () => {
       cancelled = true;
     };
-  }, [selected_id, status]);
+  }, [selected_id, status, leaderboard_version]);
 
   if (status === "loading") {
     return <EmptyShell title="Loading…" body="Resolving your session." />;
