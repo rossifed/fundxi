@@ -185,3 +185,20 @@ class SqlAlchemyFixtureRepository:
             .where(FixtureORM.sportmonks_id == sportmonks_id)
             .values(venue_id=venue_id, stage_name=stage_name, round_name=round_name)
         )
+
+    async def set_phase(
+        self,
+        *,
+        sportmonks_id: int,
+        stage_name: str | None,
+        round_name: str | None,
+    ) -> None:
+        """Update ONLY the tournament phase labels — venue_id left as-is.
+        No-op if the fixture row doesn't exist yet."""
+        from sqlalchemy import update as sql_update
+
+        await self._session.execute(
+            sql_update(FixtureORM)
+            .where(FixtureORM.sportmonks_id == sportmonks_id)
+            .values(stage_name=stage_name, round_name=round_name)
+        )

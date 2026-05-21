@@ -51,3 +51,14 @@ class FixtureRepository(Protocol):
     ) -> None:
         """Update the venue link and tournament phase labels. No-op if the fixture is unknown."""
         ...
+
+    async def set_phase(
+        self,
+        *,
+        sportmonks_id: int,
+        stage_name: str | None,
+        round_name: str | None,
+    ) -> None:
+        """Update ONLY the tournament phase labels (stage / round), leaving
+        the venue link untouched. No-op if the fixture is unknown."""
+        ...
