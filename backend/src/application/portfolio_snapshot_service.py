@@ -105,7 +105,12 @@ class PortfolioSnapshotService:
         ts: datetime,
     ) -> int:
         """Materialise snapshots for every portfolio holding any of the
-        ticked players. Returns the number of snapshots written."""
+        ticked players. Returns the number of snapshots written.
+
+        ``ts`` MUST be wall-clock time — a portfolio's value history
+        lives on the user's real timeline. Callers driven by a replay
+        must pass ``datetime.now(UTC)``, NOT the match's simulated
+        (fixture-kickoff-derived) timestamp."""
         player_ids = list({pid for pid in ticked_player_ids})
         if not player_ids:
             return 0

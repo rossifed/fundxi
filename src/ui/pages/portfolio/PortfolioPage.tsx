@@ -181,7 +181,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
   const [performance_data, set_performance_data] = useState<{ v: number; label?: string; pnl?: number }[]>([]);
   useEffect(() => {
     let cancelled = false;
-    void portfolio_api.fetch_history("24h").then(dto => {
+    void portfolio_api.fetch_history("all").then(dto => {
       if (cancelled) return;
       set_performance_data(
         dto.points.map(p => {
@@ -250,21 +250,31 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       {/* KPI row */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 12 }}>
-        <KpiCard label="Total Value" value={fmt_eur_m(total_value)} />
-        <KpiCard label="Cash" value={fmt_eur_m(totals.cash)} />
-        <KpiCard label="Invested" value={fmt_eur_m(totals.total_cost)} />
-        <KpiCard label="Positions" value={String(holdings.length)} />
+        <KpiCard
+          label="Total Value"
+          value={fmt_eur_m(total_value)}
+          title="Everything you own right now: free cash + market value of every position"
+        />
+        <KpiCard label="Cash" value={fmt_eur_m(totals.cash)} title="Free cash available to trade" />
+        <KpiCard
+          label="Invested"
+          value={fmt_eur_m(totals.total_cost)}
+          title="What you paid for your current positions (sum of avg buy price x shares)"
+        />
+        <KpiCard label="Positions" value={String(holdings.length)} title="Number of open positions" />
         <KpiCard
           label="P&L"
           value={fmt_eur_m_signed(pnl)}
           color={color_for_sign(pnl)}
+          title="Unrealised profit / loss on open positions = market value - invested. Equals the sum of the P&L column in the positions table."
         />
         <KpiCard
           label="Return"
           value={`${fmt_signed_pct(return_pct, 1)}`}
           color={color_for_sign(return_pct)}
+          title="P&L as a percentage of what you invested (P&L / Invested). Profit on your positions vs their cost — not the same as the Portfolio value chart, which tracks total value (incl. cash) over time."
         />
-        <KpiCard label="Trades" value={String(trades.length)} />
+        <KpiCard label="Trades" value={String(trades.length)} title="Total number of trades executed" />
       </div>
 
       {/* 2-col layout: stats + perf + positions on the left, breakdowns
@@ -293,10 +303,16 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <div>
-                <div style={{ fontSize: 14, fontWeight: 800 }}>Performance</div>
-                <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", marginTop: 2 }}>Since tournament start</div>
+                <div style={{ fontSize: 14, fontWeight: 800 }}>Portfolio value</div>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", marginTop: 2 }}>
+                  Total value (cash + positions) since portfolio open
+                </div>
               </div>
-              <span className="mono" style={{ fontSize: 18, fontWeight: 800, color: color_for_sign(period_return) }}>
+              <span
+                className="mono"
+                title="Change in total portfolio value since you opened the portfolio"
+                style={{ fontSize: 18, fontWeight: 800, color: color_for_sign(period_return) }}
+              >
                 {fmt_signed_pct(period_return, 1)}
               </span>
             </div>
@@ -791,9 +807,21 @@ function PulseValueCell({ value, display }: { value: number; display: string }) 
   );
 }
 
-function KpiCard({ label, value, color }: { label: string; value: string; color?: string }) {
+function KpiCard({
+  label,
+  value,
+  color,
+  title,
+}: {
+  label: string;
+  value: string;
+  color?: string;
+  /** Optional hover tooltip — clarifies what the metric actually measures. */
+  title?: string;
+}) {
   return (
     <div
+      title={title}
       style={{
         background: "rgba(255,255,255,.025)",
         border: "1px solid rgba(255,255,255,.05)",

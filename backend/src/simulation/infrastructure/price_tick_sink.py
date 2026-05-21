@@ -20,7 +20,7 @@ exact same as the batch job.
 
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import structlog
 
@@ -89,4 +89,7 @@ class PriceTickEmittingSink:
             )
             ticked_players.append(affected_player)
         if ticked_players and self.snapshot_materializer is not None:
-            await self.snapshot_materializer(ticked_players, ts)
+            # Portfolio snapshots are bucketed on the WALL CLOCK, not the
+            # match's simulated 2022 ``ts`` — a user's value history lives
+            # on their real timeline.
+            await self.snapshot_materializer(ticked_players, datetime.now(UTC))

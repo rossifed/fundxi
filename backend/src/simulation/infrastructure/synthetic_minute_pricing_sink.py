@@ -21,7 +21,7 @@ as a debt in the project memory file. Same kernel as the live poller
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from random import Random
 
 import structlog
@@ -117,14 +117,15 @@ class SyntheticMinutePricingSink:
             )
             await self._publish(pid, fixture_internal_id, result.price, result.live_delta)
         # Bucketed portfolio-value snapshot for every holder of any
-        # player priced this minute. Same session ⇒ atomic with the
-        # tick writes; bucket is `date_trunc('minute', ts)` ⇒ N ticks in
-        # the same minute collapse to one row.
+        # player priced this minute. The snapshot bucket is WALL-CLOCK
+        # now() — a portfolio's value history lives on the user's real
+        # timeline, NOT the match's simulated 2022 clock (`ts` above is
+        # fixture_kickoff + minute, used only for the player tick rows).
         from src.application.portfolio_snapshot_service import PortfolioSnapshotService
         pvs_service = PortfolioSnapshotService.from_session(self.session)
         await pvs_service.materialize_for_player_ticks(
             ticked_player_ids=self._roster(),
-            ts=ts,
+            ts=datetime.now(UTC),
         )
         self._bumps = {}
 
