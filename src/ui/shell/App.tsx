@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { matches_api } from "@/api/matches_api";
 import { players_api } from "@/api/players_api";
 import { portfolio_api } from "@/api/portfolio_api";
@@ -52,9 +52,6 @@ export function App() {
     else next.add(id);
     set_watchlist(next);
   };
-
-  const totals = useMemo(() => portfolio_api.get_totals(), []);
-  const holdings_count = useMemo(() => portfolio_api.get_holdings().length, []);
 
   const navigate = (id: string) => {
     set_tab(id as TabId);
@@ -164,7 +161,7 @@ export function App() {
         }}
       >
         <Header on_logo_click={() => navigate("home")} />
-        <PortfolioBar totals={totals} holdings_count={holdings_count} on_click={() => navigate("portfolio")} />
+        <PortfolioBar on_click={() => navigate("portfolio")} />
 
         <div style={{ display: "flex", flex: 1, alignItems: "stretch", minHeight: 0 }}>
           <Sidebar active_tab={tab} on_navigate={navigate} />

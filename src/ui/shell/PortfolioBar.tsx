@@ -1,13 +1,39 @@
-import type { PortfolioTotals } from "@/domain/portfolio/portfolio_metrics";
+import { useEffect, useMemo, useState } from "react";
+import { portfolio_api } from "@/api/portfolio_api";
+import { valuations_api } from "@/api/valuations_api";
 import { fmt_eur_m, fmt_eur_m_signed } from "@/ui/helpers/format";
+import { usePricesLiveVersion, useLiveRefetch } from "@/ui/hooks/use_live_updates";
 
 interface PortfolioBarProps {
-  totals: PortfolioTotals;
-  holdings_count: number;
   on_click: () => void;
 }
 
-export function PortfolioBar({ totals, holdings_count, on_click }: PortfolioBarProps) {
+/* PortfolioBar — always-on header strip with the live portfolio totals.
+ *
+ * It owns its own data lifecycle: the bar is visible on every page, so
+ * it cannot depend on whatever page is mounted to refresh the caches.
+ * Same live wiring as PortfolioPage — refresh valuations on a price
+ * tick, recompute on a trade, hydrate once on mount — so the totals
+ * never sit stale at zero. */
+export function PortfolioBar({ on_click }: PortfolioBarProps) {
+  const prices_live_version = usePricesLiveVersion();
+  const [data_version, set_data_version] = useState(0);
+
+  useLiveRefetch(prices_live_version, () => {
+    void valuations_api.refresh().then(() => set_data_version(v => v + 1));
+  });
+  useEffect(() => portfolio_api.subscribe(() => set_data_version(v => v + 1)), []);
+  // Mount-time hydration: pull fresh prices + holdings once so the bar
+  // shows real values immediately instead of a zeroed placeholder.
+  useEffect(() => {
+    void Promise.all([valuations_api.refresh(), portfolio_api.refresh()]).then(() =>
+      set_data_version(v => v + 1),
+    );
+  }, []);
+
+  const totals = useMemo(() => portfolio_api.get_totals(), [data_version]);
+  const holdings_count = useMemo(() => portfolio_api.get_holdings().length, [data_version]);
+
   const { total_value, cash, pnl, return_pct } = totals;
   const up = pnl >= 0;
   return (
