@@ -7,6 +7,15 @@ export const POSITION_LABEL: Record<Position, string> = {
   GK: "Goalkeeper",
 };
 
+// 3-letter acronyms for compact surfaces (e.g. inline next to the team
+// name in the portfolio positions list).
+export const POSITION_ABBR: Record<Position, string> = {
+  FW: "FWD",
+  MF: "MDF",
+  DF: "DEF",
+  GK: "GKP",
+};
+
 // Identity + descriptive attributes only. Pricing lives in PlayerValuation.
 export interface Player {
   id: number;

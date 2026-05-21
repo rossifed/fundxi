@@ -4,14 +4,14 @@ import { players_api } from "@/api/players_api";
 import { portfolio_api } from "@/api/portfolio_api";
 import { teams_api } from "@/api/teams_api";
 import { valuations_api } from "@/api/valuations_api";
-import { POSITION_LABEL } from "@/domain/player/player";
+import { POSITION_ABBR, POSITION_LABEL } from "@/domain/player/player";
 import type { Player } from "@/domain/player/player";
 import type { HoldingMetrics } from "@/domain/portfolio/portfolio_metrics";
 import { PlayerChip } from "@/ui/components/PlayerChip";
-import { PositionBadge } from "@/ui/components/PositionBadge";
 import { PerformanceChart } from "@/ui/components/PerformanceChart";
 import { Donut } from "@/ui/components/Donut";
 import { color_for_sign, fmt_eur_m, fmt_eur_m_signed, fmt_shares, fmt_signed_pct } from "@/ui/helpers/format";
+import { position_color } from "@/ui/design/tokens";
 
 function fmt_short_date(iso: string | undefined): string {
   if (!iso) return "—";
@@ -29,9 +29,12 @@ type PositionsTab = "positions" | "trades";
 // proportional, so the grid is ALWAYS exactly the container width: it
 // never overflows (no horizontal scroll) and never clips. Columns just
 // get tighter on a narrow container; the Player cell ellipsises.
+// 8 columns: Player, Side, Opened, Shares, Avg buy, Price, Value, P&L.
+// (Position is shown as an acronym inside the Player cell, not as a
+// dedicated column — it carries no financial meaning here.)
 const POSITIONS_GRID =
-  "minmax(0,2.4fr) minmax(0,0.75fr) minmax(0,0.6fr) minmax(0,0.95fr) " +
-  "minmax(0,0.7fr) minmax(0,0.95fr) minmax(0,0.95fr) minmax(0,0.95fr) minmax(0,1.15fr)";
+  "minmax(0,2.4fr) minmax(0,0.75fr) minmax(0,0.95fr) minmax(0,0.7fr) " +
+  "minmax(0,0.95fr) minmax(0,0.95fr) minmax(0,0.95fr) minmax(0,1.15fr)";
 
 // Palette built around the PerformanceChart accent ``var(--color-chart-primary)``. Same
 // hue family, slightly brighter so the fill-opacity on the Pie cells
@@ -307,7 +310,6 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
             >
               <span>Player</span>
               <span>Side</span>
-              <span>Pos</span>
               <span>Opened</span>
               <span style={{ textAlign: "right" }}>Shares</span>
               <span style={{ textAlign: "right" }}>Avg buy</span>
@@ -346,14 +348,18 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                           {h.player.name}
                         </span>
                       </div>
-                      <div style={{ fontSize: 11, color: "rgba(255,255,255,.3)", display: "flex", alignItems: "center", gap: 4 }}>
-                        <span>{team?.flag}</span>
-                        <span>{team?.name}</span>
+                      <div style={{ fontSize: 11, color: "rgba(255,255,255,.3)", display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
+                        <span style={{ flexShrink: 0 }}>{team?.flag}</span>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
+                          {team?.name}
+                        </span>
+                        <span style={{ color: position_color[h.player.position], fontWeight: 700, flexShrink: 0 }}>
+                          · {POSITION_ABBR[h.player.position]}
+                        </span>
                       </div>
                     </div>
                   </div>
                   <span><SideBadge shares={h.shares} /></span>
-                  <PositionBadge position={h.player.position} />
                   <span className="mono" style={{ fontSize: 12, color: "rgba(255,255,255,.55)" }}>
                     {fmt_short_date(opened_by_player.get(h.player_id))}
                   </span>
