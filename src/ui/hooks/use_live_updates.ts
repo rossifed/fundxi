@@ -27,26 +27,55 @@
 import { useEffect, useRef, useState } from "react";
 import { stream_url } from "@/infrastructure/stream_client";
 
+// ── Shared SSE channels ────────────────────────────────────────────
+// One EventSource per topic path, shared by every subscriber and
+// ref-counted: opened on the first subscriber, closed when the last
+// leaves. Without this, every component calling a live hook opened its
+// own connection — N components ⇒ N sockets to the same topic. One
+// socket per topic per browser keeps the streaming server's connection
+// count proportional to *users*, not to mounted components.
+
+interface TopicChannel {
+  source: EventSource;
+  listeners: Set<() => void>;
+}
+
+const _channels = new Map<string, TopicChannel>();
+
+/** Subscribe to an SSE topic's ``update`` frames. Returns an
+ * unsubscribe function. The underlying EventSource is shared across
+ * all subscribers of the same topic. */
+export function subscribe_topic(topic_path: string, on_update: () => void): () => void {
+  let channel = _channels.get(topic_path);
+  if (!channel) {
+    const source = new EventSource(stream_url(topic_path));
+    const listeners = new Set<() => void>();
+    // EventSource auto-reconnects on error; just fan out `update` frames.
+    source.addEventListener("update", () => {
+      for (const listener of listeners) listener();
+    });
+    channel = { source, listeners };
+    _channels.set(topic_path, channel);
+  }
+  channel.listeners.add(on_update);
+  return () => {
+    const ch = _channels.get(topic_path);
+    if (!ch) return;
+    ch.listeners.delete(on_update);
+    if (ch.listeners.size === 0) {
+      ch.source.close();
+      _channels.delete(topic_path);
+    }
+  };
+}
+
 /** Subscribe to an SSE topic; return a counter that increments on each `update`. */
 function useTopicVersion(topic_path: string | null): number {
   const [version, set_version] = useState(0);
-  // Keep the latest setter stable across reconnects without re-opening the stream.
-  const set_ref = useRef(set_version);
-  set_ref.current = set_version;
-
   useEffect(() => {
     if (topic_path === null) return;
-    let source: EventSource | null = new EventSource(stream_url(topic_path));
-    const on_update = () => set_ref.current(v => v + 1);
-    source.addEventListener("update", on_update);
-    // EventSource auto-reconnects on error; nothing to do but let it.
-    return () => {
-      source?.removeEventListener("update", on_update);
-      source?.close();
-      source = null;
-    };
+    return subscribe_topic(topic_path, () => set_version(v => v + 1));
   }, [topic_path]);
-
   return version;
 }
 

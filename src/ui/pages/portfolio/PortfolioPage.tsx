@@ -3,7 +3,6 @@ import { compute_period_return } from "@/domain/market/return";
 import { players_api } from "@/api/players_api";
 import { portfolio_api } from "@/api/portfolio_api";
 import { teams_api } from "@/api/teams_api";
-import { valuations_api } from "@/api/valuations_api";
 import { POSITION_ABBR, POSITION_LABEL } from "@/domain/player/player";
 import type { Player } from "@/domain/player/player";
 import type { HoldingMetrics } from "@/domain/portfolio/portfolio_metrics";
@@ -21,7 +20,7 @@ function fmt_short_date(iso: string | undefined): string {
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString(undefined, { day: "2-digit", month: "short" });
 }
-import { usePricesLiveVersion, useLiveRefetch } from "@/ui/hooks/use_live_updates";
+import { useLiveValuations } from "@/ui/hooks/use_live_valuations";
 import { pulse_class, usePulse } from "@/ui/hooks/use_pulse";
 
 type PositionsTab = "positions" | "trades";
@@ -106,16 +105,21 @@ interface PortfolioPageProps {
 }
 
 export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
-  // Live refresh: a price tick anywhere re-fetches current prices, then bumps
-  // a local version so the memoised reads below recompute. A trade (any
-  // in-place portfolio mutation) bumps it too — the repo cache is already
-  // updated by the trade execution, so no re-fetch is needed there.
-  const prices_live_version = usePricesLiveVersion();
+  // Live data feeds one ``data_version`` counter that every memo below
+  // depends on. It is bumped by:
+  //  - the shared live-valuations stream (one SSE + one debounced
+  //    refetch per browser — see use_live_valuations) on a price tick;
+  //  - a trade (in-place portfolio mutation) via portfolio_api.subscribe;
+  //  - the one-shot holdings hydration on mount.
+  const live_valuations = useLiveValuations();
   const [data_version, set_data_version] = useState(0);
-  useLiveRefetch(prices_live_version, () => {
-    void valuations_api.refresh().then(() => set_data_version(v => v + 1));
-  });
+  useEffect(() => set_data_version(v => v + 1), [live_valuations]);
   useEffect(() => portfolio_api.subscribe(() => set_data_version(v => v + 1)), []);
+  // Hydrate holdings + cash once on mount (valuations are hydrated by
+  // the shared live stream; holdings only change on a trade).
+  useEffect(() => {
+    void portfolio_api.refresh().then(() => set_data_version(v => v + 1));
+  }, []);
 
   const holdings = useMemo(() => portfolio_api.get_holdings(), [data_version]);
   const trades = useMemo(() => portfolio_api.list_trades(), [data_version]);
