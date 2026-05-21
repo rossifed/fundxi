@@ -24,6 +24,13 @@ import { pulse_class, usePulse } from "@/ui/hooks/use_pulse";
 
 type PositionsTab = "positions" | "trades";
 
+// Shared column template for the positions table header + rows so the
+// two grids cannot drift. The Player column flexes (``minmax(.., 1fr)``)
+// so the table fills the available width — no giant empty Player column
+// on a wide screen, no clipped columns on a narrow one.
+const POSITIONS_GRID =
+  "minmax(200px, 1fr) 70px 80px 100px 80px 100px 100px 100px 120px";
+
 // Palette built around the PerformanceChart accent ``var(--color-chart-primary)``. Same
 // hue family, slightly brighter so the fill-opacity on the Pie cells
 // (~0.55) reveals the gradient background through the slices —
@@ -285,7 +292,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "280px 70px 80px 100px 80px 100px 100px 100px 120px",
+                gridTemplateColumns: POSITIONS_GRID,
                 padding: "10px 18px",
                 borderBottom: "1px solid rgba(255,255,255,.04)",
                 fontSize: 10,
@@ -315,7 +322,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                   onClick={() => on_open_player(h.player)}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "280px 70px 80px 100px 80px 100px 100px 100px 120px",
+                    gridTemplateColumns: POSITIONS_GRID,
                     padding: "11px 18px",
                     borderBottom: "1px solid rgba(255,255,255,.025)",
                     cursor: "pointer",
