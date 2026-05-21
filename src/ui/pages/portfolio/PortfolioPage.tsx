@@ -7,9 +7,11 @@ import { valuations_api } from "@/api/valuations_api";
 import { POSITION_ABBR, POSITION_LABEL } from "@/domain/player/player";
 import type { Player } from "@/domain/player/player";
 import type { HoldingMetrics } from "@/domain/portfolio/portfolio_metrics";
+import type { Trade } from "@/domain/portfolio/trade";
 import { PlayerChip } from "@/ui/components/PlayerChip";
 import { PerformanceChart } from "@/ui/components/PerformanceChart";
 import { Donut } from "@/ui/components/Donut";
+import { SortableHeader, type SortDir } from "@/ui/components/SortableHeader";
 import { color_for_sign, fmt_eur_m, fmt_eur_m_signed, fmt_shares, fmt_signed_pct } from "@/ui/helpers/format";
 import { position_color } from "@/ui/design/tokens";
 
@@ -23,6 +25,54 @@ import { usePricesLiveVersion, useLiveRefetch } from "@/ui/hooks/use_live_update
 import { pulse_class, usePulse } from "@/ui/hooks/use_pulse";
 
 type PositionsTab = "positions" | "trades";
+
+type SortState = { key: string; dir: SortDir };
+type HoldingRow = HoldingMetrics & { player: Player };
+
+/** Toggle the sort: same column flips direction, a new column starts
+ * descending (the most useful default for money / counts). */
+function next_sort(prev: SortState, key: string): SortState {
+  if (prev.key === key) return { key, dir: prev.dir === "asc" ? "desc" : "asc" };
+  return { key, dir: "desc" };
+}
+
+/** Stable, in-place-free sort. Strings compare with ``localeCompare``,
+ * numbers numerically; ``dir`` flips the sign. */
+function sort_rows<T>(rows: T[], spec: SortState, value_of: (row: T, key: string) => string | number): T[] {
+  const sign = spec.dir === "asc" ? 1 : -1;
+  return rows.sort((a, b) => {
+    const va = value_of(a, spec.key);
+    const vb = value_of(b, spec.key);
+    if (typeof va === "string" && typeof vb === "string") return sign * va.localeCompare(vb);
+    return sign * (Number(va) - Number(vb));
+  });
+}
+
+function holding_sort_value(h: HoldingRow, key: string, opened: Map<number, string>): string | number {
+  switch (key) {
+    case "player": return h.player.name;
+    case "side": return Math.sign(h.shares); // long (+1) vs short (-1)
+    case "opened": return opened.get(h.player_id) ?? "";
+    case "shares": return h.shares;
+    case "avg_buy": return h.average_buy_price;
+    case "price": return h.current_price;
+    case "value": return h.market_value;
+    case "pnl": return h.pnl;
+    default: return 0;
+  }
+}
+
+function trade_sort_value(t: Trade, key: string): string | number {
+  switch (key) {
+    case "player": return t.player_name;
+    case "type": return t.kind;
+    case "shares": return t.shares;
+    case "price": return t.price;
+    case "total": return t.total;
+    case "date": return t.date;
+    default: return 0;
+  }
+}
 
 // Shared column template for the positions table header + rows so the
 // two grids cannot drift. Every track is ``minmax(0, <n>fr)`` — fully
@@ -150,8 +200,6 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
     [performance_data],
   );
 
-  const sorted_holdings = useMemo(() => [...holdings].sort((a, b) => b.market_value - a.market_value), [holdings]);
-
   // Earliest trade per player → opening date of the current position.
   // For longs that's the first buy; for shorts the first sell. We just
   // take the earliest of any kind matching this player_id.
@@ -163,6 +211,21 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
     }
     return map;
   }, [trades]);
+
+  // Click-to-sort state for the two tables. Positions default to value
+  // desc (biggest holding first); trades to date desc (newest first) —
+  // the behaviour from before the headers became sortable.
+  const [pos_sort, set_pos_sort] = useState<SortState>({ key: "value", dir: "desc" });
+  const [trade_sort, set_trade_sort] = useState<SortState>({ key: "date", dir: "desc" });
+
+  const sorted_holdings = useMemo(
+    () => sort_rows([...holdings], pos_sort, (h, k) => holding_sort_value(h, k, opened_by_player)),
+    [holdings, pos_sort, opened_by_player],
+  );
+  const sorted_trades = useMemo(
+    () => sort_rows([...trades], trade_sort, trade_sort_value),
+    [trades, trade_sort],
+  );
 
   const team_items = by_team.map((t, i) => ({
     label: `${t.flag} ${t.name}`,
@@ -308,14 +371,28 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                 gap: 12,
               }}
             >
-              <span>Player</span>
-              <span>Side</span>
-              <span>Opened</span>
-              <span style={{ textAlign: "right" }}>Shares</span>
-              <span style={{ textAlign: "right" }}>Avg buy</span>
-              <span style={{ textAlign: "right" }}>Price</span>
-              <span style={{ textAlign: "right" }}>Value</span>
-              <span style={{ textAlign: "right" }}>P&L</span>
+              {(
+                [
+                  { key: "player", label: "Player", align: "left" },
+                  { key: "side", label: "Side", align: "left" },
+                  { key: "opened", label: "Opened", align: "left" },
+                  { key: "shares", label: "Shares", align: "right" },
+                  { key: "avg_buy", label: "Avg buy", align: "right" },
+                  { key: "price", label: "Price", align: "right" },
+                  { key: "value", label: "Value", align: "right" },
+                  { key: "pnl", label: "P&L", align: "right" },
+                ] as const
+              ).map(c => (
+                <SortableHeader
+                  key={c.key}
+                  label={c.label}
+                  sort_key={c.key}
+                  active_key={pos_sort.key}
+                  dir={pos_sort.dir}
+                  on_sort={k => set_pos_sort(prev => next_sort(prev, k))}
+                  align={c.align}
+                />
+              ))}
             </div>
             <div className="scroll-visible" style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
             {sorted_holdings.map(h => {
@@ -404,18 +481,29 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                 gap: 12,
               }}
             >
-              <span>Player</span>
-              <span>Type</span>
-              <span style={{ textAlign: "right" }}>Shares</span>
-              <span style={{ textAlign: "right" }}>Price</span>
-              <span style={{ textAlign: "right" }}>Total</span>
-              <span style={{ textAlign: "right" }}>Date</span>
+              {(
+                [
+                  { key: "player", label: "Player", align: "left" },
+                  { key: "type", label: "Type", align: "left" },
+                  { key: "shares", label: "Shares", align: "right" },
+                  { key: "price", label: "Price", align: "right" },
+                  { key: "total", label: "Total", align: "right" },
+                  { key: "date", label: "Date", align: "right" },
+                ] as const
+              ).map(c => (
+                <SortableHeader
+                  key={c.key}
+                  label={c.label}
+                  sort_key={c.key}
+                  active_key={trade_sort.key}
+                  dir={trade_sort.dir}
+                  on_sort={k => set_trade_sort(prev => next_sort(prev, k))}
+                  align={c.align}
+                />
+              ))}
             </div>
             <div className="scroll-visible" style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-            {trades
-              .slice()
-              .reverse()
-              .map(t => {
+            {sorted_trades.map(t => {
                 const team = teams_api.get(t.team_id);
                 const player = players_api.get(t.player_id);
                 const is_buy = t.kind === "buy";
