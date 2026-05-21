@@ -8,19 +8,21 @@ import { POSITION_LABEL } from "@/domain/player/player";
 import type { Player } from "@/domain/player/player";
 import type { HoldingMetrics } from "@/domain/portfolio/portfolio_metrics";
 import { PlayerChip } from "@/ui/components/PlayerChip";
+import { PositionBadge } from "@/ui/components/PositionBadge";
 import { PerformanceChart } from "@/ui/components/PerformanceChart";
 import { Donut } from "@/ui/components/Donut";
 import { color_for_sign, fmt_eur_m, fmt_eur_m_signed, fmt_shares, fmt_signed_pct } from "@/ui/helpers/format";
+
+function fmt_short_date(iso: string | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, { day: "2-digit", month: "short" });
+}
 import { usePricesLiveVersion, useLiveRefetch } from "@/ui/hooks/use_live_updates";
 import { pulse_class, usePulse } from "@/ui/hooks/use_pulse";
 
 type PositionsTab = "positions" | "trades";
-
-// Shared column template for the positions table header + rows so the
-// two grids cannot drift. 6 columns: Player (flex) + 5 financial — the
-// table lives in the narrow left column, so it carries only the money
-// metrics; Side / Pos / Opened were dropped to fit.
-const POSITIONS_GRID = "minmax(92px, 1fr) 46px 60px 60px 64px 78px";
 
 // Palette built around the PerformanceChart accent ``var(--color-chart-primary)``. Same
 // hue family, slightly brighter so the fill-opacity on the Pie cells
@@ -137,6 +139,18 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
   );
 
   const sorted_holdings = useMemo(() => [...holdings].sort((a, b) => b.market_value - a.market_value), [holdings]);
+
+  // Earliest trade per player → opening date of the current position.
+  // For longs that's the first buy; for shorts the first sell. We just
+  // take the earliest of any kind matching this player_id.
+  const opened_by_player = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const t of trades) {
+      const cur = map.get(t.player_id);
+      if (!cur || t.date < cur) map.set(t.player_id, t.date);
+    }
+    return map;
+  }, [trades]);
 
   const team_items = by_team.map((t, i) => ({
     label: `${t.flag} ${t.name}`,
@@ -271,7 +285,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: POSITIONS_GRID,
+                gridTemplateColumns: "280px 70px 80px 100px 80px 100px 100px 100px 120px",
                 padding: "10px 18px",
                 borderBottom: "1px solid rgba(255,255,255,.04)",
                 fontSize: 10,
@@ -279,10 +293,13 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                 color: "rgba(255,255,255,.35)",
                 letterSpacing: 0.5,
                 textTransform: "uppercase",
-                gap: 10,
+                gap: 12,
               }}
             >
               <span>Player</span>
+              <span>Side</span>
+              <span>Pos</span>
+              <span>Opened</span>
               <span style={{ textAlign: "right" }}>Shares</span>
               <span style={{ textAlign: "right" }}>Avg buy</span>
               <span style={{ textAlign: "right" }}>Price</span>
@@ -298,12 +315,12 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                   onClick={() => on_open_player(h.player)}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: POSITIONS_GRID,
+                    gridTemplateColumns: "280px 70px 80px 100px 80px 100px 100px 100px 120px",
                     padding: "11px 18px",
                     borderBottom: "1px solid rgba(255,255,255,.025)",
                     cursor: "pointer",
                     alignItems: "center",
-                    gap: 10,
+                    gap: 12,
                     fontSize: 13,
                   }}
                   onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.025)")}
@@ -326,6 +343,11 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                       </div>
                     </div>
                   </div>
+                  <span><SideBadge shares={h.shares} /></span>
+                  <PositionBadge position={h.player.position} />
+                  <span className="mono" style={{ fontSize: 12, color: "rgba(255,255,255,.55)" }}>
+                    {fmt_short_date(opened_by_player.get(h.player_id))}
+                  </span>
                   <span className="mono" style={{ textAlign: "right", fontWeight: 700 }}>{fmt_shares(h.shares)}</span>
                   <span className="mono" style={{ textAlign: "right", color: "rgba(255,255,255,.55)" }}>
                     €{h.average_buy_price}M
@@ -631,6 +653,26 @@ function PlayerAvatar({ player, team_color, size }: { player: Player; team_color
     );
   }
   return <PlayerChip jersey_number={player.jersey_number} team_color={team_color} size={size} />;
+}
+
+function SideBadge({ shares }: { shares: number }) {
+  const is_short = shares < 0;
+  return (
+    <span
+      style={{
+        fontSize: 9,
+        fontWeight: 800,
+        padding: "1px 5px",
+        borderRadius: 3,
+        letterSpacing: 0.4,
+        flexShrink: 0,
+        background: is_short ? "var(--color-negative)" : "var(--color-positive)",
+        color: "#fff",
+      }}
+    >
+      {is_short ? "SHORT" : "LONG"}
+    </span>
+  );
 }
 
 /** Mono value cell with a one-shot Bloomberg-style pulse on change. */
