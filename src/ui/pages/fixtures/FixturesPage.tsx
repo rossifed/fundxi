@@ -303,12 +303,27 @@ export function FixturesPage({ on_open_match }: FixturesPageProps) {
   );
 }
 
-const BRACKET_PHASES: { stage_name: string; label: string }[] = [
-  { stage_name: "Round of 16", label: "Round of 16" },
-  { stage_name: "Quarter-finals", label: "Quarter-finals" },
-  { stage_name: "Semi-finals", label: "Semi-finals" },
-  { stage_name: "Final", label: "Final" },
-];
+// Shared bracket styling so group columns and knockout columns read as
+// the same visual family: every column is a bordered panel, every
+// column header is a filled chip. White overlays only — theme-agnostic
+// on the dark UI, no new palette colour (cf. FUNDXI-BRIEF).
+const BRACKET_COL_PANEL: React.CSSProperties = {
+  background: "rgba(255,255,255,.025)",
+  border: "1px solid rgba(255,255,255,.07)",
+  borderRadius: 8,
+  padding: 6,
+};
+
+const BRACKET_COL_CHIP: React.CSSProperties = {
+  fontSize: 10,
+  letterSpacing: 1.4,
+  fontWeight: 800,
+  color: "rgba(255,255,255,.82)",
+  textAlign: "center",
+  padding: "5px 0",
+  background: "rgba(255,255,255,.07)",
+  borderRadius: 5,
+};
 
 
 function BracketView({ fixtures, on_open }: { fixtures: Fixture[]; on_open: (fx: Fixture) => void | Promise<void> }) {
@@ -338,22 +353,9 @@ function BracketView({ fixtures, on_open }: { fixtures: Fixture[]; on_open: (fx:
             }}
           >
             {group_letters.map(letter => (
-              <div key={letter} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <div
-                  style={{
-                    fontSize: 10,
-                    letterSpacing: 1.6,
-                    fontWeight: 800,
-                    color: "rgba(255,255,255,.8)",
-                    textAlign: "center",
-                    padding: "5px 0",
-                    background: "rgba(255,255,255,.04)",
-                    borderRadius: 4,
-                  }}
-                >
-                  GROUP {letter}
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+              <div key={letter} style={{ ...BRACKET_COL_PANEL, display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={BRACKET_COL_CHIP}>GROUP {letter}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                   {(by_group.get(letter) ?? []).map(fx => (
                     <CompactMatchCell key={fx.id} fixture={fx} on_click={() => void on_open(fx)} />
                   ))}
@@ -385,8 +387,8 @@ function CompactMatchCell({ fixture, on_click }: { fixture: Fixture; on_click: (
   const is_today = fixture.date ? fixture.date.slice(0, 10) === today_key() : false;
   const time = format_kickoff_time(fixture.date);
 
-  const accent_bg = is_today ? "rgba(72,255,67,.07)" : is_live ? "rgba(255,255,255,.05)" : "rgba(255,255,255,.02)";
-  const accent_border = is_today ? "rgba(72,255,67,.35)" : is_live ? "rgba(255,255,255,.12)" : "rgba(255,255,255,.04)";
+  const accent_bg = is_today ? "rgba(72,255,67,.10)" : is_live ? "rgba(255,255,255,.07)" : "rgba(255,255,255,.05)";
+  const accent_border = is_today ? "rgba(72,255,67,.40)" : is_live ? "rgba(255,255,255,.16)" : "rgba(255,255,255,.11)";
   const tooltip = [
     format_short_date(fixture.date),
     time,
@@ -503,22 +505,11 @@ function MirroredBracket({
   // midpoints of their feeder column pairs — gives the canonical bracket
   // pyramid shape without drawing connector lines.
   const col_header = (label: string): React.ReactNode => (
-    <div
-      style={{
-        fontSize: 10,
-        letterSpacing: 1.4,
-        fontWeight: 700,
-        color: "rgba(255,255,255,.4)",
-        textAlign: "center",
-        paddingBottom: 6,
-        borderBottom: "1px solid rgba(255,255,255,.05)",
-      }}
-    >
-      {label}
-    </div>
+    <div style={BRACKET_COL_CHIP}>{label}</div>
   );
 
   const col_style: React.CSSProperties = {
+    ...BRACKET_COL_PANEL,
     display: "flex",
     flexDirection: "column",
     gap: 8,
@@ -568,19 +559,7 @@ function MirroredBracket({
         </div>
         {/* Final + trophy */}
         <div style={col_style}>
-          <div
-            style={{
-              fontSize: 11,
-              letterSpacing: 1.6,
-              fontWeight: 800,
-              color: "rgba(255,255,255,.7)",
-              textAlign: "center",
-              paddingBottom: 6,
-              borderBottom: "1px solid rgba(255,255,255,.08)",
-            }}
-          >
-            FINAL
-          </div>
+          <div style={BRACKET_COL_CHIP}>FINAL</div>
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10 }}>
             <TrophyImage />
             <div style={{ width: "100%" }}>{render_slot(bracket.final, "final")}</div>
