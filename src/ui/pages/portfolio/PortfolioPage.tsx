@@ -54,15 +54,6 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
     void valuations_api.refresh().then(() => set_data_version(v => v + 1));
   });
   useEffect(() => portfolio_api.subscribe(() => set_data_version(v => v + 1)), []);
-  // Mount-time hydration: ``useLiveRefetch`` deliberately skips the first
-  // render, so without this the positions list would show stale (or
-  // zero) prices until the next tick. Pull fresh valuations + holdings
-  // once on open so Price / Value / P&L are correct immediately.
-  useEffect(() => {
-    void Promise.all([valuations_api.refresh(), portfolio_api.refresh()]).then(() =>
-      set_data_version(v => v + 1),
-    );
-  }, []);
 
   const holdings = useMemo(() => portfolio_api.get_holdings(), [data_version]);
   const trades = useMemo(() => portfolio_api.list_trades(), [data_version]);
@@ -201,19 +192,20 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
         <KpiCard label="Trades" value={String(trades.length)} />
       </div>
 
-      {/* 2-col summary row: performance chart on the left, breakdown
-          rail on the right. The positions / trades table is a separate
-          full-width section below — a 9-column table needs the room. */}
+      {/* 2-col layout: stats + perf + positions on the left, breakdowns
+          stack on the right. The right rail starts at the very top of
+          this grid (same Y as Long/Short on the left). */}
       <div
         style={{
           display: "grid",
           gridTemplateColumns: "minmax(0, 1fr) 340px",
           columnGap: 16,
           rowGap: 16,
-          alignItems: "start",
+          alignItems: "stretch",
         }}
       >
-        {/* Left col — performance chart. */}
+        {/* Left col — Perf chart → Positions/Trades (stretches to match
+            the right rail height so the bottoms align). */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
           <div
             style={{
@@ -235,31 +227,21 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
             </div>
             <PerformanceChart data={performance_data} height={280} />
           </div>
-        </div>
 
-        {/* Right rail — full analytics stack */}
-        <aside style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <ExposureCard total_value={total_value} />
-          <WinLossCard holdings={holdings} />
-          <BreakdownCard title="By team" items={team_items} chart="bars" />
-          <BreakdownCard title="By position" items={position_items} chart="pie" />
-          <BreakdownCard title="By age" items={age_items} chart="pie" />
-        </aside>
-      </div>
-
-      {/* Positions / Trade history — full-width section below the summary
-          grid so the table has room for every financial column
-          (Avg buy / Price / Value / P&L). */}
-      <div
-        style={{
-          background: "rgba(255,255,255,.02)",
-          border: "1px solid rgba(255,255,255,.04)",
-          borderRadius: 12,
-          overflow: "hidden",
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
+          {/* Positions / Trade history — flex-grows to fill remaining
+              left-col height so the bottom aligns with the right rail. */}
+          <div
+            style={{
+              background: "rgba(255,255,255,.02)",
+              border: "1px solid rgba(255,255,255,.04)",
+              borderRadius: 12,
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
+              flex: 1,
+              minHeight: 0,
+            }}
+          >
         <div
           style={{
             display: "flex",
@@ -303,7 +285,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "minmax(160px, 1fr) 64px 64px 88px 72px 92px 92px 96px 112px",
+                gridTemplateColumns: "280px 70px 80px 100px 80px 100px 100px 100px 120px",
                 padding: "10px 18px",
                 borderBottom: "1px solid rgba(255,255,255,.04)",
                 fontSize: 10,
@@ -324,7 +306,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
               <span style={{ textAlign: "right" }}>Value</span>
               <span style={{ textAlign: "right" }}>P&L</span>
             </div>
-            <div className="scroll-visible" style={{ maxHeight: 460, overflowY: "auto" }}>
+            <div className="scroll-visible" style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
             {sorted_holdings.map(h => {
               const team = teams_api.get(h.player.team_id);
               return (
@@ -333,7 +315,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                   onClick={() => on_open_player(h.player)}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "minmax(160px, 1fr) 64px 64px 88px 72px 92px 92px 96px 112px",
+                    gridTemplateColumns: "280px 70px 80px 100px 80px 100px 100px 100px 120px",
                     padding: "11px 18px",
                     borderBottom: "1px solid rgba(255,255,255,.025)",
                     cursor: "pointer",
@@ -414,7 +396,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
               <span style={{ textAlign: "right" }}>Total</span>
               <span style={{ textAlign: "right" }}>Date</span>
             </div>
-            <div className="scroll-visible" style={{ maxHeight: 460, overflowY: "auto" }}>
+            <div className="scroll-visible" style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
             {trades
               .slice()
               .reverse()
@@ -486,6 +468,17 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
           </>
         )}
           </div>
+        </div>
+
+        {/* Right rail — full analytics stack */}
+        <aside style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <ExposureCard total_value={total_value} />
+          <WinLossCard holdings={holdings} />
+          <BreakdownCard title="By team" items={team_items} chart="bars" />
+          <BreakdownCard title="By position" items={position_items} chart="pie" />
+          <BreakdownCard title="By age" items={age_items} chart="pie" />
+        </aside>
+      </div>
 
     </div>
   );
