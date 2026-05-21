@@ -66,9 +66,10 @@ function p_x(u: number, v: number): number {
 // Token scale by depth — far players smaller (perspective). With the lower
 // camera angle the depth gap reads more, so the size gap follows.
 function token_scale(v: number): number {
-  return 0.62 + 0.38 * v; // 0.62 (far) → 1.0 (near). Less aggressive than the
+  return 0.68 + 0.42 * v; // 0.68 (far) → 1.10 (near). Less aggressive than the
   // pitch perspective itself — pure geometric scaling would shrink far tokens
   // to thumbnails; we keep them legible at the cost of strict realism.
+  // Nudged up ~10% over the original 0.62→1.0 for better readability.
 }
 
 // Visual constants — dark surface with a touch of warmth, white markings.
