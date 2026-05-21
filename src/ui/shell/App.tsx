@@ -25,11 +25,7 @@ const APP_MAX_WIDTH = 1800;
 
 // Pages where the right rail adds value (live ticker, watchlist, movers).
 // Hidden on Match View (full bleed) and Profile (settings, no need).
-// Portfolio is excluded on purpose: it already carries its own analytics
-// rail (Exposure / Win-Loss / breakdowns) AND a wide 9-column positions
-// table — a second 320px rail squeezes that table until its rightmost
-// columns (Price / Value / P&L) clip under ``overflow: hidden``.
-const PAGES_WITH_RAIL: TabId[] = ["home", "screener", "fixtures", "leagues"];
+const PAGES_WITH_RAIL: TabId[] = ["home", "screener", "fixtures", "portfolio", "leagues"];
 
 // Read a one-shot ``?join=CODE`` invite param, then strip it from the URL
 // so a refresh doesn't replay it. Returns the code (uppercased) or null.
