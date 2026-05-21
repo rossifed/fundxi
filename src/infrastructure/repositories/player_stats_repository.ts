@@ -17,6 +17,8 @@ export interface PlayerTournamentStat {
   shots_total: number | null;
   shots_on_target: number | null;
   key_passes: number | null;
+  passes_total: number | null;
+  passes_accuracy: number | null;
   rating_avg: number | null;
 }
 

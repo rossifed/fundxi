@@ -5,16 +5,18 @@ DDD role: Domain Service (pure function). Maps a single statistics block
 domain Value Object.
 
 Sportmonks v3 stat type IDs we surface as primary columns:
-- 42  SHOTS_TOTAL
-- 52  GOALS         (value: {total, goals, penalties})
-- 79  ASSISTS
-- 83  REDCARDS
-- 84  YELLOWCARDS
-- 86  SHOTS_ON_TARGET
-- 117 KEY_PASSES
-- 118 RATING        (value: {average, highest, lowest})
-- 119 MINUTES_PLAYED
-- 321 APPEARANCES
+- 42   SHOTS_TOTAL
+- 52   GOALS         (value: {total, goals, penalties})
+- 79   ASSISTS
+- 80   PASSES_TOTAL
+- 83   REDCARDS
+- 84   YELLOWCARDS
+- 86   SHOTS_ON_TARGET
+- 117  KEY_PASSES
+- 118  RATING        (value: {average, highest, lowest})
+- 119  MINUTES_PLAYED
+- 321  APPEARANCES
+- 1584 PASSES_ACCURACY (Accurate Passes Percentage; value: {total: 85.34})
 
 Anything else we receive lands in `raw_stats` as-is so we can surface
 new metrics later without re-ingesting.
@@ -31,6 +33,8 @@ _STAT_YELLOW_CARDS = 84
 _STAT_SHOTS_TOTAL = 42
 _STAT_SHOTS_ON_TARGET = 86
 _STAT_KEY_PASSES = 117
+_STAT_PASSES_TOTAL = 80
+_STAT_PASSES_ACCURACY = 1584
 _STAT_RATING = 118
 _STAT_MINUTES_PLAYED = 119
 _STAT_APPEARANCES = 321
@@ -49,6 +53,24 @@ def _total(value: object) -> int | None:
         return value
     if isinstance(value, float):
         return int(value)
+    return None
+
+
+def _total_float(value: object) -> float | None:
+    """Like ``_total`` but keeps the fractional part — used for the
+    pass-accuracy percentage whose ``total`` is a float (e.g. 85.34)."""
+    if isinstance(value, dict):
+        v = value.get("total")
+        if isinstance(v, (int, float)):
+            return float(v)
+        if isinstance(v, str):
+            try:
+                return float(v)
+            except ValueError:
+                return None
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
     return None
 
 
@@ -103,6 +125,8 @@ def project_player_stat(
         shots_total=_total(by_type.get(_STAT_SHOTS_TOTAL)),
         shots_on_target=_total(by_type.get(_STAT_SHOTS_ON_TARGET)),
         key_passes=_total(by_type.get(_STAT_KEY_PASSES)),
+        passes_total=_total(by_type.get(_STAT_PASSES_TOTAL)),
+        passes_accuracy=_total_float(by_type.get(_STAT_PASSES_ACCURACY)),
         rating_avg=_average(by_type.get(_STAT_RATING)),
     )
     raw = {"details": block.get("details")}

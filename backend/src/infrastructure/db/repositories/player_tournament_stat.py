@@ -23,6 +23,8 @@ def _to_domain(orm: PlayerTournamentStatORM) -> PlayerTournamentStat:
         shots_total=orm.shots_total,
         shots_on_target=orm.shots_on_target,
         key_passes=orm.key_passes,
+        passes_total=orm.passes_total,
+        passes_accuracy=float(orm.passes_accuracy) if orm.passes_accuracy is not None else None,
         rating_avg=float(orm.rating_avg) if orm.rating_avg is not None else None,
     )
 
@@ -51,6 +53,8 @@ class SqlAlchemyPlayerTournamentStatRepository:
             shots_total=stat.shots_total,
             shots_on_target=stat.shots_on_target,
             key_passes=stat.key_passes,
+            passes_total=stat.passes_total,
+            passes_accuracy=stat.passes_accuracy,
             rating_avg=stat.rating_avg,
             raw_stats=raw_stats,
         )
@@ -66,6 +70,8 @@ class SqlAlchemyPlayerTournamentStatRepository:
             "shots_total": stmt.excluded.shots_total,
             "shots_on_target": stmt.excluded.shots_on_target,
             "key_passes": stmt.excluded.key_passes,
+            "passes_total": stmt.excluded.passes_total,
+            "passes_accuracy": stmt.excluded.passes_accuracy,
             "rating_avg": stmt.excluded.rating_avg,
             "raw_stats": stmt.excluded.raw_stats,
         }

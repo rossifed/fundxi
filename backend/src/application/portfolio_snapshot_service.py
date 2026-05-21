@@ -80,9 +80,9 @@ def _compute_holdings_value(
     holdings: list[Holding],
     prices: dict[int, float],
 ) -> float:
-    """Σ shares × latest_price across positions. Falls back to the
+    """Sum of shares * latest_price across positions. Falls back to the
     holding's own cost basis (``average_buy_price``) when no tick exists
-    yet — see service docstring."""
+    yet - see service docstring."""
     total = 0.0
     for h in holdings:
         price = prices.get(h.player_id, h.average_buy_price)

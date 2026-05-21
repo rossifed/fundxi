@@ -7,8 +7,8 @@ chart has a baseline (and ``pnl_vs_open`` is well-defined for the live
 tail stitching in ``PortfolioHistoryService``).
 
 For each such portfolio we materialise a snapshot reflecting its
-CURRENT state (cash + Σ shares × latest_tick_price). That becomes the
-"open" baseline going forward — i.e. the chart starts from "now".
+CURRENT state (cash + sum(shares * latest_tick_price)). That becomes the
+"open" baseline going forward - i.e. the chart starts from "now".
 
 Idempotent. Run multiple times safely (``UPSERT`` semantics; we skip
 portfolios that already have ≥1 row).

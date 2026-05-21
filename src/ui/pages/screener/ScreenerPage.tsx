@@ -45,6 +45,11 @@ type SortKey =
   | "goals"
   | "assists"
   | "shots"
+  | "yellow_cards"
+  | "red_cards"
+  | "key_passes"
+  | "passes"
+  | "passes_accuracy"
   | "rating_avg"
   | "age"
   | "foot"
@@ -73,12 +78,17 @@ const TABS: Record<Tab, ColumnDef[]> = {
     { key: "spark", label: "Trend", width: "100px", align: "left", sortable: false },
   ],
   statistics: [
-    { key: "appearances", label: "Apps", width: "50px", align: "right" },
-    { key: "minutes_played", label: "Min", width: "55px", align: "right" },
-    { key: "goals", label: "G", width: "40px", align: "right" },
-    { key: "assists", label: "A", width: "40px", align: "right" },
-    { key: "shots", label: "Shots", width: "55px", align: "right" },
-    { key: "rating_avg", label: "Rate", width: "55px", align: "right" },
+    { key: "appearances", label: "Apps", width: "46px", align: "right" },
+    { key: "minutes_played", label: "Min", width: "46px", align: "right" },
+    { key: "goals", label: "Goals", width: "54px", align: "right" },
+    { key: "assists", label: "Assists", width: "60px", align: "right" },
+    { key: "shots", label: "Shots", width: "52px", align: "right" },
+    { key: "yellow_cards", label: "🟨", width: "38px", align: "right" },
+    { key: "red_cards", label: "🟥", width: "38px", align: "right" },
+    { key: "key_passes", label: "Key P", width: "48px", align: "right" },
+    { key: "passes", label: "Passes", width: "58px", align: "right" },
+    { key: "passes_accuracy", label: "Pass %", width: "56px", align: "right" },
+    { key: "rating_avg", label: "Rating", width: "54px", align: "right" },
   ],
   personal: [
     { key: "age", label: "Age", width: "45px", align: "right" },
@@ -166,8 +176,16 @@ export function ScreenerPage({ on_open_player, watchlist, toggle_watch }: Screen
     position_filters.size + team_filters.size + (price_range[0] > 0 || price_range[1] < 999 ? 1 : 0);
 
   const columns = TABS[tab];
-  const variable_template = columns.map(c => c.width).join(" ");
-  const grid_template = `${STAR_W}px ${PLAYER_W}px ${TEAM_W}px ${POS_W}px ${VALUE_W}px ${variable_template}`;
+  // Every column except the star is a proportional ``minmax(0, Nfr)``
+  // track — the per-column px numbers become fr weights. The grid is
+  // therefore ALWAYS exactly the container width: it fits any screen
+  // without a horizontal scrollbar and without clipping; columns just
+  // scale together. The star stays a fixed icon width.
+  const grid_template =
+    `${STAR_W}px ` +
+    [PLAYER_W, TEAM_W, POS_W, VALUE_W, ...columns.map(c => parseInt(c.width, 10))]
+      .map(w => `minmax(0, ${w}fr)`)
+      .join(" ");
 
   const set_sort = (key: SortKey) => {
     if (sort_key === key) {
@@ -624,7 +642,20 @@ function Row({
               {e.name}
             </span>
             {held && (
-              <span style={{ fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,.5)", background: "rgba(255,255,255,.06)", padding: "1px 5px", borderRadius: 3, flexShrink: 0 }}>
+              <span
+                title="In your portfolio"
+                style={{
+                  fontSize: 9,
+                  fontWeight: 800,
+                  letterSpacing: 0.4,
+                  color: "var(--color-positive)",
+                  background: "rgba(72,255,67,.14)",
+                  border: "1px solid rgba(72,255,67,.35)",
+                  padding: "1px 5px",
+                  borderRadius: 3,
+                  flexShrink: 0,
+                }}
+              >
                 HELD
               </span>
             )}
@@ -681,6 +712,16 @@ function pluck(e: ScreenerEntry, key: SortKey): number | string | null {
       return e.assists;
     case "shots":
       return e.shots_total;
+    case "yellow_cards":
+      return e.yellow_cards;
+    case "red_cards":
+      return e.red_cards;
+    case "key_passes":
+      return e.key_passes;
+    case "passes":
+      return e.passes_total;
+    case "passes_accuracy":
+      return e.passes_accuracy;
     case "rating_avg":
       return e.rating_avg;
     case "age":
@@ -769,8 +810,46 @@ function ScreenerCell({ entry: e, column: c }: { entry: ScreenerEntry; column: C
       );
     case "shots":
       return (
-        <span className="mono" style={base_style}>
+        <span
+          className="mono"
+          style={base_style}
+          title={`${e.shots_on_target ?? 0} on target · ${e.shots_total ?? 0} total`}
+        >
           {e.shots_on_target ?? 0}/{e.shots_total ?? 0}
+        </span>
+      );
+    case "yellow_cards":
+      return (
+        <span className="mono" style={base_style} title="Yellow cards">
+          {fmt_int(e.yellow_cards)}
+        </span>
+      );
+    case "red_cards":
+      return (
+        <span
+          className="mono"
+          style={{ ...base_style, color: (e.red_cards ?? 0) > 0 ? "var(--color-negative)" : undefined }}
+          title="Red cards"
+        >
+          {fmt_int(e.red_cards)}
+        </span>
+      );
+    case "key_passes":
+      return (
+        <span className="mono" style={base_style} title="Key passes (passes leading to a shot)">
+          {fmt_int(e.key_passes)}
+        </span>
+      );
+    case "passes":
+      return (
+        <span className="mono" style={base_style} title="Total passes">
+          {fmt_int(e.passes_total)}
+        </span>
+      );
+    case "passes_accuracy":
+      return (
+        <span className="mono" style={base_style} title="Pass accuracy">
+          {e.passes_accuracy != null ? `${e.passes_accuracy.toFixed(0)}%` : "—"}
         </span>
       );
     case "rating_avg":

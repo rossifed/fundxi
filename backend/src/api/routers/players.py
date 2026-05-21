@@ -177,7 +177,7 @@ async def players_screener_view(
               lm.net_pct AS last_match_pct,
               ts.appearances, ts.minutes_played, ts.goals, ts.assists,
               ts.yellow_cards, ts.red_cards, ts.shots_total, ts.shots_on_target,
-              ts.key_passes, ts.rating_avg,
+              ts.key_passes, ts.passes_total, ts.passes_accuracy, ts.rating_avg,
               COALESCE(h.shares, 0) AS held_shares,
               h.average_buy_price
             FROM core.player p
@@ -272,6 +272,8 @@ async def players_screener_view(
                 shots_total=r["shots_total"],
                 shots_on_target=r["shots_on_target"],
                 key_passes=r["key_passes"],
+                passes_total=r["passes_total"],
+                passes_accuracy=float(r["passes_accuracy"]) if r["passes_accuracy"] is not None else None,
                 rating_avg=float(r["rating_avg"]) if r["rating_avg"] is not None else None,
                 held_shares=shares,
                 average_buy_price=avg_buy,

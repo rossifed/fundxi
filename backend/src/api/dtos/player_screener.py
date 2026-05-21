@@ -48,6 +48,8 @@ class PlayerScreenerEntryResponse(BaseModel):
     shots_total: int | None = None
     shots_on_target: int | None = None
     key_passes: int | None = None
+    passes_total: int | None = None
+    passes_accuracy: float | None = None
     rating_avg: float | None = None
 
     # User context (app.holding for the default user's portfolio)

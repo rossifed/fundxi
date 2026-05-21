@@ -35,7 +35,7 @@ class PortfolioSnapshot:
     cash: float
     holdings_value: float
     value: float  # cash + holdings_value, persisted denormalised
-    pnl_vs_open: float  # value − initial portfolio value
+    pnl_vs_open: float  # value - initial portfolio value
 
 
 class PortfolioSnapshotRepository(Protocol):

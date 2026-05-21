@@ -17,6 +17,8 @@ class PlayerTournamentStatResponse(BaseModel):
     shots_total: int | None = None
     shots_on_target: int | None = None
     key_passes: int | None = None
+    passes_total: int | None = None
+    passes_accuracy: float | None = None
     rating_avg: float | None = None
 
     @classmethod
@@ -33,5 +35,7 @@ class PlayerTournamentStatResponse(BaseModel):
             shots_total=stat.shots_total,
             shots_on_target=stat.shots_on_target,
             key_passes=stat.key_passes,
+            passes_total=stat.passes_total,
+            passes_accuracy=stat.passes_accuracy,
             rating_avg=stat.rating_avg,
         )

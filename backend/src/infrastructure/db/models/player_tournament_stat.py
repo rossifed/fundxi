@@ -31,5 +31,7 @@ class PlayerTournamentStatORM(Base, AuditMixin):
     shots_total: Mapped[int | None]
     shots_on_target: Mapped[int | None]
     key_passes: Mapped[int | None]
+    passes_total: Mapped[int | None]
+    passes_accuracy: Mapped[float | None] = mapped_column(Numeric(precision=5, scale=2))
     rating_avg: Mapped[float | None] = mapped_column(Numeric(precision=4, scale=2))
     raw_stats: Mapped[dict[str, Any] | None] = mapped_column(JSONB)

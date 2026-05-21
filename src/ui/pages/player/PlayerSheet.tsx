@@ -912,8 +912,9 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
                   color={(tournament_stats.assists ?? 0) > 0 ? "var(--color-positive)" : undefined}
                 />
                 <SmallKpi
-                  label="Shots"
+                  label="Shots (OT/Tot)"
                   value={`${tournament_stats.shots_on_target ?? 0}/${tournament_stats.shots_total ?? 0}`}
+                  title={`${tournament_stats.shots_on_target ?? 0} on target · ${tournament_stats.shots_total ?? 0} total`}
                 />
                 <SmallKpi
                   label="Yellow Cards"
@@ -926,6 +927,15 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
                   color={(tournament_stats.red_cards ?? 0) > 0 ? "var(--color-negative)" : undefined}
                 />
                 <SmallKpi label="Key Passes" value={String(tournament_stats.key_passes ?? 0)} />
+                <SmallKpi label="Passes" value={String(tournament_stats.passes_total ?? 0)} />
+                <SmallKpi
+                  label="Pass Accuracy"
+                  value={
+                    tournament_stats.passes_accuracy != null
+                      ? `${tournament_stats.passes_accuracy.toFixed(0)}%`
+                      : "—"
+                  }
+                />
               </div>
             </SectionCard>
           )}
@@ -1184,14 +1194,19 @@ function SmallKpi({
   value,
   color,
   mono = true,
+  title,
 }: {
   label: string;
   value: ReactNode;
   color?: string;
   mono?: boolean;
+  /** Optional hover tooltip — used to disambiguate compact values
+   * (e.g. the "on target / total" shots ratio). */
+  title?: string;
 }) {
   return (
     <div
+      title={title}
       style={{
         background: "rgba(255,255,255,.025)",
         border: "1px solid rgba(255,255,255,.05)",

@@ -5,7 +5,7 @@ DDD role: Application Service. Single entry point for the BFF router
 
 1. **Historical buckets** — read from ``valuation.portfolio_value_snapshot``
    for the requested range. One row per (portfolio, minute).
-2. **Live tail** — the current ``cash + Σ shares × latest_price`` value,
+2. **Live tail** — the current ``cash + sum(shares * latest_price)`` value,
    appended as the last point so the chart never lags the live KPIs by
    more than one tick.
 
