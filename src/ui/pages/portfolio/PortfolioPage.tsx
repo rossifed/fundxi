@@ -25,11 +25,13 @@ import { pulse_class, usePulse } from "@/ui/hooks/use_pulse";
 type PositionsTab = "positions" | "trades";
 
 // Shared column template for the positions table header + rows so the
-// two grids cannot drift. The Player column flexes (``minmax(.., 1fr)``)
-// so the table fills the available width — no giant empty Player column
-// on a wide screen, no clipped columns on a narrow one.
+// two grids cannot drift. Every track is ``minmax(0, <n>fr)`` — fully
+// proportional, so the grid is ALWAYS exactly the container width: it
+// never overflows (no horizontal scroll) and never clips. Columns just
+// get tighter on a narrow container; the Player cell ellipsises.
 const POSITIONS_GRID =
-  "minmax(200px, 1fr) 70px 80px 100px 80px 100px 100px 100px 120px";
+  "minmax(0,2.4fr) minmax(0,0.75fr) minmax(0,0.6fr) minmax(0,0.95fr) " +
+  "minmax(0,0.7fr) minmax(0,0.95fr) minmax(0,0.95fr) minmax(0,0.95fr) minmax(0,1.15fr)";
 
 // Palette built around the PerformanceChart accent ``var(--color-chart-primary)``. Same
 // hue family, slightly brighter so the fill-opacity on the Pie cells
