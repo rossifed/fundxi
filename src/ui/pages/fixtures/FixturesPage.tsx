@@ -1,16 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
 import { matches_api } from "@/api/matches_api";
+import { standings_api, type GroupStanding } from "@/api/standings_api";
 import { teams_api } from "@/api/teams_api";
 import type { Fixture, FixtureStatus } from "@/domain/match/fixture";
 import type { Match } from "@/domain/match/match";
 import { build_bracket, type BracketLayout } from "@/domain/match/bracket";
 import { LiveBadge } from "@/ui/components/LiveBadge";
-import { useLiveRefetch, useMatchesLiveVersion } from "@/ui/hooks/use_live_updates";
+import {
+  useLiveRefetch,
+  useMatchesLiveVersion,
+  useStandingsLiveVersion,
+} from "@/ui/hooks/use_live_updates";
 
 type StatusFilter = "all" | FixtureStatus;
-type ViewMode = "calendar" | "bracket";
+type ViewMode = "calendar" | "bracket" | "groups";
 
 const VIEW_MODE_STORAGE_KEY = "fundxi.fixtures.view_mode";
+
+function read_view_mode(): ViewMode {
+  if (typeof window === "undefined") return "calendar";
+  const stored = window.localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+  return stored === "bracket" || stored === "groups" ? stored : "calendar";
+}
 
 const STATUS_TABS: { key: StatusFilter; label: string }[] = [
   { key: "all", label: "All" },
@@ -112,10 +123,7 @@ function phase_chip(fixture: Fixture): string {
 
 export function FixturesPage({ on_open_match }: FixturesPageProps) {
   const [filter, set_filter] = useState<StatusFilter>("all");
-  const [view_mode, set_view_mode] = useState<ViewMode>(() => {
-    if (typeof window === "undefined") return "calendar";
-    return window.localStorage.getItem(VIEW_MODE_STORAGE_KEY) === "bracket" ? "bracket" : "calendar";
-  });
+  const [view_mode, set_view_mode] = useState<ViewMode>(read_view_mode);
   useEffect(() => {
     if (typeof window !== "undefined") window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, view_mode);
   }, [view_mode]);
@@ -141,27 +149,32 @@ export function FixturesPage({ on_open_match }: FixturesPageProps) {
     <div style={{ display: "flex", flexDirection: "column", gap: 16, width: "100%" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
         <div style={{ display: "flex", gap: 6 }}>
-          {STATUS_TABS.map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => set_filter(tab.key)}
-              disabled={view_mode === "bracket"}
-              style={{
-                padding: "8px 16px",
-                borderRadius: 10,
-                fontSize: 12,
-                fontWeight: filter === tab.key ? 700 : 500,
-                border: "1px solid rgba(255,255,255,.06)",
-                cursor: view_mode === "bracket" ? "not-allowed" : "pointer",
-                fontFamily: "inherit",
-                background: filter === tab.key ? "rgba(255,255,255,.08)" : "rgba(255,255,255,.02)",
-                color: filter === tab.key ? "#fff" : "rgba(255,255,255,.45)",
-                opacity: view_mode === "bracket" ? 0.4 : 1,
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
+          {STATUS_TABS.map(tab => {
+            // The status filter only applies to the calendar list — the
+            // bracket and groups views show the whole tournament.
+            const filter_disabled = view_mode !== "calendar";
+            return (
+              <button
+                key={tab.key}
+                onClick={() => set_filter(tab.key)}
+                disabled={filter_disabled}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: 10,
+                  fontSize: 12,
+                  fontWeight: filter === tab.key ? 700 : 500,
+                  border: "1px solid rgba(255,255,255,.06)",
+                  cursor: filter_disabled ? "not-allowed" : "pointer",
+                  fontFamily: "inherit",
+                  background: filter === tab.key ? "rgba(255,255,255,.08)" : "rgba(255,255,255,.02)",
+                  color: filter === tab.key ? "#fff" : "rgba(255,255,255,.45)",
+                  opacity: filter_disabled ? 0.4 : 1,
+                }}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
 
         <div
@@ -175,8 +188,9 @@ export function FixturesPage({ on_open_match }: FixturesPageProps) {
             gap: 2,
           }}
         >
-          {(["calendar", "bracket"] as const).map(m => {
+          {(["calendar", "bracket", "groups"] as const).map(m => {
             const active = view_mode === m;
+            const label = m === "calendar" ? "Calendar" : m === "bracket" ? "Bracket" : "Groups";
             return (
               <button
                 key={m}
@@ -197,7 +211,7 @@ export function FixturesPage({ on_open_match }: FixturesPageProps) {
                   fontFamily: "inherit",
                 }}
               >
-                {m === "calendar" ? "Calendar" : "Bracket"}
+                {label}
               </button>
             );
           })}
@@ -206,6 +220,8 @@ export function FixturesPage({ on_open_match }: FixturesPageProps) {
 
       {view_mode === "bracket" ? (
         <BracketView fixtures={all} on_open={handle_open} />
+      ) : view_mode === "groups" ? (
+        <GroupsView />
       ) : (
       <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
         {days.map(day => (
@@ -325,6 +341,129 @@ const BRACKET_COL_CHIP: React.CSSProperties = {
   borderRadius: 5,
 };
 
+
+// === Groups view — one standings table per group ===================
+
+// Column template shared by a group table's header + rows so they
+// cannot drift: # | Team (flex) | P | W | D | L | GD | Pts.
+const GROUP_TABLE_GRID = "22px minmax(0,1fr) 22px 22px 22px 22px 36px 34px";
+
+/** Group-stage standings: every group's table, fed by /api/standings
+ * (one request, team name + flag already joined server-side). Refreshes
+ * on the live ``standings`` SSE topic. */
+function GroupsView() {
+  const standings_version = useStandingsLiveVersion();
+  const [groups, set_groups] = useState<GroupStanding[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void standings_api.list().then(data => {
+      if (!cancelled) {
+        set_groups([...data].sort((a, b) => a.group.localeCompare(b.group)));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [standings_version]);
+
+  if (groups === null) {
+    return (
+      <div style={{ padding: 40, textAlign: "center", color: "rgba(255,255,255,.3)", fontSize: 13 }}>
+        Loading group tables…
+      </div>
+    );
+  }
+  if (groups.length === 0) {
+    return (
+      <div style={{ padding: 40, textAlign: "center", color: "rgba(255,255,255,.25)", fontSize: 13 }}>
+        No group standings available yet
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 12 }}>
+      {groups.map(g => (
+        <GroupTable key={g.group} group={g} />
+      ))}
+    </div>
+  );
+}
+
+function GroupTable({ group }: { group: GroupStanding }) {
+  return (
+    <div style={BRACKET_COL_PANEL}>
+      <div style={{ ...BRACKET_COL_CHIP, marginBottom: 6 }}>GROUP {group.group}</div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: GROUP_TABLE_GRID,
+          gap: 4,
+          padding: "2px 6px 5px",
+          fontSize: 9,
+          fontWeight: 700,
+          letterSpacing: 0.4,
+          textTransform: "uppercase",
+          color: "rgba(255,255,255,.35)",
+        }}
+      >
+        <span>#</span>
+        <span>Team</span>
+        <span style={{ textAlign: "center" }}>P</span>
+        <span style={{ textAlign: "center" }}>W</span>
+        <span style={{ textAlign: "center" }}>D</span>
+        <span style={{ textAlign: "center" }}>L</span>
+        <span style={{ textAlign: "right" }}>GD</span>
+        <span style={{ textAlign: "right" }}>Pts</span>
+      </div>
+      {group.rows.map(r => {
+        // Top 2 of every group always advance (true for both the WC2022
+        // and WC2026 formats) — mark them with a green left accent.
+        const qualifies = r.position <= 2;
+        return (
+          <div
+            key={r.team_id}
+            style={{
+              display: "grid",
+              gridTemplateColumns: GROUP_TABLE_GRID,
+              gap: 4,
+              alignItems: "center",
+              padding: "5px 6px",
+              fontSize: 12,
+              borderTop: "1px solid rgba(255,255,255,.04)",
+              borderLeft: `2px solid ${qualifies ? "var(--color-positive)" : "transparent"}`,
+            }}
+          >
+            <span
+              className="mono"
+              style={{ fontWeight: 700, color: qualifies ? "var(--color-positive)" : "rgba(255,255,255,.4)" }}
+            >
+              {r.position}
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+              {r.flag ? (
+                <img src={r.flag} alt="" style={{ width: 16, height: 16, objectFit: "contain", flexShrink: 0 }} />
+              ) : (
+                <span style={{ width: 16, flexShrink: 0 }} />
+              )}
+              <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {r.team_name}
+              </span>
+            </span>
+            <span className="mono" style={{ textAlign: "center", color: "rgba(255,255,255,.5)" }}>{r.played}</span>
+            <span className="mono" style={{ textAlign: "center", color: "rgba(255,255,255,.5)" }}>{r.won}</span>
+            <span className="mono" style={{ textAlign: "center", color: "rgba(255,255,255,.5)" }}>{r.drawn}</span>
+            <span className="mono" style={{ textAlign: "center", color: "rgba(255,255,255,.5)" }}>{r.lost}</span>
+            <span className="mono" style={{ textAlign: "right", color: "rgba(255,255,255,.7)" }}>
+              {r.goal_difference > 0 ? "+" : ""}{r.goal_difference}
+            </span>
+            <span className="mono" style={{ textAlign: "right", fontWeight: 800 }}>{r.points}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function BracketView({ fixtures, on_open }: { fixtures: Fixture[]; on_open: (fx: Fixture) => void | Promise<void> }) {
   const by_group = new Map<string, Fixture[]>();
