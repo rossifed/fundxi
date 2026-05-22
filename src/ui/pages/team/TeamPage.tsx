@@ -134,30 +134,52 @@ export function TeamPage({ team, on_open_player, on_open_match, on_back }: TeamP
         ) : squad.length === 0 ? (
           <Muted>No players found for this team.</Muted>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
             {POSITION_GROUPS.map(grp => {
               const players = squad.filter(p => p.position === grp.key);
               if (players.length === 0) return null;
+              const accent = position_color[grp.key];
               return (
-                <div key={grp.key} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                <div key={grp.key} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {/* Position section header — a coloured title with a
+                      fading rule so each block is unmistakably its own. */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                     <span
-                      style={{ width: 7, height: 7, borderRadius: 4, background: position_color[grp.key] }}
+                      style={{ width: 10, height: 10, borderRadius: 5, background: accent, flexShrink: 0 }}
                     />
                     <span
                       style={{
-                        fontSize: 11,
-                        fontWeight: 700,
-                        letterSpacing: 0.5,
+                        fontSize: 16,
+                        fontWeight: 800,
+                        letterSpacing: 1.2,
                         textTransform: "uppercase",
-                        color: "rgba(255,255,255,.6)",
+                        color: accent,
+                        whiteSpace: "nowrap",
                       }}
                     >
                       {grp.label}
                     </span>
-                    <span style={{ fontSize: 11, color: "rgba(255,255,255,.3)", fontWeight: 600 }}>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 800,
+                        color: "rgba(255,255,255,.55)",
+                        background: "rgba(255,255,255,.06)",
+                        borderRadius: 20,
+                        padding: "2px 8px",
+                        flexShrink: 0,
+                      }}
+                    >
                       {players.length}
                     </span>
+                    <span
+                      style={{
+                        flex: 1,
+                        height: 2,
+                        borderRadius: 1,
+                        background: `linear-gradient(90deg, ${accent}66, rgba(255,255,255,.04) 60%, transparent)`,
+                      }}
+                    />
                   </div>
                   <div
                     style={{
