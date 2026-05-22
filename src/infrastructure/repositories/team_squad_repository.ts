@@ -26,6 +26,14 @@ export interface SquadPlayer {
     change_last_match: number;
     performance_rating: number;
   };
+  stats: {
+    appearances: number | null;
+    minutes_played: number | null;
+    goals: number | null;
+    assists: number | null;
+    passes_accuracy: number | null;
+    rating_avg: number | null;
+  } | null;
 }
 
 export async function fetch_team_squad(team_id: string): Promise<SquadPlayer[]> {

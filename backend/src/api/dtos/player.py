@@ -84,13 +84,31 @@ class PlayerValuationResponse(BaseModel):
         )
 
 
+class PlayerStatsBrief(BaseModel):
+    """A small tournament-stat slice — what a squad/player card shows.
+    Every field is nullable: a player may have no stat row yet."""
+
+    appearances: int | None = None
+    minutes_played: int | None = None
+    goals: int | None = None
+    assists: int | None = None
+    passes_accuracy: float | None = None
+    rating_avg: float | None = None
+
+
 class PlayerWithValuationResponse(PlayerResponse):
     valuation: PlayerValuationResponse
+    stats: PlayerStatsBrief | None = None
 
     @classmethod
-    def from_pair(cls, pair: PlayerWithValuation) -> "PlayerWithValuationResponse":
+    def from_pair(
+        cls,
+        pair: PlayerWithValuation,
+        stats: PlayerStatsBrief | None = None,
+    ) -> "PlayerWithValuationResponse":
         base = PlayerResponse.from_domain(pair.player)
         return cls(
             **base.model_dump(),
             valuation=PlayerValuationResponse.from_domain(pair.valuation),
+            stats=stats,
         )

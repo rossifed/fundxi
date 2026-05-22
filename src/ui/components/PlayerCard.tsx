@@ -1,13 +1,13 @@
 /* PlayerCard — a portrait trading card for a player.
  *
- * DDD role: presentational UI component. The player as a tradeable
- * asset: a full-bleed portrait hero, identity overlaid on a gradient
- * scrim, then the market value + tournament change and the physical
- * profile. Click is the caller's concern (open the PlayerSheet).
+ * DDD role: presentational UI component. FUT-inspired layout (rating
+ * badge, hero portrait, a 6-stat block, a market-value band) but in
+ * fundXI's palette: dark surfaces, the team kit colour as the frame
+ * accent (per-card provider data, not theme), green/red for the change.
  *
- * Colours flow through design tokens; the only literals are the
- * per-player team kit colour (provider data, not theme) and the
- * black scrim overlays (theme-agnostic on a dark UI — see CLAUDE.md).
+ * Every value is real: the rating, the 6 stats, age/height/weight/foot,
+ * the market value. Nothing FIFA-proprietary (no PAC/SHO/… attributes,
+ * no EA overall, no rarity tier) — see CLAUDE.md Data-Sourcing.
  */
 
 import { useState } from "react";
@@ -16,6 +16,15 @@ import type { Position } from "@/domain/player/player";
 import { POSITION_ABBR } from "@/domain/player/player";
 import { color_for_sign, fmt_eur_m, fmt_signed_pct } from "@/ui/helpers/format";
 import { position_color } from "@/ui/design/tokens";
+
+export interface PlayerCardStats {
+  appearances: number | null;
+  minutes_played: number | null;
+  goals: number | null;
+  assists: number | null;
+  passes_accuracy: number | null;
+  rating_avg: number | null;
+}
 
 interface PlayerCardProps {
   name: string;
@@ -30,6 +39,7 @@ interface PlayerCardProps {
   weight: number | null; // kg
   current_price: number;
   change_pct: number; // % since tournament start
+  stats: PlayerCardStats | null;
   on_click: () => void;
 }
 
@@ -37,17 +47,10 @@ function capitalize(s: string): string {
   return s.length === 0 ? s : s[0]!.toUpperCase() + s.slice(1);
 }
 
-const CHIP: CSSProperties = {
-  position: "absolute",
-  top: 8,
-  fontSize: 10,
-  fontWeight: 800,
-  padding: "3px 7px",
-  borderRadius: 6,
-  background: "rgba(7,8,29,.82)",
-  backdropFilter: "blur(3px)",
-  lineHeight: 1,
-};
+/** Count-style stat -> always a number (null means "played, none"). */
+function n(v: number | null | undefined): string {
+  return String(v ?? 0);
+}
 
 export function PlayerCard({
   name,
@@ -62,13 +65,14 @@ export function PlayerCard({
   weight,
   current_price,
   change_pct,
+  stats,
   on_click,
 }: PlayerCardProps) {
   const [img_failed, set_img_failed] = useState(false);
   const [hover, set_hover] = useState(false);
   const has_photo = image_path !== null && image_path !== "" && !img_failed;
 
-  // Compact physical line — only the parts the provider actually gave.
+  const rating = stats?.rating_avg;
   const bio = [
     age != null ? `${age}y` : null,
     height != null ? `${height}cm` : null,
@@ -76,7 +80,22 @@ export function PlayerCard({
     foot ? capitalize(foot) : null,
   ].filter((x): x is string => x !== null);
 
-  const up = change_pct >= 0;
+  // The 6-stat block — real tournament figures.
+  const stat_cells: { label: string; value: string }[] = [
+    { label: "G", value: n(stats?.goals) },
+    { label: "A", value: n(stats?.assists) },
+    { label: "APP", value: n(stats?.appearances) },
+    { label: "MIN", value: n(stats?.minutes_played) },
+    { label: "PAS%", value: stats?.passes_accuracy != null ? `${Math.round(stats.passes_accuracy)}` : "—" },
+    { label: "RAT", value: stats?.rating_avg != null ? stats.rating_avg.toFixed(1) : "—" },
+  ];
+
+  const overlay_chip: CSSProperties = {
+    background: "rgba(6,7,12,.78)",
+    backdropFilter: "blur(3px)",
+    borderRadius: 7,
+    lineHeight: 1,
+  };
 
   return (
     <button
@@ -88,27 +107,26 @@ export function PlayerCard({
         display: "flex",
         flexDirection: "column",
         padding: 0,
-        border: `1px solid ${hover ? `${team_color}88` : "rgba(255,255,255,.09)"}`,
+        border: `1.5px solid ${hover ? team_color : `${team_color}66`}`,
         borderRadius: 14,
-        background: "#0c0d12",
+        background: "#0b0c11",
         cursor: "pointer",
         overflow: "hidden",
         fontFamily: "inherit",
         textAlign: "left",
         transform: hover ? "translateY(-4px)" : "none",
         boxShadow: hover
-          ? "0 14px 32px rgba(0,0,0,.55)"
-          : "0 2px 8px rgba(0,0,0,.35)",
+          ? `0 16px 34px rgba(0,0,0,.6), 0 0 0 1px ${team_color}44`
+          : "0 2px 10px rgba(0,0,0,.4)",
         transition: "transform .16s ease, box-shadow .16s ease, border-color .16s ease",
       }}
     >
-      {/* Hero — full-bleed portrait. Real photo, or a team-coloured
-          panel with the jersey number when the provider has none. */}
+      {/* Hero — portrait photo with corner overlays + a name scrim. */}
       <div
         style={{
           position: "relative",
-          aspectRatio: "4 / 5",
-          background: `radial-gradient(120% 80% at 50% 0%, ${team_color}55, #0c0d12 70%)`,
+          aspectRatio: "3 / 4",
+          background: `radial-gradient(125% 80% at 50% 12%, ${team_color}66, #0b0c11 72%)`,
         }}
       >
         {has_photo ? (
@@ -125,46 +143,93 @@ export function PlayerCard({
             }}
           />
         ) : (
-          <div
-            style={{
-              width: "100%",
-              height: "100%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <span className="mono" style={{ fontSize: 60, fontWeight: 900, color: "rgba(255,255,255,.30)" }}>
+          <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <span className="mono" style={{ fontSize: 64, fontWeight: 900, color: "rgba(255,255,255,.26)" }}>
               {jersey_number}
             </span>
           </div>
         )}
 
-        {/* Corner chips */}
-        <span style={{ ...CHIP, left: 8, color: position_color[position] }}>
-          {POSITION_ABBR[position]}
-        </span>
-        <span style={{ ...CHIP, right: 8, color: "rgba(255,255,255,.92)", minWidth: 22, textAlign: "center" }}>
-          {jersey_number}
-        </span>
+        {/* Top-left — rating headline + position. */}
+        <div style={{ position: "absolute", top: 8, left: 8, display: "flex", flexDirection: "column", gap: 3 }}>
+          <span
+            style={{
+              ...overlay_chip,
+              padding: "3px 8px",
+              fontSize: 17,
+              fontWeight: 900,
+              letterSpacing: -0.5,
+              color: team_color,
+              textAlign: "center",
+            }}
+          >
+            {rating != null ? rating.toFixed(1) : "—"}
+          </span>
+          <span
+            style={{
+              ...overlay_chip,
+              padding: "3px 6px",
+              fontSize: 9,
+              fontWeight: 800,
+              letterSpacing: 0.6,
+              color: position_color[position],
+              textAlign: "center",
+            }}
+          >
+            {POSITION_ABBR[position]}
+          </span>
+        </div>
 
-        {/* Bottom scrim — name + club ride on top of the photo. */}
+        {/* Top-right — jersey + change. */}
+        <div
+          style={{
+            position: "absolute",
+            top: 8,
+            right: 8,
+            display: "flex",
+            flexDirection: "column",
+            gap: 3,
+            alignItems: "flex-end",
+          }}
+        >
+          <span
+            className="mono"
+            style={{ ...overlay_chip, padding: "3px 7px", fontSize: 12, fontWeight: 800, color: "#fff" }}
+          >
+            {jersey_number}
+          </span>
+          <span
+            className="mono"
+            style={{
+              ...overlay_chip,
+              padding: "3px 7px",
+              fontSize: 10,
+              fontWeight: 800,
+              color: color_for_sign(change_pct),
+            }}
+          >
+            {fmt_signed_pct(change_pct, 1)}
+          </span>
+        </div>
+
+        {/* Name scrim. */}
         <div
           style={{
             position: "absolute",
             left: 0,
             right: 0,
             bottom: 0,
-            padding: "26px 11px 9px",
-            background: "linear-gradient(to top, rgba(5,6,12,.96) 18%, rgba(5,6,12,.55) 60%, transparent)",
+            padding: "30px 11px 9px",
+            background: "linear-gradient(to top, rgba(5,6,11,.97) 16%, rgba(5,6,11,.55) 58%, transparent)",
           }}
         >
           <div
             style={{
-              fontSize: 14,
+              fontSize: 15,
               fontWeight: 800,
               letterSpacing: -0.2,
               color: "#fff",
+              textTransform: "uppercase",
               whiteSpace: "nowrap",
               overflow: "hidden",
               textOverflow: "ellipsis",
@@ -191,34 +256,62 @@ export function PlayerCard({
         </div>
       </div>
 
-      {/* Stat panel — market value headline + physical line. */}
-      <div style={{ padding: "9px 11px 10px", display: "flex", flexDirection: "column", gap: 5 }}>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 6 }}>
-          <span className="mono" style={{ fontSize: 16, fontWeight: 800, letterSpacing: -0.3 }}>
-            {fmt_eur_m(current_price)}
-          </span>
-          <span
-            className="mono"
-            title="Change since tournament start"
-            style={{ fontSize: 11.5, fontWeight: 700, color: color_for_sign(change_pct) }}
-          >
-            {up ? "▲" : "▼"} {fmt_signed_pct(change_pct, 1)}
-          </span>
-        </div>
-        {bio.length > 0 && (
+      {/* 6-stat block — abbreviation over value, FUT-style. */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(6, 1fr)",
+          background: "rgba(255,255,255,.03)",
+          borderBottom: "1px solid rgba(255,255,255,.05)",
+        }}
+      >
+        {stat_cells.map((c, i) => (
           <div
+            key={c.label}
             style={{
-              fontSize: 9.5,
-              fontWeight: 600,
-              letterSpacing: 0.2,
-              color: "rgba(255,255,255,.4)",
-              borderTop: "1px solid rgba(255,255,255,.05)",
-              paddingTop: 6,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 1,
+              padding: "7px 2px",
+              borderLeft: i === 0 ? "none" : "1px solid rgba(255,255,255,.04)",
             }}
           >
-            {bio.join("  ·  ")}
+            <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: 0.3, color: "rgba(255,255,255,.4)" }}>
+              {c.label}
+            </span>
+            <span className="mono" style={{ fontSize: 12, fontWeight: 800, color: "#fff" }}>
+              {c.value}
+            </span>
           </div>
-        )}
+        ))}
+      </div>
+
+      {/* Physical line. */}
+      {bio.length > 0 && (
+        <div
+          style={{
+            fontSize: 9,
+            fontWeight: 600,
+            letterSpacing: 0.2,
+            color: "rgba(255,255,255,.4)",
+            textAlign: "center",
+            padding: "5px 6px",
+            borderBottom: "1px solid rgba(255,255,255,.05)",
+          }}
+        >
+          {bio.join("  ·  ")}
+        </div>
+      )}
+
+      {/* Market value band — team-colour accent on top. */}
+      <div style={{ borderTop: `2px solid ${team_color}`, padding: "8px 11px", textAlign: "center" }}>
+        <div className="mono" style={{ fontSize: 16, fontWeight: 900, letterSpacing: -0.3, color: "#fff" }}>
+          {fmt_eur_m(current_price)}
+        </div>
+        <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: 1, color: "rgba(255,255,255,.35)", marginTop: 1 }}>
+          MARKET VALUE
+        </div>
       </div>
     </button>
   );

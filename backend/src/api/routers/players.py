@@ -15,7 +15,7 @@ from src.api.dependencies import (
 )
 from src.api.dtos.match_comment import MatchCommentResponse
 from src.api.dtos.news import NewsResponse
-from src.api.dtos.player import PlayerResponse, PlayerWithValuationResponse
+from src.api.dtos.player import PlayerResponse, PlayerStatsBrief, PlayerWithValuationResponse
 from src.api.dtos.player_match import PlayerMatchEntryResponse
 from src.api.dtos.player_screener import PlayerScreenerEntryResponse
 from src.api.dtos.player_stat import PlayerTournamentStatResponse
@@ -31,6 +31,7 @@ from src.domain.player.player import Position
 from src.domain.player.screener_criteria import ScreenerCriteria, SortDirection, SortKey, SortSpec
 from src.domain.valuation.valuation_provider import ValuationProvider
 from src.infrastructure.db.models.player_price_tick import PlayerPriceTickORM
+from src.infrastructure.db.models.player_tournament_stat import PlayerTournamentStatORM
 from src.infrastructure.db.repositories.match_comment import SqlAlchemyMatchCommentRepository
 from src.infrastructure.db.repositories.news import SqlAlchemyNewsRepository
 from src.infrastructure.db.repositories.player import SqlAlchemyPlayerRepository
@@ -76,6 +77,7 @@ async def players_search(
     limit: int = Query(default=500, ge=1, le=2000),
     repo: SqlAlchemyPlayerRepository = Depends(get_player_repo),
     valuation_provider: ValuationProvider = Depends(get_valuation_provider),
+    session: AsyncSession = Depends(get_session),
 ) -> list[PlayerWithValuationResponse]:
     sort_spec = None
     if sort_key:
@@ -108,7 +110,29 @@ async def players_search(
     pairs = await search_players_with_valuation(
         player_repo=repo, valuation_provider=valuation_provider, criteria=criteria
     )
-    return [PlayerWithValuationResponse.from_pair(p) for p in pairs]
+
+    # Attach each player's tournament-stat slice (one batch query) so a
+    # squad / player card can show real stats, not just the valuation.
+    player_ids = [p.player.id for p in pairs]
+    stats_by_player: dict[int, PlayerStatsBrief] = {}
+    if player_ids:
+        season_id = get_settings().active_season_id
+        stat_rows = await session.execute(
+            select(PlayerTournamentStatORM).where(
+                PlayerTournamentStatORM.player_id.in_(player_ids),
+                PlayerTournamentStatORM.season_id == season_id,
+            )
+        )
+        for orm in stat_rows.scalars():
+            stats_by_player[orm.player_id] = PlayerStatsBrief(
+                appearances=orm.appearances,
+                minutes_played=orm.minutes_played,
+                goals=orm.goals,
+                assists=orm.assists,
+                passes_accuracy=float(orm.passes_accuracy) if orm.passes_accuracy is not None else None,
+                rating_avg=float(orm.rating_avg) if orm.rating_avg is not None else None,
+            )
+    return [PlayerWithValuationResponse.from_pair(p, stats_by_player.get(p.player.id)) for p in pairs]
 
 
 @router.get("/screener-view", response_model=list[PlayerScreenerEntryResponse])

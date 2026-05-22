@@ -210,6 +210,7 @@ export function TeamPage({ team, on_open_player, on_open_match, on_back }: TeamP
                         weight={p.weight}
                         current_price={p.valuation.current_price}
                         change_pct={p.valuation.change_since_inception}
+                        stats={p.stats}
                         on_click={() => on_open_player(p.id)}
                       />
                     ))}
