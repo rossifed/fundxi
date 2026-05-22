@@ -1,11 +1,18 @@
 """Pricing model coefficients (v0).
 
-DDD role: Configuration (constants). Centralised here so the model can be
-re-tuned without touching the strategy code. Each coefficient is a percent
-delta applied to the player's pre-event price.
+DDD role: Configuration. ``PricingCoefficients`` is an immutable Value
+Object; ``DEFAULT_COEFFICIENTS`` is loaded once at import from
+``config/pricing.toml`` so the model can be re-tuned by editing a file
+and restarting the worker — no code change, no redeploy. The dataclass
+field defaults remain the fallback when the file (or a key) is absent.
+
+Each ``w_*_pct`` is a percent delta applied to the player's pre-event
+price.
 """
 
-from dataclasses import dataclass
+import tomllib
+from dataclasses import dataclass, fields
+from pathlib import Path
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,4 +95,34 @@ class PricingCoefficients:
     w_unused_sub_pct: float = -1.0  # bench, never came on (applied once at FT)
 
 
-DEFAULT_COEFFICIENTS = PricingCoefficients()
+# config/pricing.toml — this file is backend/src/valuation/coefficients.py,
+# so ``parents[2]`` is the backend/ root.
+_PRICING_TOML_PATH = Path(__file__).resolve().parents[2] / "config" / "pricing.toml"
+
+
+def load_coefficients(path: Path = _PRICING_TOML_PATH) -> PricingCoefficients:
+    """Build ``PricingCoefficients`` from a flat TOML file.
+
+    - Missing file  -> the dataclass defaults (the model still runs).
+    - Missing key   -> that field keeps its default.
+    - Unknown key   -> ``ValueError`` (a typo in the config must fail
+      loudly, never be a silently-ignored "tweak").
+    - Non-numeric value -> ``ValueError``.
+    """
+    if not path.is_file():
+        return PricingCoefficients()
+    with path.open("rb") as handle:
+        raw: dict[str, object] = tomllib.load(handle)
+
+    known = {f.name for f in fields(PricingCoefficients)}
+    unknown = sorted(set(raw) - known)
+    if unknown:
+        raise ValueError(f"{path}: unknown pricing coefficient(s): {unknown}")
+    for key, value in raw.items():
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"{path}: coefficient {key!r} must be a number, got {value!r}")
+
+    return PricingCoefficients(**{k: float(v) for k, v in raw.items()})  # type: ignore[arg-type]
+
+
+DEFAULT_COEFFICIENTS = load_coefficients()
