@@ -15,7 +15,7 @@ class TeamResponse(BaseModel):
     flag: str
     color: str
     kind: str
-    confederation: str | None = None
+    continent: str | None = None
     group: str | None = None
     coach_name: str | None = None
     coach_image_path: str | None = None
@@ -29,7 +29,7 @@ class TeamResponse(BaseModel):
             flag=team.flag,
             color=team.color,
             kind=team.kind.value,
-            confederation=team.confederation.value if team.confederation else None,
+            continent=team.continent,
             group=team.group,
             coach_name=team.coach_name,
             coach_image_path=team.coach_image_path,

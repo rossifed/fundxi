@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.team.team import Confederation, Team, TeamKind
+from src.domain.team.team import Team, TeamKind
 from src.infrastructure.db.models.coach import CoachORM
 from src.infrastructure.db.models.team import TeamORM
 
@@ -22,7 +22,7 @@ def _to_domain(orm: TeamORM, coach: CoachORM | None = None) -> Team:
         flag=orm.flag,
         color=orm.color,
         kind=TeamKind(orm.kind),
-        confederation=Confederation(orm.confederation) if orm.confederation else None,
+        continent=orm.continent,
         group=orm.group,
         coach_name=coach.name if coach is not None else None,
         coach_image_path=coach.image_path if coach is not None else None,
@@ -44,7 +44,7 @@ class SqlAlchemyTeamRepository:
             flag=team.flag,
             color=team.color,
             kind=team.kind.value,
-            confederation=team.confederation.value if team.confederation else None,
+            continent=team.continent,
             group=team.group,
             coach_id=coach_id,
         )
@@ -54,7 +54,7 @@ class SqlAlchemyTeamRepository:
             "flag": stmt.excluded.flag,
             "color": stmt.excluded.color,
             "kind": stmt.excluded.kind,
-            "confederation": stmt.excluded.confederation,
+            "continent": stmt.excluded.continent,
             "group": stmt.excluded.group,
             # Keep a previously-linked coach if this run carries none.
             "coach_id": func.coalesce(stmt.excluded.coach_id, TeamORM.coach_id),

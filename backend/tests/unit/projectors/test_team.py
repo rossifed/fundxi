@@ -22,9 +22,21 @@ def test_project_team_minimal_national() -> None:
         flag="https://cdn.sportmonks.com/images/teams/brazil.png",
         color="",
         kind=TeamKind.NATIONAL,
-        confederation=None,
+        continent=None,
         group=None,
     )
+
+
+def test_project_team_extracts_continent() -> None:
+    payload = {
+        "id": 30,
+        "name": "Japan",
+        "short_code": "JPN",
+        "type": "national",
+        "country": {"continent": {"name": "Asia"}},
+    }
+    team, _ = project_team(payload)
+    assert team.continent == "Asia"
 
 
 def test_project_team_uppercases_short_code() -> None:

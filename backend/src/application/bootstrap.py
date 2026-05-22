@@ -116,7 +116,7 @@ async def bootstrap_teams(
     ``include=coaches.coach.country`` rides along so each team is linked to
     its head coach (core.coach) within the same call."""
     endpoint = f"/teams/seasons/{season_id}"
-    base_params = {"include": "coaches.coach.country"}
+    base_params = {"include": "coaches.coach.country;country.continent"}
     pairs: list[tuple[int, str]] = []
     skipped = 0
     coaches_linked = 0

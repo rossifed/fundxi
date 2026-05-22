@@ -1,8 +1,9 @@
-"""Team domain — Entity + Value Objects.
+"""Team domain — Entity + Value Object.
 
 DDD roles:
 - Team: Entity (identity = ISO country code for WC2026 squads).
-- TeamKind, Confederation: Value Objects (enums).
+- TeamKind: Value Object (enum). ``continent`` is the raw Sportmonks
+  country continent — provider truth, not an invented confederation.
 """
 
 from dataclasses import dataclass
@@ -14,15 +15,6 @@ class TeamKind(StrEnum):
     CLUB = "club"
 
 
-class Confederation(StrEnum):
-    UEFA = "UEFA"
-    CONMEBOL = "CONMEBOL"
-    CONCACAF = "CONCACAF"
-    AFC = "AFC"
-    CAF = "CAF"
-    OFC = "OFC"
-
-
 @dataclass(frozen=True, slots=True)
 class Team:
     id: str
@@ -30,7 +22,7 @@ class Team:
     flag: str
     color: str
     kind: TeamKind
-    confederation: Confederation | None = None
+    continent: str | None = None
     group: str | None = None
     # Head coach — read-time enrichment joined from core.coach. Not part of
     # the write path (ingestion links the coach via the repository's

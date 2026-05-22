@@ -2,18 +2,18 @@
 
 DDD role: Domain Service (pure function), Sportmonks-specific.
 
-Assumed payload shape (Sportmonks v3 /teams):
+Assumed payload shape (Sportmonks v3 /teams?include=...;country.continent):
 {
   "id": int,
   "name": str,
   "short_code": str | null,        # ISO-ish, e.g. "FRA"
   "image_path": str | null,        # flag / crest URL
-  "type": "national" | "domestic"
+  "type": "national" | "domestic",
+  "country": { "continent": { "name": str } } | null
 }
 
-WC2026 enrichments (flag emoji, color, confederation, group) are NOT in the
-Sportmonks payload. They come from a static branding overlay applied by the
-bootstrap worker AFTER projection.
+``continent`` is taken from the nested country.continent include. Team
+colour is derived separately from kit palettes; ``group`` from standings.
 """
 
 from typing import Any
@@ -46,13 +46,20 @@ def project_team(payload: dict[str, Any]) -> tuple[Team, int]:
 
     image_path = payload.get("image_path") or ""
 
+    continent: str | None = None
+    country = payload.get("country")
+    if isinstance(country, dict):
+        cont = country.get("continent")
+        if isinstance(cont, dict) and isinstance(cont.get("name"), str) and cont["name"]:
+            continent = cont["name"]
+
     team = Team(
         id=short_code.upper(),
         name=name,
         flag=image_path if isinstance(image_path, str) else "",
-        color="",  # filled by branding overlay
+        color="",  # derived from kit palettes post-ingest
         kind=kind,
-        confederation=None,  # filled by branding overlay
-        group=None,  # filled by group-stage enrichment
+        continent=continent,
+        group=None,  # resolved from standings
     )
     return team, sportmonks_id

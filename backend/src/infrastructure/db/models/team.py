@@ -23,7 +23,7 @@ class TeamORM(Base, AuditMixin):
     flag: Mapped[str] = mapped_column(String(255))
     color: Mapped[str] = mapped_column(String(16))
     kind: Mapped[str] = mapped_column(String(16))
-    confederation: Mapped[str | None] = mapped_column(String(16))
+    continent: Mapped[str | None] = mapped_column(String(16))
     group: Mapped[str | None] = mapped_column(String(8))
     # Head coach — FK to the core.coach reference table, nullable (a team
     # may be ingested before its coach include lands).

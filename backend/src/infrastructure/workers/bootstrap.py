@@ -19,6 +19,7 @@ from datetime import date
 import structlog
 
 from src.application.bootstrap import BootstrapReport, bootstrap_for_season
+from src.application.derive_team_colors import derive_team_colors
 from src.config import get_settings
 from src.infrastructure.db.repositories.coach import SqlAlchemyCoachRepository
 from src.infrastructure.db.repositories.fixture import SqlAlchemyFixtureRepository
@@ -76,6 +77,8 @@ async def run() -> BootstrapReport:
             season_id=settings.active_season_id,
             today=date.today(),
         )
+        # Derive team accent colours from the freshly-ingested kit palettes.
+        await derive_team_colors(session)
         await session.commit()
     log.info(
         "bootstrap.done",

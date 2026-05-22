@@ -1,35 +1,41 @@
 import type { Team } from "@/domain/team/team";
+import { flag_emoji } from "@/domain/team/flag_emoji";
 import { api_get } from "@/infrastructure/api_client";
-import { brand_for } from "@/infrastructure/branding/team_branding";
 
-// Backend payload shape — matches FastAPI TeamResponse exactly.
+// Backend payload shape — the fields of FastAPI TeamResponse the UI uses.
 interface TeamDTO {
   id: string;
   name: string;
-  flag: string;          // Sportmonks URL — overridden with local emoji
-  color: string;         // typically empty from backend — overridden
+  flag: string; // Sportmonks flag image URL
+  color: string; // kit-derived accent; "" when a team has no kit data yet
   kind: string;
-  confederation: string | null;
-  group: string | null;
+  continent: string | null;
   coach_name: string | null;
   coach_image_path: string | null;
   coach_nationality: string | null;
 }
 
+// team.color is always a hex (kit colours are hex literals, and consumers
+// append an alpha pair, e.g. `${color}66`). This is the neutral sentinel
+// used when a team has no kit-colour data yet — not a theme colour.
+const NEUTRAL_TEAM_COLOR = "#3b4049";
+
 let TEAMS: Team[] = [];
 let TEAMS_BY_ID = new Map<string, Team>();
 
 function dto_to_domain(dto: TeamDTO): Team {
-  const brand = brand_for(dto.id);
   return {
     id: dto.id,
     name: dto.name,
-    flag: brand.flag,
+    // The emoji is a presentational transform of the nation code; the
+    // raster flag image is the provider value carried as flag_url.
+    flag: flag_emoji(dto.id),
     flag_url: dto.flag || undefined,
-    color: brand.color,
-    kind: (dto.kind === "national" ? "national" : "club"),
-    confederation: (dto.confederation ?? brand.confederation) as Team["confederation"],
-    group: dto.group ?? brand.group,
+    // Real kit-derived colour, or the neutral sentinel when a team has no
+    // kit data yet (debutants before their first WC2026 match).
+    color: dto.color || NEUTRAL_TEAM_COLOR,
+    kind: dto.kind === "national" ? "national" : "club",
+    continent: dto.continent ?? undefined,
     coach_name: dto.coach_name ?? undefined,
     coach_image_path: dto.coach_image_path ?? undefined,
     coach_nationality: dto.coach_nationality ?? undefined,

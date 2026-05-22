@@ -261,8 +261,8 @@ async def test_bootstrap_teams_paginates() -> None:
     assert pairs == [(1, "AAA"), (2, "BBB")]
     assert len(raw_archive.events) == 2  # one per page
     assert client.calls == [
-        ("/teams/seasons/100", {"include": "coaches.coach.country", "page": 1}),
-        ("/teams/seasons/100", {"include": "coaches.coach.country", "page": 2}),
+        ("/teams/seasons/100", {"include": "coaches.coach.country;country.continent", "page": 1}),
+        ("/teams/seasons/100", {"include": "coaches.coach.country;country.continent", "page": 2}),
     ]
 
 

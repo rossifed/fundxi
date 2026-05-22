@@ -60,7 +60,7 @@ async def test_teams_list_returns_wc2022_nations(client: httpx.AsyncClient) -> N
     # Sanity check: well-known nations must be present
     assert {"ARG", "BRA", "FRA", "ENG", "USA"}.issubset(iso_codes)
     sample = teams[0]
-    assert set(sample.keys()) >= {"id", "name", "flag", "color", "kind", "confederation", "group"}
+    assert set(sample.keys()) >= {"id", "name", "flag", "color", "kind", "continent", "group"}
     assert sample["kind"] == "national"
 
 

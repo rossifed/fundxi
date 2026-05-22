@@ -1,3 +1,3 @@
-from src.domain.team.team import Confederation, Team, TeamKind
+from src.domain.team.team import Team, TeamKind
 
-__all__ = ["Confederation", "Team", "TeamKind"]
+__all__ = ["Team", "TeamKind"]

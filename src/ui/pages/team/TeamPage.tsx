@@ -84,6 +84,9 @@ export function TeamPage({ team, on_open_player, on_open_match, on_open_team, on
 
   // Tournament record — the team's row in the group standings.
   const [standing, set_standing] = useState<StandingRow | null>(null);
+  // The team's group letter — a standings concept, read from the standings
+  // (never stored on the team, never hardcoded in the frontend).
+  const [team_group, set_team_group] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     void standings_api.list().then(groups => {
@@ -92,10 +95,12 @@ export function TeamPage({ team, on_open_player, on_open_match, on_open_team, on
         const row = g.rows.find(r => r.team_id === team.id);
         if (row) {
           set_standing(row);
+          set_team_group(g.group);
           return;
         }
       }
       set_standing(null);
+      set_team_group(null);
     });
     return () => {
       cancelled = true;
@@ -152,7 +157,7 @@ export function TeamPage({ team, on_open_player, on_open_match, on_open_team, on
         ← Back
       </button>
 
-      <TeamHeader team={team} standing={standing} />
+      <TeamHeader team={team} standing={standing} group={team_group} />
       {standing && <RecordStrip standing={standing} />}
       {squad && squad.length > 0 && <SquadSummary squad={squad} />}
 
@@ -283,10 +288,18 @@ export function TeamPage({ team, on_open_player, on_open_match, on_open_team, on
   );
 }
 
-function TeamHeader({ team, standing }: { team: Team; standing: StandingRow | null }) {
+function TeamHeader({
+  team,
+  standing,
+  group,
+}: {
+  team: Team;
+  standing: StandingRow | null;
+  group: string | null;
+}) {
   const sub: string[] = [];
-  if (team.confederation) sub.push(team.confederation);
-  if (team.group) sub.push(`Group ${team.group}`);
+  if (team.continent) sub.push(team.continent);
+  if (group) sub.push(`Group ${group}`);
   if (standing) sub.push(`${ordinal(standing.position)} in group`);
   return (
     <div

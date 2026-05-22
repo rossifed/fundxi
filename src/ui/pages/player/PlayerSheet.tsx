@@ -867,7 +867,7 @@ export function PlayerSheet({
                   lineHeight: 1.45,
                 }}
               >
-                {player.bio ?? synthesize_bio(player, team.name, team.confederation)}
+                {player.bio ?? synthesize_bio(player, team.name, team.continent)}
               </div>
             </SectionCard>
           )}
