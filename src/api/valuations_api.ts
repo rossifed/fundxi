@@ -4,12 +4,18 @@ import {
   fetch_price_history,
   refresh_price_history,
   refresh_valuations,
+  spark_for_player,
   type PricePoint,
 } from "@/infrastructure/repositories/valuations_repository";
 
 export const valuations_api = {
   get_for_player(player_id: number): PlayerValuation | undefined {
     return valuation_service.get_valuation(player_id);
+  },
+  /** Real-prices sparkline for a player — fixed-length, resampled, drawn
+   * from the already-loaded sparkline cache (synchronous, no fetch). */
+  get_sparkline(player_id: number): number[] {
+    return spark_for_player(player_id);
   },
   get_top_movers(limit?: number, direction: MoverDirection = "up"): PlayerValuation[] {
     return valuation_service.get_top_movers(limit, direction);

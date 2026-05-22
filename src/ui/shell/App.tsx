@@ -99,6 +99,7 @@ export function App() {
           const p = players_api.get(id);
           if (p) set_selected_player(p);
         }}
+        on_open_team={open_team}
         go_portfolio={go_portfolio}
       />
     );
@@ -114,6 +115,7 @@ export function App() {
           set_selected_team(null);
           set_selected_match(m);
         }}
+        on_open_team={open_team}
         on_back={() => set_selected_team(null)}
       />
     );
@@ -123,16 +125,24 @@ export function App() {
         on_open_player={open_player}
         on_navigate_tab={navigate}
         on_open_match={set_selected_match}
+        on_open_team={open_team}
         watchlist={watchlist}
         toggle_watch={toggle_watch}
       />
     );
   } else if (tab === "screener") {
-    content = <ScreenerPage on_open_player={open_player} watchlist={watchlist} toggle_watch={toggle_watch} />;
+    content = (
+      <ScreenerPage
+        on_open_player={open_player}
+        on_open_team={open_team}
+        watchlist={watchlist}
+        toggle_watch={toggle_watch}
+      />
+    );
   } else if (tab === "fixtures") {
     content = <FixturesPage on_open_match={set_selected_match} on_open_team={open_team} />;
   } else if (tab === "portfolio") {
-    content = <PortfolioPage on_open_player={open_player} />;
+    content = <PortfolioPage on_open_player={open_player} on_open_team={open_team} />;
   } else if (tab === "leagues") {
     content = <LeaguesPage initial_join_code={initial_join_code} />;
   } else {
@@ -235,6 +245,7 @@ export function App() {
               watchlist={watchlist}
               on_open_player={open_player}
               on_open_match={set_selected_match}
+              on_open_team={open_team}
             />
           )}
         </div>

@@ -11,6 +11,9 @@ interface TeamDTO {
   kind: string;
   confederation: string | null;
   group: string | null;
+  coach_name: string | null;
+  coach_image_path: string | null;
+  coach_nationality: string | null;
 }
 
 let TEAMS: Team[] = [];
@@ -27,6 +30,9 @@ function dto_to_domain(dto: TeamDTO): Team {
     kind: (dto.kind === "national" ? "national" : "club"),
     confederation: (dto.confederation ?? brand.confederation) as Team["confederation"],
     group: dto.group ?? brand.group,
+    coach_name: dto.coach_name ?? undefined,
+    coach_image_path: dto.coach_image_path ?? undefined,
+    coach_nationality: dto.coach_nationality ?? undefined,
   };
 }
 

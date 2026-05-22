@@ -31,6 +31,8 @@ export interface SquadPlayer {
     minutes_played: number | null;
     goals: number | null;
     assists: number | null;
+    yellow_cards: number | null;
+    red_cards: number | null;
     passes_accuracy: number | null;
     rating_avg: number | null;
   } | null;

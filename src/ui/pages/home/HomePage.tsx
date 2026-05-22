@@ -12,6 +12,7 @@ import { LiveBadge } from "@/ui/components/LiveBadge";
 import { PlayerChip } from "@/ui/components/PlayerChip";
 import { SectionHeader } from "@/ui/components/SectionHeader";
 import { Spark } from "@/ui/components/Spark";
+import { TeamLink } from "@/ui/components/TeamLink";
 import { TickValue } from "@/ui/components/TickValue";
 import { spark_for_player } from "@/infrastructure/repositories/valuations_repository";
 import { news_api } from "@/api/news_api";
@@ -35,11 +36,12 @@ interface HomePageProps {
   on_open_player: (player: Player) => void;
   on_navigate_tab: (tab: string) => void;
   on_open_match: (match: Match) => void;
+  on_open_team?: (team_id: string) => void;
   watchlist?: Set<number>;
   toggle_watch?: (id: number) => void;
 }
 
-export function HomePage({ on_open_player, on_navigate_tab, on_open_match }: HomePageProps) {
+export function HomePage({ on_open_player, on_navigate_tab, on_open_match, on_open_team }: HomePageProps) {
   // The Match Center card mirrors the in-play match via the shared
   // useLiveMatch hook — the SAME source/refresh path the RightRail ticker
   // uses, so the minute/score can never diverge between widgets/pages.
@@ -116,7 +118,7 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match }: Hom
           <SectionHeader title="Match Center" cta="All fixtures →" on_cta={() => on_navigate_tab("fixtures")} />
 
           {live ? (
-            <LiveMatchCard match={live} on_open={() => on_open_match(live)} />
+            <LiveMatchCard match={live} on_open={() => on_open_match(live)} on_open_team={on_open_team} />
           ) : (
             <div
               style={{
@@ -165,15 +167,23 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match }: Hom
                 <span style={{ fontSize: 11, color: "rgba(255,255,255,.45)", fontWeight: 600, letterSpacing: 0.3 }}>
                   {fx.date} · 21:00
                 </span>
-                <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
+                <TeamLink
+                  team_id={fx.home_team_id}
+                  on_open_team={on_open_team}
+                  style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}
+                >
                   <span style={{ fontWeight: 600 }}>{home.name}</span>
                   <span style={{ fontSize: 18 }}>{home.flag}</span>
-                </span>
+                </TeamLink>
                 <span style={{ fontSize: 11, color: "rgba(255,255,255,.2)", fontWeight: 600, textAlign: "center" }}>vs</span>
-                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <TeamLink
+                  team_id={fx.away_team_id}
+                  on_open_team={on_open_team}
+                  style={{ display: "flex", alignItems: "center", gap: 8 }}
+                >
                   <span style={{ fontSize: 18 }}>{away.flag}</span>
                   <span style={{ fontWeight: 600 }}>{away.name}</span>
-                </span>
+                </TeamLink>
               </div>
             );
           })}
@@ -258,8 +268,8 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match }: Hom
       >
         <SectionHeader title="Top movers · since tournament start" cta="Open screener →" on_cta={() => on_navigate_tab("screener")} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
-          <MoversColumn label="Top gainers" players={top_up} on_open_player={on_open_player} />
-          <MoversColumn label="Top losers" players={top_down} on_open_player={on_open_player} divider />
+          <MoversColumn label="Top gainers" players={top_up} on_open_player={on_open_player} on_open_team={on_open_team} />
+          <MoversColumn label="Top losers" players={top_down} on_open_player={on_open_player} on_open_team={on_open_team} divider />
         </div>
       </div>
 
@@ -313,7 +323,15 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match }: Hom
 // (and own-goal — the BFF collapses both), "🎯" for a scored penalty.
 const _GOAL_GLYPHS = new Set(["⚽", "🎯"]);
 
-function LiveMatchCard({ match, on_open }: { match: Match; on_open: () => void }) {
+function LiveMatchCard({
+  match,
+  on_open,
+  on_open_team,
+}: {
+  match: Match;
+  on_open: () => void;
+  on_open_team?: (team_id: string) => void;
+}) {
   const home = teams_api.get(match.home_team_id);
   const away = teams_api.get(match.away_team_id);
 
@@ -355,15 +373,19 @@ function LiveMatchCard({ match, on_open }: { match: Match; on_open: () => void }
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 20 }}>
         <div style={{ textAlign: "right", flex: 1 }}>
-          <div style={{ fontSize: 28 }}>{home?.flag}</div>
-          <div style={{ fontSize: 13, fontWeight: 700, marginTop: 2 }}>{home?.name}</div>
+          <TeamLink team_id={match.home_team_id} on_open_team={on_open_team} style={{ display: "block" }}>
+            <div style={{ fontSize: 28 }}>{home?.flag}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, marginTop: 2 }}>{home?.name}</div>
+          </TeamLink>
         </div>
         <div className="mono" style={{ fontSize: 32, fontWeight: 900, letterSpacing: -1.5 }}>
           {match.home_score} : {match.away_score}
         </div>
         <div style={{ textAlign: "left", flex: 1 }}>
-          <div style={{ fontSize: 28 }}>{away?.flag}</div>
-          <div style={{ fontSize: 13, fontWeight: 700, marginTop: 2 }}>{away?.name}</div>
+          <TeamLink team_id={match.away_team_id} on_open_team={on_open_team} style={{ display: "block" }}>
+            <div style={{ fontSize: 28 }}>{away?.flag}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, marginTop: 2 }}>{away?.name}</div>
+          </TeamLink>
         </div>
       </div>
       {goals.length > 0 && (
@@ -389,11 +411,13 @@ function MoversColumn({
   label,
   players,
   on_open_player,
+  on_open_team,
   divider,
 }: {
   label: string;
   players: PlayerWithValuation[];
   on_open_player: (player: Player) => void;
+  on_open_team?: (team_id: string) => void;
   divider?: boolean;
 }) {
   return (
@@ -446,10 +470,14 @@ function MoversColumn({
                   {p.name}
                 </span>
               </div>
-              <div style={{ fontSize: 10, color: "rgba(255,255,255,.3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "flex", alignItems: "center", gap: 4 }}>
+              <TeamLink
+                team_id={p.team_id}
+                on_open_team={on_open_team}
+                style={{ fontSize: 10, color: "rgba(255,255,255,.3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "flex", alignItems: "center", gap: 4 }}
+              >
                 <span>{team?.flag}</span>
                 <span>{team?.name}</span>
-              </div>
+              </TeamLink>
             </div>
             <Spark
               data={spark_for_player(p.id)}

@@ -13,6 +13,8 @@ export interface Fixture {
   note?: string;
   /** Stadium name (e.g. "Lusail Stadium"). */
   venue_name?: string;
+  /** Host city of the venue (e.g. "Lusail"). */
+  venue_city?: string;
   /** Sportmonks stage label: "Group Stage", "Round of 16", "Quarter-finals",
    * "Semi-finals", "3rd Place Final", "Final". */
   stage_name?: string;

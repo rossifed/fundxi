@@ -12,4 +12,8 @@ export interface Team {
   // Specific to international competitions — only set for national teams in a tournament
   confederation?: Confederation;
   group?: string;
+  // Head coach — joined server-side from core.coach. Absent until ingested.
+  coach_name?: string;
+  coach_image_path?: string;
+  coach_nationality?: string;
 }

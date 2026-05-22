@@ -21,6 +21,8 @@ export const color = {
   /* Semantic */
   positive: "var(--color-positive)",
   negative: "var(--color-negative)",
+  /* Discipline */
+  cardYellow: "var(--color-card-yellow)",
   /* Charts */
   chartPrimary: "var(--color-chart-primary)",
   chartNegative: "var(--color-chart-negative)",

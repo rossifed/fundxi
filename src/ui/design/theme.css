@@ -32,6 +32,9 @@
   --color-positive: #00805d;
   --color-negative: #E41541;
 
+  /* Discipline — yellow-card booking colour (red card reuses --color-negative). */
+  --color-card-yellow: #E0A800;
+
   /* Chart primaries. */
   --color-chart-primary: #183C82;
   --color-chart-negative: #F41258;

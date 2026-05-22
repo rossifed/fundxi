@@ -5,6 +5,7 @@ import type { Match } from "@/domain/match/match";
 import type { Player } from "@/domain/player/player";
 import { PlayerChip } from "@/ui/components/PlayerChip";
 import { SectionHeader } from "@/ui/components/SectionHeader";
+import { TeamLink } from "@/ui/components/TeamLink";
 import { TickValue } from "@/ui/components/TickValue";
 import { useLiveMatch } from "@/ui/hooks/use_live_match";
 
@@ -12,9 +13,10 @@ interface RightRailProps {
   watchlist: Set<number>;
   on_open_player: (player: Player) => void;
   on_open_match: (match: Match) => void;
+  on_open_team?: (team_id: string) => void;
 }
 
-export function RightRail({ watchlist, on_open_player, on_open_match }: RightRailProps) {
+export function RightRail({ watchlist, on_open_player, on_open_match, on_open_team }: RightRailProps) {
   const live = useLiveMatch();
   const live_home = live ? teams_api.get(live.home_team_id) : undefined;
   const live_away = live ? teams_api.get(live.away_team_id) : undefined;
@@ -65,9 +67,13 @@ export function RightRail({ watchlist, on_open_player, on_open_match }: RightRai
           <span style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,.55)", letterSpacing: 0.5 }}>LIVE</span>
           <span className="mono" style={{ fontSize: 11, color: "rgba(255,255,255,.45)", fontWeight: 700 }}>{live.minute}'</span>
           <span style={{ flex: 1, textAlign: "center", fontSize: 12, fontWeight: 700 }}>
-            <span style={{ marginRight: 4 }}>{live_home.flag}</span>
+            <TeamLink team_id={live.home_team_id} on_open_team={on_open_team} style={{ marginRight: 4 }}>
+              {live_home.flag}
+            </TeamLink>
             <span className="mono">{live.home_score}–{live.away_score}</span>
-            <span style={{ marginLeft: 4 }}>{live_away.flag}</span>
+            <TeamLink team_id={live.away_team_id} on_open_team={on_open_team} style={{ marginLeft: 4 }}>
+              {live_away.flag}
+            </TeamLink>
           </span>
           <span style={{ fontSize: 12, color: "rgba(255,255,255,.3)" }}>›</span>
         </div>
@@ -136,10 +142,14 @@ export function RightRail({ watchlist, on_open_player, on_open_match }: RightRai
                         {p.name}
                       </span>
                     </div>
-                    <div style={{ fontSize: 10, color: "rgba(255,255,255,.3)", display: "flex", alignItems: "center", gap: 4 }}>
+                    <TeamLink
+                      team_id={p.team_id}
+                      on_open_team={on_open_team}
+                      style={{ fontSize: 10, color: "rgba(255,255,255,.3)", display: "inline-flex", alignItems: "center", gap: 4 }}
+                    >
                       <span>{team?.flag}</span>
                       <span>{team?.name}</span>
-                    </div>
+                    </TeamLink>
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div className="mono" style={{ fontSize: 12, fontWeight: 700 }}>

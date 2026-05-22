@@ -7,6 +7,7 @@ import type { Fixture, FixtureStatus } from "@/domain/match/fixture";
 import type { Match } from "@/domain/match/match";
 import { build_bracket, type BracketLayout } from "@/domain/match/bracket";
 import { LiveBadge } from "@/ui/components/LiveBadge";
+import { TeamLink } from "@/ui/components/TeamLink";
 import {
   useLiveRefetch,
   useMatchesLiveVersion,
@@ -264,7 +265,7 @@ export function FixturesPage({ on_open_match, on_open_team }: FixturesPageProps)
       </div>
 
       {view_mode === "bracket" ? (
-        <BracketView fixtures={all} on_open={handle_open} />
+        <BracketView fixtures={all} on_open={handle_open} on_open_team={on_open_team} />
       ) : view_mode === "groups" ? (
         <GroupsView on_open_team={on_open_team} />
       ) : (
@@ -368,6 +369,7 @@ export function FixturesPage({ on_open_match, on_open_team }: FixturesPageProps)
                     held_players={held_players_for(fx)}
                     clickable
                     on_click={() => void handle_open(fx)}
+                    on_open_team={on_open_team}
                   />
                 );
               })}
@@ -537,7 +539,15 @@ function GroupTable({
   );
 }
 
-function BracketView({ fixtures, on_open }: { fixtures: Fixture[]; on_open: (fx: Fixture) => void | Promise<void> }) {
+function BracketView({
+  fixtures,
+  on_open,
+  on_open_team,
+}: {
+  fixtures: Fixture[];
+  on_open: (fx: Fixture) => void | Promise<void>;
+  on_open_team?: (team_id: string) => void;
+}) {
   const by_group = new Map<string, Fixture[]>();
   for (const fx of fixtures) {
     if (fx.stage_name === "Group Stage" && fx.group) {
@@ -568,7 +578,12 @@ function BracketView({ fixtures, on_open }: { fixtures: Fixture[]; on_open: (fx:
                 <div style={BRACKET_COL_CHIP}>GROUP {letter}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                   {(by_group.get(letter) ?? []).map(fx => (
-                    <CompactMatchCell key={fx.id} fixture={fx} on_click={() => void on_open(fx)} />
+                    <CompactMatchCell
+                      key={fx.id}
+                      fixture={fx}
+                      on_click={() => void on_open(fx)}
+                      on_open_team={on_open_team}
+                    />
                   ))}
                 </div>
               </div>
@@ -580,7 +595,7 @@ function BracketView({ fixtures, on_open }: { fixtures: Fixture[]; on_open: (fx:
       {/* Mirrored knockout bracket */}
       <section style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <SectionHeader label="KNOCKOUTS" />
-        <MirroredBracket bracket={bracket} on_open={on_open} />
+        <MirroredBracket bracket={bracket} on_open={on_open} on_open_team={on_open_team} />
       </section>
     </div>
   );
@@ -589,7 +604,15 @@ function BracketView({ fixtures, on_open }: { fixtures: Fixture[]; on_open: (fx:
 /** Compact 2-row cell used in the bracket view (groups + KO).
  * Each team gets its own row (flag + code, score on the right). Today's
  * matches get an accent tint + green left border to pop out. */
-function CompactMatchCell({ fixture, on_click }: { fixture: Fixture; on_click: () => void }) {
+function CompactMatchCell({
+  fixture,
+  on_click,
+  on_open_team,
+}: {
+  fixture: Fixture;
+  on_click: () => void;
+  on_open_team?: (team_id: string) => void;
+}) {
   const home = teams_api.get(fixture.home_team_id);
   const away = teams_api.get(fixture.away_team_id);
   const is_live = fixture.status === "live";
@@ -624,8 +647,22 @@ function CompactMatchCell({ fixture, on_click }: { fixture: Fixture; on_click: (
         overflow: "hidden",
       }}
     >
-      <CellTeamRow flag={home?.flag} code={fixture.home_team_id} score={fixture.home_score} is_played={is_played} />
-      <CellTeamRow flag={away?.flag} code={fixture.away_team_id} score={fixture.away_score} is_played={is_played} />
+      <CellTeamRow
+        flag={home?.flag}
+        code={fixture.home_team_id}
+        team_id={fixture.home_team_id}
+        score={fixture.home_score}
+        is_played={is_played}
+        on_open_team={on_open_team}
+      />
+      <CellTeamRow
+        flag={away?.flag}
+        code={fixture.away_team_id}
+        team_id={fixture.away_team_id}
+        score={fixture.away_score}
+        is_played={is_played}
+        on_open_team={on_open_team}
+      />
       {!is_played && (
         <div
           className="mono"
@@ -660,29 +697,45 @@ function CompactMatchCell({ fixture, on_click }: { fixture: Fixture; on_click: (
 function CellTeamRow({
   flag,
   code,
+  team_id,
   score,
   is_played,
+  on_open_team,
 }: {
   flag: string | undefined;
   code: string;
+  team_id: string;
   score: number | undefined;
   is_played: boolean;
+  on_open_team?: (team_id: string) => void;
 }) {
   return (
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "20px minmax(0, 1fr) 18px",
+        gridTemplateColumns: "minmax(0, 1fr) 18px",
         alignItems: "center",
         columnGap: 6,
         fontSize: 11,
         lineHeight: 1.1,
       }}
     >
-      <span style={{ fontSize: 16, lineHeight: 1, textAlign: "center" }}>{flag ?? ""}</span>
-      <span style={{ fontWeight: 700, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {code}
-      </span>
+      <TeamLink
+        team_id={team_id}
+        on_open_team={on_open_team}
+        style={{
+          display: "grid",
+          gridTemplateColumns: "20px minmax(0, 1fr)",
+          alignItems: "center",
+          columnGap: 6,
+          minWidth: 0,
+        }}
+      >
+        <span style={{ fontSize: 16, lineHeight: 1, textAlign: "center" }}>{flag ?? ""}</span>
+        <span style={{ fontWeight: 700, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {code}
+        </span>
+      </TeamLink>
       <span
         className="mono"
         style={{
@@ -707,9 +760,11 @@ const BRACKET_COL_LABELS: { left: string; center?: string; right: string }[] = [
 function MirroredBracket({
   bracket,
   on_open,
+  on_open_team,
 }: {
   bracket: BracketLayout;
   on_open: (fx: Fixture) => void | Promise<void>;
+  on_open_team?: (team_id: string) => void;
 }) {
   // 7 columns: R16L | QFL | SFL | FINAL | SFR | QFR | R16R
   // Each column uses flex space-around so the cards' centers align to the
@@ -736,7 +791,11 @@ function MirroredBracket({
   });
 
   const render_slot = (fx: Fixture | null, key: string): React.ReactNode =>
-    fx ? <CompactMatchCell key={key} fixture={fx} on_click={() => void on_open(fx)} /> : <EmptySlot key={key} />;
+    fx ? (
+      <CompactMatchCell key={key} fixture={fx} on_click={() => void on_open(fx)} on_open_team={on_open_team} />
+    ) : (
+      <EmptySlot key={key} />
+    );
 
   return (
     <div>
@@ -876,6 +935,7 @@ function FixtureCard({
   held_players = [],
   clickable,
   on_click,
+  on_open_team,
 }: {
   fixture: Fixture;
   home_flag: string;
@@ -887,6 +947,7 @@ function FixtureCard({
   held_players?: string[];
   clickable: boolean;
   on_click: () => void;
+  on_open_team?: (team_id: string) => void;
 }) {
   const is_live = fixture.status === "live";
   const is_finished = fixture.status === "finished";
@@ -967,8 +1028,14 @@ function FixtureCard({
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, justifyContent: "flex-end" }}>
-          <span style={{ fontSize: 13, fontWeight: 700 }}>{home_name}</span>
-          <span style={{ fontSize: 28 }}>{home_flag}</span>
+          <TeamLink
+            team_id={fixture.home_team_id}
+            on_open_team={on_open_team}
+            style={{ display: "inline-flex", alignItems: "center", gap: 10 }}
+          >
+            <span style={{ fontSize: 13, fontWeight: 700 }}>{home_name}</span>
+            <span style={{ fontSize: 28 }}>{home_flag}</span>
+          </TeamLink>
         </div>
         {fixture.status !== "upcoming" ? (
           <div className="mono" style={{ fontSize: 26, fontWeight: 900, minWidth: 60, textAlign: "center", letterSpacing: -1.5 }}>
@@ -980,8 +1047,14 @@ function FixtureCard({
           </div>
         )}
         <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
-          <span style={{ fontSize: 28 }}>{away_flag}</span>
-          <span style={{ fontSize: 13, fontWeight: 700 }}>{away_name}</span>
+          <TeamLink
+            team_id={fixture.away_team_id}
+            on_open_team={on_open_team}
+            style={{ display: "inline-flex", alignItems: "center", gap: 10 }}
+          >
+            <span style={{ fontSize: 28 }}>{away_flag}</span>
+            <span style={{ fontSize: 13, fontWeight: 700 }}>{away_name}</span>
+          </TeamLink>
         </div>
       </div>
 

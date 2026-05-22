@@ -7,6 +7,7 @@ import { POSITION_LABEL } from "@/domain/player/player";
 import { PlayerChip } from "@/ui/components/PlayerChip";
 import { PositionBadge } from "@/ui/components/PositionBadge";
 import { Spark } from "@/ui/components/Spark";
+import { TeamLink } from "@/ui/components/TeamLink";
 import {
   refresh_screener_repository,
   screener_repository,
@@ -107,11 +108,12 @@ const ROW_GAP = 8;
 
 interface ScreenerPageProps {
   on_open_player: (player: Player) => void;
+  on_open_team?: (team_id: string) => void;
   watchlist?: Set<number>;
   toggle_watch?: (id: number) => void;
 }
 
-export function ScreenerPage({ on_open_player, watchlist, toggle_watch }: ScreenerPageProps) {
+export function ScreenerPage({ on_open_player, on_open_team, watchlist, toggle_watch }: ScreenerPageProps) {
   const [position_filters, set_position_filters] = useState<Set<Position>>(new Set());
   const [team_filters, set_team_filters] = useState<Set<string>>(new Set());
   const [price_range, set_price_range] = useState<[number, number]>([0, 999]);
@@ -500,6 +502,7 @@ export function ScreenerPage({ on_open_player, watchlist, toggle_watch }: Screen
                 grid_template={grid_template}
                 columns={columns}
                 on_open={() => open_player_by_id(e.id)}
+                on_open_team={on_open_team}
                 on_toggle_watch={() => toggle_watch?.(e.id)}
               />
             );
@@ -529,6 +532,7 @@ interface RowProps {
   grid_template: string;
   columns: ColumnDef[];
   on_open: () => void;
+  on_open_team?: (team_id: string) => void;
   on_toggle_watch: () => void;
 }
 
@@ -558,6 +562,7 @@ function Row({
   grid_template,
   columns,
   on_open,
+  on_open_team,
   on_toggle_watch,
 }: RowProps) {
   return (
@@ -667,14 +672,18 @@ function Row({
           )}
         </div>
       </div>
-      <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "rgba(255,255,255,.55)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
+      <TeamLink
+        team_id={e.team_id}
+        on_open_team={on_open_team}
+        style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "rgba(255,255,255,.55)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}
+      >
         {team_flag_url ? (
           <img src={team_flag_url} alt={team_name ?? ""} style={{ width: 18, height: 18, objectFit: "contain", flexShrink: 0 }} />
         ) : (
           <span style={{ fontSize: 14 }}>{team_flag}</span>
         )}
         <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{team_name}</span>
-      </span>
+      </TeamLink>
       <PositionBadge position={e.position as Position} />
       <PriceCell value={e.current_price} />
       {columns.map(c => (

@@ -10,6 +10,7 @@ import { team_stats_api } from "@/api/team_stats_api";
 import { teams_api } from "@/api/teams_api";
 import { valuations_api } from "@/api/valuations_api";
 import type { TeamMatchStats } from "@/domain/match/team_match_stats";
+import { TeamLink } from "@/ui/components/TeamLink";
 import { TickValue } from "@/ui/components/TickValue";
 import { useFixtureLiveVersion, useLiveRefetch, usePricesLiveVersion } from "@/ui/hooks/use_live_updates";
 import { PitchView } from "@/ui/pages/match/PitchView";
@@ -23,6 +24,7 @@ interface MatchViewProps {
   match: Match;
   on_back: () => void;
   on_open_player_profile: (player_id: number) => void;
+  on_open_team?: (team_id: string) => void;
   go_portfolio?: () => void; // not used here; kept for the App's prop contract
 }
 
@@ -81,7 +83,7 @@ function ScorerColumn({ goals, align }: { goals: MatchEvent[]; align: "left" | "
   );
 }
 
-export function MatchView({ match: initial_match, on_back, on_open_player_profile }: MatchViewProps) {
+export function MatchView({ match: initial_match, on_back, on_open_player_profile, on_open_team }: MatchViewProps) {
   // The match comes in as a prop, but its clock / score / lineups / prices
   // change while an in-play (or replayed) match runs. We hold a live copy
   // refreshed from the SSE stream and fall back to the prop until it lands.
@@ -291,16 +293,20 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
         </div>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "center", gap: 24, marginTop: 14 }}>
           <div style={{ flex: 1, textAlign: "right" }}>
-            <div style={{ fontSize: 48, lineHeight: 1 }}>{home_team?.flag}</div>
-            <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8, letterSpacing: -0.2 }}>{home_team?.name ?? match.home_team_id}</div>
+            <TeamLink team_id={match.home_team_id} on_open_team={on_open_team} style={{ display: "block" }}>
+              <div style={{ fontSize: 48, lineHeight: 1 }}>{home_team?.flag}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8, letterSpacing: -0.2 }}>{home_team?.name ?? match.home_team_id}</div>
+            </TeamLink>
             <ScorerColumn goals={goals.filter(g => g.team_id === match.home_team_id)} align="right" />
           </div>
           <div className="mono" style={{ fontSize: 42, fontWeight: 900, letterSpacing: -1.5, paddingTop: 8, flexShrink: 0 }}>
             {match.home_score} : {match.away_score}
           </div>
           <div style={{ flex: 1, textAlign: "left" }}>
-            <div style={{ fontSize: 48, lineHeight: 1 }}>{away_team?.flag}</div>
-            <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8, letterSpacing: -0.2 }}>{away_team?.name ?? match.away_team_id}</div>
+            <TeamLink team_id={match.away_team_id} on_open_team={on_open_team} style={{ display: "block" }}>
+              <div style={{ fontSize: 48, lineHeight: 1 }}>{away_team?.flag}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8, letterSpacing: -0.2 }}>{away_team?.name ?? match.away_team_id}</div>
+            </TeamLink>
             <ScorerColumn goals={goals.filter(g => g.team_id === match.away_team_id)} align="left" />
           </div>
         </div>
@@ -377,12 +383,15 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
               away_bench={away_effective.bench}
               home_title={`${home_team?.flag ?? ""} ${home_team?.name ?? match.home_team_id}`.trim()}
               away_title={`${away_team?.flag ?? ""} ${away_team?.name ?? match.away_team_id}`.trim()}
+              home_team_id={match.home_team_id}
+              away_team_id={match.away_team_id}
               home_color={match.home_kit_color ?? home_team?.color}
               away_color={match.away_kit_color ?? away_team?.color}
               event_counts={event_counts}
               subs={subs}
               card={card}
               on_open_player={on_open_player_profile}
+              on_open_team={on_open_team}
             />
           ) : (
             <div>
@@ -651,12 +660,15 @@ function DualRoster({
   away_bench,
   home_title,
   away_title,
+  home_team_id,
+  away_team_id,
   home_color,
   away_color,
   event_counts,
   subs,
   card,
   on_open_player,
+  on_open_team,
 }: {
   home_xi: MatchPlayer[];
   away_xi: MatchPlayer[];
@@ -664,12 +676,15 @@ function DualRoster({
   away_bench: MatchPlayer[];
   home_title: string;
   away_title: string;
+  home_team_id: string;
+  away_team_id: string;
   home_color?: string;
   away_color?: string;
   event_counts: Map<number, MatchEventCounts>;
   subs: Map<number, SubInfo>;
   card: CSSProperties;
   on_open_player: (player_id: number) => void;
+  on_open_team?: (team_id: string) => void;
 }) {
   const home_by_pos = useMemo(() => _group_by_position(home_xi), [home_xi]);
   const away_by_pos = useMemo(() => _group_by_position(away_xi), [away_xi]);
@@ -705,7 +720,13 @@ function DualRoster({
             borderLeft: home_color ? `3px solid ${home_color}` : undefined,
           }}
         >
-          {home_title}
+          <TeamLink
+            team_id={home_team_id}
+            on_open_team={on_open_team}
+            style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+          >
+            {home_title}
+          </TeamLink>
         </div>
         <div
           style={{
@@ -718,7 +739,13 @@ function DualRoster({
             borderLeft: away_color ? `3px solid ${away_color}` : undefined,
           }}
         >
-          {away_title}
+          <TeamLink
+            team_id={away_team_id}
+            on_open_team={on_open_team}
+            style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+          >
+            {away_title}
+          </TeamLink>
         </div>
       </div>
 

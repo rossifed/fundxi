@@ -13,6 +13,7 @@ interface FixtureDTO {
   minute: number | null;
   note: string | null;
   venue_name: string | null;
+  venue_city: string | null;
   stage_name: string | null;
   round_name: string | null;
 }
@@ -33,6 +34,7 @@ function dto_to_domain(dto: FixtureDTO): Fixture {
     minute: dto.minute ?? undefined,
     note: dto.note ?? undefined,
     venue_name: dto.venue_name ?? undefined,
+    venue_city: dto.venue_city ?? undefined,
     stage_name: dto.stage_name ?? undefined,
     round_name: dto.round_name ?? undefined,
   };

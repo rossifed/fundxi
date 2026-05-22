@@ -11,6 +11,7 @@ import { PlayerChip } from "@/ui/components/PlayerChip";
 import { PerformanceChart } from "@/ui/components/PerformanceChart";
 import { Donut } from "@/ui/components/Donut";
 import { SortableHeader, type SortDir } from "@/ui/components/SortableHeader";
+import { TeamLink } from "@/ui/components/TeamLink";
 import { color_for_sign, fmt_eur_m, fmt_eur_m_signed, fmt_shares, fmt_signed_pct } from "@/ui/helpers/format";
 import { position_color } from "@/ui/design/tokens";
 
@@ -102,9 +103,10 @@ const CHART_PALETTE = [
 
 interface PortfolioPageProps {
   on_open_player: (player: Player) => void;
+  on_open_team?: (team_id: string) => void;
 }
 
-export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
+export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPageProps) {
   // Live data feeds one ``data_version`` counter that every memo below
   // depends on. It is bumped by:
   //  - the shared live-valuations stream (one SSE + one debounced
@@ -129,11 +131,11 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
   const return_pct = totals.return_pct;
 
   const by_team = useMemo(() => {
-    const map: Record<string, { name: string; flag: string; v: number }> = {};
+    const map: Record<string, { id: string; name: string; flag: string; v: number }> = {};
     for (const h of holdings) {
       const team = teams_api.get(h.player.team_id);
       if (!team) continue;
-      if (!map[team.id]) map[team.id] = { name: team.name, flag: team.flag, v: 0 };
+      if (!map[team.id]) map[team.id] = { id: team.id, name: team.name, flag: team.flag, v: 0 };
       map[team.id].v += h.market_value;
     }
     return Object.values(map)
@@ -236,6 +238,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
     color: CHART_PALETTE[i] ?? CHART_PALETTE.at(-1)!,
     pct: t.pct,
     v: t.v,
+    team_id: t.id,
   }));
   const position_items = by_position.map((p, i) => ({
     label: p.label,
@@ -446,10 +449,16 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                         </span>
                       </div>
                       <div style={{ fontSize: 11, color: "rgba(255,255,255,.3)", display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
-                        <span style={{ flexShrink: 0 }}>{team?.flag}</span>
-                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
-                          {team?.name}
-                        </span>
+                        <TeamLink
+                          team_id={h.player.team_id}
+                          on_open_team={on_open_team}
+                          style={{ display: "inline-flex", alignItems: "center", gap: 4, minWidth: 0 }}
+                        >
+                          <span style={{ flexShrink: 0 }}>{team?.flag}</span>
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
+                            {team?.name}
+                          </span>
+                        </TeamLink>
                         <span style={{ color: position_color[h.player.position], fontWeight: 700, flexShrink: 0 }}>
                           · {POSITION_ABBR[h.player.position]}
                         </span>
@@ -555,10 +564,14 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
                             {t.player_name}
                           </span>
                         </div>
-                        <div style={{ fontSize: 11, color: "rgba(255,255,255,.3)", display: "flex", alignItems: "center", gap: 4 }}>
+                        <TeamLink
+                          team_id={t.team_id}
+                          on_open_team={on_open_team}
+                          style={{ fontSize: 11, color: "rgba(255,255,255,.3)", display: "inline-flex", alignItems: "center", gap: 4 }}
+                        >
                           <span>{team?.flag}</span>
                           <span>{team?.name}</span>
-                        </div>
+                        </TeamLink>
                       </div>
                     </div>
                     <span
@@ -597,7 +610,7 @@ export function PortfolioPage({ on_open_player }: PortfolioPageProps) {
         <aside style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <ExposureCard total_value={total_value} />
           <WinLossCard holdings={holdings} />
-          <BreakdownCard title="By team" items={team_items} chart="bars" />
+          <BreakdownCard title="By team" items={team_items} chart="bars" on_open_team={on_open_team} />
           <BreakdownCard title="By position" items={position_items} chart="pie" />
           <BreakdownCard title="By age" items={age_items} chart="pie" />
         </aside>
@@ -612,6 +625,28 @@ interface BreakdownItem {
   color: string;
   pct: string;
   v: number;
+  /** Set only on the "By team" breakdown — turns the row label into a
+   * link to that team's page. Absent on position / age breakdowns. */
+  team_id?: string;
+}
+
+/** A breakdown row label, clickable to the team page when the item
+ * carries a ``team_id`` and the card was given an ``on_open_team``. */
+function ItemLabel({
+  item,
+  on_open_team,
+}: {
+  item: BreakdownItem;
+  on_open_team?: (team_id: string) => void;
+}) {
+  if (item.team_id && on_open_team) {
+    return (
+      <TeamLink team_id={item.team_id} on_open_team={on_open_team}>
+        {item.label}
+      </TeamLink>
+    );
+  }
+  return <>{item.label}</>;
 }
 
 function BreakdownCard({
@@ -619,6 +654,7 @@ function BreakdownCard({
   items,
   chart = "bars",
   large = false,
+  on_open_team,
 }: {
   title: string;
   items: BreakdownItem[];
@@ -627,6 +663,8 @@ function BreakdownCard({
   chart?: "bars" | "pie";
   /** Bigger donut for the wider above-the-fold cards (pie variant only). */
   large?: boolean;
+  /** When provided, item labels carrying a ``team_id`` link to the team. */
+  on_open_team?: (team_id: string) => void;
 }) {
   const segments = items.map(x => ({ value: x.v, color: x.color, label: x.label }));
   return (
@@ -673,7 +711,7 @@ function BreakdownCard({
                   <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
                     <div style={{ width: 8, height: 8, borderRadius: 2, background: item.color, flexShrink: 0 }} />
                     <span style={{ fontSize: 11, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "#fff" }}>
-                      {item.label}
+                      <ItemLabel item={item} on_open_team={on_open_team} />
                     </span>
                   </div>
                   <span
@@ -721,7 +759,7 @@ function BreakdownCard({
                       minWidth: 0,
                     }}
                   >
-                    {item.label}
+                    <ItemLabel item={item} on_open_team={on_open_team} />
                   </span>
                   <span
                     className="mono"
