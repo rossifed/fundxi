@@ -267,28 +267,31 @@ export function FixturesPage({ on_open_match }: FixturesPageProps) {
       ) : view_mode === "groups" ? (
         <GroupsView />
       ) : (
-      <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {days.map(day => (
           <section
             key={day.day_key}
             ref={day.is_today ? today_ref : undefined}
-            style={{ display: "flex", flexDirection: "column", gap: 10, scrollMarginTop: 8 }}
+            style={{
+              background: day.is_today ? "rgba(72,255,67,.04)" : "rgba(255,255,255,.025)",
+              border: `1px solid ${day.is_today ? "rgba(72,255,67,.30)" : "rgba(255,255,255,.07)"}`,
+              borderRadius: 10,
+              overflow: "hidden",
+              scrollMarginTop: 8,
+            }}
           >
+            {/* Date band — each day is its own bordered block, the date
+                as its header, the way the bracket groups each pool. */}
             <header
               style={{
-                position: "sticky",
-                top: 0,
-                zIndex: 1,
-                padding: "8px 2px",
-                background: "linear-gradient(to bottom, rgba(13,13,15,.97) 70%, rgba(13,13,15,0))",
-                backdropFilter: "blur(6px)",
                 display: "flex",
                 alignItems: "baseline",
                 gap: 10,
+                padding: "9px 14px",
+                background: day.is_today ? "rgba(72,255,67,.07)" : "rgba(255,255,255,.03)",
+                borderBottom: `1px solid ${day.is_today ? "rgba(72,255,67,.20)" : "rgba(255,255,255,.05)"}`,
               }}
             >
-              {/* Prominent date: the day number + month is the anchor,
-                  the weekday sits above it small. */}
               <span
                 style={{
                   fontSize: 10,
@@ -305,7 +308,7 @@ export function FixturesPage({ on_open_match }: FixturesPageProps) {
                   fontSize: 17,
                   fontWeight: 800,
                   letterSpacing: -0.2,
-                  color: day.is_today ? "#fff" : "rgba(255,255,255,.82)",
+                  color: day.is_today ? "#fff" : "rgba(255,255,255,.85)",
                 }}
               >
                 {day.date_label}
@@ -325,14 +328,7 @@ export function FixturesPage({ on_open_match }: FixturesPageProps) {
                   TODAY
                 </span>
               )}
-              <span
-                style={{
-                  flex: 1,
-                  height: 1,
-                  alignSelf: "center",
-                  background: day.is_today ? "rgba(72,255,67,.25)" : "rgba(255,255,255,.06)",
-                }}
-              />
+              <span style={{ flex: 1 }} />
               <span
                 style={{
                   fontSize: 11,
@@ -351,8 +347,9 @@ export function FixturesPage({ on_open_match }: FixturesPageProps) {
                       gridTemplateColumns: "minmax(0, 440px)",
                       justifyContent: "center",
                       gap: 12,
+                      padding: 12,
                     }
-                  : { display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }
+                  : { display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12, padding: 12 }
               }
             >
               {day.fixtures.map(fx => {
