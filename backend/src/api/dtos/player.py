@@ -92,6 +92,8 @@ class PlayerStatsBrief(BaseModel):
     minutes_played: int | None = None
     goals: int | None = None
     assists: int | None = None
+    yellow_cards: int | None = None
+    red_cards: int | None = None
     passes_accuracy: float | None = None
     rating_avg: float | None = None
 

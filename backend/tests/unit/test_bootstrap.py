@@ -21,6 +21,7 @@ from src.domain.match.match_comment import MatchComment
 from src.domain.news.news import News
 from src.domain.player.player import Player
 from src.domain.team.team import Team
+from src.infrastructure.sportmonks.projectors.coach import CoachProjection
 
 # --- Fakes ----------------------------------------------------------------
 
@@ -63,15 +64,30 @@ class _FakeTeamRepo:
 
     def __init__(self) -> None:
         self.upserts: list[tuple[Team, int | None]] = []
+        self.coach_links: list[int | None] = []
 
-    async def upsert(self, team: Team, *, sportmonks_id: int | None = None) -> None:
+    async def upsert(
+        self, team: Team, *, sportmonks_id: int | None = None, coach_id: int | None = None
+    ) -> None:
         self.upserts.append((team, sportmonks_id))
+        self.coach_links.append(coach_id)
 
     async def list_all(self) -> list[Team]:
         raise NotImplementedError
 
     async def get_by_id(self, team_id: str) -> Team | None:
         raise NotImplementedError
+
+
+class _FakeCoachRepo:
+    """Implements the bootstrap CoachRepository port structurally."""
+
+    def __init__(self) -> None:
+        self.upserts: list[CoachProjection] = []
+
+    async def upsert(self, projection: CoachProjection) -> int:
+        self.upserts.append(projection)
+        return len(self.upserts)
 
 
 class _FakePlayerRepo:
@@ -204,6 +220,7 @@ async def test_bootstrap_teams_single_page() -> None:
         client=client,
         raw_archive=raw_archive,
         team_repo=team_repo,
+        coach_repo=_FakeCoachRepo(),
         season_id=100,
     )
 
@@ -237,12 +254,69 @@ async def test_bootstrap_teams_paginates() -> None:
         client=client,
         raw_archive=raw_archive,
         team_repo=team_repo,
+        coach_repo=_FakeCoachRepo(),
         season_id=100,
     )
 
     assert pairs == [(1, "AAA"), (2, "BBB")]
     assert len(raw_archive.events) == 2  # one per page
-    assert client.calls == [("/teams/seasons/100", {"page": 1}), ("/teams/seasons/100", {"page": 2})]
+    assert client.calls == [
+        ("/teams/seasons/100", {"include": "coaches.coach.country", "page": 1}),
+        ("/teams/seasons/100", {"include": "coaches.coach.country", "page": 2}),
+    ]
+
+
+@pytest.mark.anyio
+async def test_bootstrap_teams_links_head_coach() -> None:
+    client = _FakeClient(
+        {
+            "/teams/seasons/100": [
+                {
+                    "data": [
+                        {
+                            "id": 17,
+                            "name": "Japan",
+                            "short_code": "JPN",
+                            "type": "national",
+                            "coaches": [
+                                {
+                                    "active": True,
+                                    "coach": {
+                                        "id": 471484,
+                                        "name": "Hajime Moriyasu",
+                                        "image_path": "https://cdn.sportmonks.com/x.png",
+                                        "country": {"name": "Japan", "iso2": "JP"},
+                                    },
+                                }
+                            ],
+                        },
+                        # No coaches include -> team still ingests, unlinked.
+                        {"id": 18, "name": "France", "short_code": "FRA", "type": "national"},
+                    ],
+                    "pagination": {"has_more": False},
+                }
+            ]
+        }
+    )
+    raw_archive = _FakeRawArchive()
+    team_repo = _FakeTeamRepo()
+    coach_repo = _FakeCoachRepo()
+
+    pairs = await bootstrap_teams(
+        client=client,
+        raw_archive=raw_archive,
+        team_repo=team_repo,
+        coach_repo=coach_repo,
+        season_id=100,
+    )
+
+    assert pairs == [(17, "JPN"), (18, "FRA")]
+    assert len(coach_repo.upserts) == 1
+    assert coach_repo.upserts[0].name == "Hajime Moriyasu"
+    assert coach_repo.upserts[0].nationality_name == "Japan"
+    assert coach_repo.upserts[0].nationality_iso == "JP"
+    # Japan linked to the coach (fake repo returns id 1); France unlinked.
+    assert team_repo.coach_links == [1, None]
 
 
 @pytest.mark.anyio
@@ -463,6 +537,7 @@ async def test_bootstrap_for_season_orchestrates_three_steps() -> None:
         client=client,
         raw_archive=raw_archive,
         team_repo=team_repo,
+        coach_repo=_FakeCoachRepo(),
         fixture_repo=fixture_repo,
         player_repo=player_repo,
         stat_repo=stat_repo,

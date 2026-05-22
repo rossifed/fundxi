@@ -20,6 +20,7 @@ import structlog
 
 from src.application.bootstrap import BootstrapReport, bootstrap_for_season
 from src.config import get_settings
+from src.infrastructure.db.repositories.coach import SqlAlchemyCoachRepository
 from src.infrastructure.db.repositories.fixture import SqlAlchemyFixtureRepository
 from src.infrastructure.db.repositories.match_comment import SqlAlchemyMatchCommentRepository
 from src.infrastructure.db.repositories.news import SqlAlchemyNewsRepository
@@ -66,6 +67,7 @@ async def run() -> BootstrapReport:
             client=client,
             raw_archive=SqlAlchemyRawSportmonksEventRepository(session),
             team_repo=SqlAlchemyTeamRepository(session),
+            coach_repo=SqlAlchemyCoachRepository(session),
             fixture_repo=SqlAlchemyFixtureRepository(session),
             player_repo=SqlAlchemyPlayerRepository(session),
             stat_repo=SqlAlchemyPlayerTournamentStatRepository(session),

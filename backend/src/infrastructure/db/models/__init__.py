@@ -3,6 +3,7 @@
 Importing this module registers all ORM classes on Base.metadata.
 """
 
+from src.infrastructure.db.models.coach import CoachORM
 from src.infrastructure.db.models.fixture import FixtureORM
 from src.infrastructure.db.models.league import LeagueMemberORM, LeagueORM
 from src.infrastructure.db.models.lineup import LineupORM
@@ -23,6 +24,7 @@ from src.infrastructure.db.models.team import TeamORM
 from src.infrastructure.db.models.user import UserORM
 
 __all__ = [
+    "CoachORM",
     "FixtureORM",
     "HoldingORM",
     "LeagueMemberORM",

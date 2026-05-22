@@ -19,6 +19,7 @@ def _to_domain(
     *,
     group_override: str | None = None,
     venue_name: str | None = None,
+    venue_city: str | None = None,
 ) -> Fixture:
     # Group letter (A..H) lives on ``core.standings``, populated by the
     # StandingsPoller. ``FixtureORM.group`` stays empty because Sportmonks'
@@ -42,6 +43,7 @@ def _to_domain(
         home_formation=orm.home_formation,
         away_formation=orm.away_formation,
         venue_name=venue_name,
+        venue_city=venue_city,
         stage_name=orm.stage_name,
         round_name=orm.round_name,
         season_id=orm.season_id,
@@ -86,22 +88,28 @@ class SqlAlchemyFixtureRepository:
         if season_id is not None:
             query = query.where(FixtureORM.season_id == season_id)
         rows = await self._session.execute(query.order_by(FixtureORM.kickoff_at))
-        return [_to_domain(fx, group_override=grp, venue_name=vn) for fx, grp, vn in rows.all()]
+        return [
+            _to_domain(fx, group_override=grp, venue_name=vn, venue_city=vc)
+            for fx, grp, vn, vc in rows.all()
+        ]
 
     async def get_by_id(self, fixture_id: int) -> Fixture | None:
         rows = await self._session.execute(self._select_enriched().where(FixtureORM.id == fixture_id))
         row = rows.one_or_none()
         if row is None:
             return None
-        fx, grp, vn = row
-        return _to_domain(fx, group_override=grp, venue_name=vn)
+        fx, grp, vn, vc = row
+        return _to_domain(fx, group_override=grp, venue_name=vn, venue_city=vc)
 
     async def list_by_status(self, status: FixtureStatus, *, season_id: int | None = None) -> list[Fixture]:
         query = self._select_enriched().where(FixtureORM.status == status.value)
         if season_id is not None:
             query = query.where(FixtureORM.season_id == season_id)
         rows = await self._session.execute(query.order_by(FixtureORM.kickoff_at))
-        return [_to_domain(fx, group_override=grp, venue_name=vn) for fx, grp, vn in rows.all()]
+        return [
+            _to_domain(fx, group_override=grp, venue_name=vn, venue_city=vc)
+            for fx, grp, vn, vc in rows.all()
+        ]
 
     @staticmethod
     def _select_enriched():
@@ -115,6 +123,7 @@ class SqlAlchemyFixtureRepository:
                 FixtureORM,
                 case((home_s.group == away_s.group, home_s.group), else_=None).label("group_letter"),
                 VenueORM.name.label("venue_name"),
+                VenueORM.city.label("venue_city"),
             )
             .outerjoin(home_s, home_s.team_id == FixtureORM.home_team_id)
             .outerjoin(away_s, away_s.team_id == FixtureORM.away_team_id)

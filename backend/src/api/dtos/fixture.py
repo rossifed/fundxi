@@ -19,6 +19,7 @@ class FixtureResponse(BaseModel):
     minute: int | None = None
     note: str | None = None
     venue_name: str | None = None
+    venue_city: str | None = None
     stage_name: str | None = None
     round_name: str | None = None
 
@@ -36,6 +37,7 @@ class FixtureResponse(BaseModel):
             minute=fixture.minute,
             note=fixture.note,
             venue_name=fixture.venue_name,
+            venue_city=fixture.venue_city,
             stage_name=fixture.stage_name,
             round_name=fixture.round_name,
         )

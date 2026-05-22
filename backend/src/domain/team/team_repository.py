@@ -12,7 +12,9 @@ from src.domain.team.team import Team
 
 
 class TeamRepository(Protocol):
-    async def upsert(self, team: Team, *, sportmonks_id: int | None = None) -> None: ...
+    async def upsert(
+        self, team: Team, *, sportmonks_id: int | None = None, coach_id: int | None = None
+    ) -> None: ...
 
     async def list_all(self) -> list[Team]: ...
 

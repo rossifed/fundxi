@@ -41,9 +41,10 @@ class Fixture:
     # Stadium + tournament phase. ``stage_name`` is the raw Sportmonks label
     # ("Group Stage", "Round of 16", "Final"); ``round_name`` is the
     # matchday within a stage ("1", "2", "3" for the group stage; null for
-    # knockouts). ``venue_name`` is the stadium name; city/capacity stay
-    # in ``core.venue`` and are not surfaced here.
+    # knockouts). ``venue_name``/``venue_city`` are the stadium name and
+    # city; capacity stays in ``core.venue`` and is not surfaced here.
     venue_name: str | None = None
+    venue_city: str | None = None
     stage_name: str | None = None
     round_name: str | None = None
     # Sportmonks season id — which tournament this fixture belongs to

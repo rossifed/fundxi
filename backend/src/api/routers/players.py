@@ -129,6 +129,8 @@ async def players_search(
                 minutes_played=orm.minutes_played,
                 goals=orm.goals,
                 assists=orm.assists,
+                yellow_cards=orm.yellow_cards,
+                red_cards=orm.red_cards,
                 passes_accuracy=float(orm.passes_accuracy) if orm.passes_accuracy is not None else None,
                 rating_avg=float(orm.rating_avg) if orm.rating_avg is not None else None,
             )

@@ -23,6 +23,7 @@ from src.domain.player.player_repository import PlayerRepository
 from src.domain.player.player_tournament_stat_repository import PlayerTournamentStatRepository
 from src.domain.team.team_repository import TeamRepository
 from src.infrastructure.sportmonks.client import SportmonksClient
+from src.infrastructure.sportmonks.projectors.coach import CoachProjection, project_coach
 from src.infrastructure.sportmonks.projectors.fixture import project_fixture
 from src.infrastructure.sportmonks.projectors.match_comment import project_match_comment
 from src.infrastructure.sportmonks.projectors.news import project_news
@@ -41,6 +42,13 @@ class RawEventArchive(Protocol):
         params: dict[str, Any],
         response: dict[str, Any],
     ) -> bool: ...
+
+
+class CoachRepository(Protocol):
+    """Port — upsert a coach projection, return its internal id. Defined
+    inline (single consumer: bootstrap_teams), like RawEventArchive."""
+
+    async def upsert(self, projection: CoachProjection) -> int: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,18 +87,40 @@ def _data_items(envelope: dict[str, Any]) -> list[dict[str, Any]]:
     return [item for item in data if isinstance(item, dict)]
 
 
+def _head_coach(coaches: Any) -> dict[str, Any] | None:
+    """Extract the head coach entity from a team's ``coaches`` pivot list
+    (``include=coaches.coach.country``). Each element is a team↔coach
+    pivot; we prefer the ``active`` link and return its nested ``coach``
+    object. Returns None when there is no usable coach."""
+    if not isinstance(coaches, list):
+        return None
+    pivots = [p for p in coaches if isinstance(p, dict)]
+    if not pivots:
+        return None
+    active = [p for p in pivots if p.get("active") is True]
+    chosen = active[0] if active else pivots[0]
+    coach = chosen.get("coach")
+    return coach if isinstance(coach, dict) else None
+
+
 async def bootstrap_teams(
     *,
     client: SportmonksClient,
     raw_archive: RawEventArchive,
     team_repo: TeamRepository,
+    coach_repo: CoachRepository,
     season_id: int,
 ) -> list[tuple[int, str]]:
-    """Fetch + upsert teams for the season. Returns (sportmonks_id, internal_id) pairs."""
+    """Fetch + upsert teams for the season. Returns (sportmonks_id, internal_id) pairs.
+
+    ``include=coaches.coach.country`` rides along so each team is linked to
+    its head coach (core.coach) within the same call."""
     endpoint = f"/teams/seasons/{season_id}"
+    base_params = {"include": "coaches.coach.country"}
     pairs: list[tuple[int, str]] = []
     skipped = 0
-    async for params, envelope in _paginate_pages(client, endpoint):
+    coaches_linked = 0
+    async for params, envelope in _paginate_pages(client, endpoint, base_params=base_params):
         await raw_archive.insert_if_new(endpoint=endpoint, params=params, response=envelope)
         for item in _data_items(envelope):
             # Future tournaments expose TBD bracket slots flagged by
@@ -107,9 +137,23 @@ async def bootstrap_teams(
                 log.debug("bootstrap.teams.skip", reason=str(exc))
                 skipped += 1
                 continue
-            await team_repo.upsert(team, sportmonks_id=sportmonks_id)
+            # Head coach — optional. We pick the active team↔coach link
+            # and project its nested coach entity; an absent or
+            # unprojectable coach just leaves the team unlinked.
+            coach_id: int | None = None
+            coach_projection = project_coach(_head_coach(item.get("coaches")))
+            if coach_projection is not None:
+                coach_id = await coach_repo.upsert(coach_projection)
+                coaches_linked += 1
+            await team_repo.upsert(team, sportmonks_id=sportmonks_id, coach_id=coach_id)
             pairs.append((sportmonks_id, team.id))
-    log.info("bootstrap.teams.done", count=len(pairs), skipped=skipped, season_id=season_id)
+    log.info(
+        "bootstrap.teams.done",
+        count=len(pairs),
+        skipped=skipped,
+        coaches=coaches_linked,
+        season_id=season_id,
+    )
     return pairs
 
 
@@ -353,6 +397,7 @@ async def bootstrap_for_season(
     client: SportmonksClient,
     raw_archive: RawEventArchive,
     team_repo: TeamRepository,
+    coach_repo: CoachRepository,
     fixture_repo: FixtureRepository,
     player_repo: PlayerRepository,
     stat_repo: PlayerTournamentStatRepository,
@@ -361,7 +406,13 @@ async def bootstrap_for_season(
     season_id: int,
     today: date,
 ) -> BootstrapReport:
-    teams = await bootstrap_teams(client=client, raw_archive=raw_archive, team_repo=team_repo, season_id=season_id)
+    teams = await bootstrap_teams(
+        client=client,
+        raw_archive=raw_archive,
+        team_repo=team_repo,
+        coach_repo=coach_repo,
+        season_id=season_id,
+    )
     fixtures = await bootstrap_fixtures(
         client=client, raw_archive=raw_archive, fixture_repo=fixture_repo, season_id=season_id
     )

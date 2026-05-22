@@ -32,3 +32,9 @@ class Team:
     kind: TeamKind
     confederation: Confederation | None = None
     group: str | None = None
+    # Head coach — read-time enrichment joined from core.coach. Not part of
+    # the write path (ingestion links the coach via the repository's
+    # ``upsert(..., coach_id=...)`` argument).
+    coach_name: str | None = None
+    coach_image_path: str | None = None
+    coach_nationality: str | None = None

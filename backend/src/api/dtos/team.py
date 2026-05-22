@@ -17,6 +17,9 @@ class TeamResponse(BaseModel):
     kind: str
     confederation: str | None = None
     group: str | None = None
+    coach_name: str | None = None
+    coach_image_path: str | None = None
+    coach_nationality: str | None = None
 
     @classmethod
     def from_domain(cls, team: Team) -> "TeamResponse":
@@ -28,4 +31,7 @@ class TeamResponse(BaseModel):
             kind=team.kind.value,
             confederation=team.confederation.value if team.confederation else None,
             group=team.group,
+            coach_name=team.coach_name,
+            coach_image_path=team.coach_image_path,
+            coach_nationality=team.coach_nationality,
         )

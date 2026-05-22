@@ -4,7 +4,7 @@ DDD role: Adapter (Repository implementation detail), not a domain entity.
 Translation to/from `domain.team.Team` happens in the Repository.
 """
 
-from sqlalchemy import String
+from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.db.base import Base
@@ -25,3 +25,8 @@ class TeamORM(Base, AuditMixin):
     kind: Mapped[str] = mapped_column(String(16))
     confederation: Mapped[str | None] = mapped_column(String(16))
     group: Mapped[str | None] = mapped_column(String(8))
+    # Head coach — FK to the core.coach reference table, nullable (a team
+    # may be ingested before its coach include lands).
+    coach_id: Mapped[int | None] = mapped_column(
+        ForeignKey("core.coach.id", ondelete="SET NULL"), nullable=True
+    )

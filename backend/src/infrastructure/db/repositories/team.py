@@ -4,16 +4,18 @@ DDD role: Adapter. Carries an AsyncSession (legitimate stateful class).
 Conflict target = `id` (ISO country code, deterministic from country).
 """
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.team.team import Confederation, Team, TeamKind
+from src.infrastructure.db.models.coach import CoachORM
 from src.infrastructure.db.models.team import TeamORM
 
 
-def _to_domain(orm: TeamORM) -> Team:
-    """Pure mapping ORM → domain entity."""
+def _to_domain(orm: TeamORM, coach: CoachORM | None = None) -> Team:
+    """Pure mapping ORM → domain entity. ``coach`` is the LEFT-JOINed
+    core.coach row (None when the team has no coach linked yet)."""
     return Team(
         id=orm.id,
         name=orm.name,
@@ -22,6 +24,9 @@ def _to_domain(orm: TeamORM) -> Team:
         kind=TeamKind(orm.kind),
         confederation=Confederation(orm.confederation) if orm.confederation else None,
         group=orm.group,
+        coach_name=coach.name if coach is not None else None,
+        coach_image_path=coach.image_path if coach is not None else None,
+        coach_nationality=coach.nationality_name if coach is not None else None,
     )
 
 
@@ -29,7 +34,9 @@ class SqlAlchemyTeamRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def upsert(self, team: Team, *, sportmonks_id: int | None = None) -> None:
+    async def upsert(
+        self, team: Team, *, sportmonks_id: int | None = None, coach_id: int | None = None
+    ) -> None:
         stmt = pg_insert(TeamORM).values(
             id=team.id,
             sportmonks_id=sportmonks_id,
@@ -39,6 +46,7 @@ class SqlAlchemyTeamRepository:
             kind=team.kind.value,
             confederation=team.confederation.value if team.confederation else None,
             group=team.group,
+            coach_id=coach_id,
         )
         update_payload = {
             "sportmonks_id": stmt.excluded.sportmonks_id,
@@ -48,15 +56,28 @@ class SqlAlchemyTeamRepository:
             "kind": stmt.excluded.kind,
             "confederation": stmt.excluded.confederation,
             "group": stmt.excluded.group,
+            # Keep a previously-linked coach if this run carries none.
+            "coach_id": func.coalesce(stmt.excluded.coach_id, TeamORM.coach_id),
         }
         stmt = stmt.on_conflict_do_update(index_elements=["id"], set_=update_payload)
         await self._session.execute(stmt)
 
     async def list_all(self) -> list[Team]:
-        result = await self._session.execute(select(TeamORM).order_by(TeamORM.name))
-        return [_to_domain(row) for row in result.scalars().all()]
+        result = await self._session.execute(
+            select(TeamORM, CoachORM)
+            .outerjoin(CoachORM, CoachORM.id == TeamORM.coach_id)
+            .order_by(TeamORM.name)
+        )
+        return [_to_domain(team, coach) for team, coach in result.all()]
 
     async def get_by_id(self, team_id: str) -> Team | None:
-        result = await self._session.execute(select(TeamORM).where(TeamORM.id == team_id))
-        row = result.scalar_one_or_none()
-        return _to_domain(row) if row else None
+        result = await self._session.execute(
+            select(TeamORM, CoachORM)
+            .outerjoin(CoachORM, CoachORM.id == TeamORM.coach_id)
+            .where(TeamORM.id == team_id)
+        )
+        row = result.one_or_none()
+        if row is None:
+            return None
+        team, coach = row
+        return _to_domain(team, coach)

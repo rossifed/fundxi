@@ -31,6 +31,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.bootstrap import bootstrap_fixtures, bootstrap_squads, bootstrap_teams
+from src.infrastructure.db.repositories.coach import SqlAlchemyCoachRepository
 from src.infrastructure.db.repositories.fixture import SqlAlchemyFixtureRepository
 from src.infrastructure.db.repositories.player import SqlAlchemyPlayerRepository
 from src.infrastructure.db.repositories.raw_sportmonks_event import SqlAlchemyRawSportmonksEventRepository
@@ -79,6 +80,7 @@ class ReferenceRefresher:
             client=self.client,
             raw_archive=raw_archive,
             team_repo=SqlAlchemyTeamRepository(session),
+            coach_repo=SqlAlchemyCoachRepository(session),
             season_id=self.season_id,
         )
         await bootstrap_fixtures(

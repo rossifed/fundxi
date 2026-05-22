@@ -73,6 +73,7 @@ def _patch_bootstrap(monkeypatch: pytest.MonkeyPatch, *, teams_fail: bool = Fals
     for name in (
         "SqlAlchemyRawSportmonksEventRepository",
         "SqlAlchemyTeamRepository",
+        "SqlAlchemyCoachRepository",
         "SqlAlchemyFixtureRepository",
         "SqlAlchemyPlayerRepository",
     ):
