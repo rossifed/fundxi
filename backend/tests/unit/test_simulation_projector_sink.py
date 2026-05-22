@@ -60,6 +60,10 @@ class _FakeEventRepo:
         _ = season_id
         return []
 
+    async def list_since_id(self, last_id: int, *, limit: int = 1000) -> list[MatchEvent]:
+        _ = (last_id, limit)
+        return []
+
 
 def _comment_event(payload: dict[str, Any]) -> ReplayEvent:
     return ReplayEvent(

@@ -17,7 +17,7 @@ from src.application.portfolio_history_service import (
     HistoryRange,
     PortfolioHistoryService,
 )
-from src.domain.portfolio.portfolio import Holding, Portfolio
+from src.domain.portfolio.portfolio import Holding
 from src.domain.portfolio.portfolio_snapshot import PortfolioSnapshot
 
 pytestmark = pytest.mark.anyio

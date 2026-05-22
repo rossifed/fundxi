@@ -44,13 +44,15 @@ class _FakeFixtureRepo:
     async def upsert_by_sportmonks_id(self, fixture: Fixture, *, sportmonks_id: int) -> None:
         _ = fixture, sportmonks_id
 
-    async def list_all(self) -> list[Fixture]:
+    async def list_all(self, *, season_id: int | None = None) -> list[Fixture]:
+        _ = season_id
         return list(self.fixtures)
 
     async def get_by_id(self, fixture_id: int) -> Fixture | None:
         return next((f for f in self.fixtures if f.id == fixture_id), None)
 
-    async def list_by_status(self, status: FixtureStatus) -> list[Fixture]:
+    async def list_by_status(self, status: FixtureStatus, *, season_id: int | None = None) -> list[Fixture]:
+        _ = season_id
         return [f for f in self.fixtures if f.status is status]
 
     async def map_sportmonks_to_internal_id(self) -> dict[int, int]:
@@ -75,6 +77,25 @@ class _FakeFixtureRepo:
         away_formation: str | None,
     ) -> None:
         _ = (sportmonks_id, home_formation, away_formation)
+
+    async def set_venue_and_phase(
+        self,
+        *,
+        sportmonks_id: int,
+        venue_id: int | None,
+        stage_name: str | None,
+        round_name: str | None,
+    ) -> None:
+        _ = (sportmonks_id, venue_id, stage_name, round_name)
+
+    async def set_phase(
+        self,
+        *,
+        sportmonks_id: int,
+        stage_name: str | None,
+        round_name: str | None,
+    ) -> None:
+        _ = (sportmonks_id, stage_name, round_name)
 
 
 @dataclass(slots=True)

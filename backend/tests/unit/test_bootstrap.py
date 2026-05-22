@@ -128,13 +128,13 @@ class _FakeFixtureRepo:
         # Synthetic id for testing news/comment fixture resolution.
         self._fixture_id_map[sportmonks_id] = len(self.upserts)
 
-    async def list_all(self) -> list[Fixture]:
+    async def list_all(self, *, season_id: int | None = None) -> list[Fixture]:
         raise NotImplementedError
 
     async def get_by_id(self, fixture_id: int) -> Fixture | None:
         raise NotImplementedError
 
-    async def list_by_status(self, status: object) -> list[Fixture]:
+    async def list_by_status(self, status: object, *, season_id: int | None = None) -> list[Fixture]:
         raise NotImplementedError
 
     async def map_sportmonks_to_internal_id(self) -> dict[int, int]:
@@ -159,6 +159,25 @@ class _FakeFixtureRepo:
         away_formation: str | None,
     ) -> None:
         _ = (sportmonks_id, home_formation, away_formation)
+
+    async def set_venue_and_phase(
+        self,
+        *,
+        sportmonks_id: int,
+        venue_id: int | None,
+        stage_name: str | None,
+        round_name: str | None,
+    ) -> None:
+        _ = (sportmonks_id, venue_id, stage_name, round_name)
+
+    async def set_phase(
+        self,
+        *,
+        sportmonks_id: int,
+        stage_name: str | None,
+        round_name: str | None,
+    ) -> None:
+        _ = (sportmonks_id, stage_name, round_name)
 
 
 class _FakeNewsRepo:

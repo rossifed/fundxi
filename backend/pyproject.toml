@@ -74,6 +74,19 @@ reportUnknownArgumentType = false
 reportUnknownVariableType = false
 reportUnknownMemberType = false
 
+# Test code legitimately uses in-memory fakes, monkeypatch lambdas and
+# white-box assertions on internals — strict's private-usage and
+# lambda/parameter type-inference rules are noise there, not signal.
+# src/ stays fully strict; only tests/ relaxes these four. Real type
+# errors (e.g. a fake not satisfying its port) are still reported.
+[[tool.pyright.executionEnvironments]]
+root = "tests"
+extraPaths = ["."]
+reportPrivateUsage = false
+reportUnknownLambdaType = false
+reportUnknownParameterType = false
+reportMissingParameterType = false
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [

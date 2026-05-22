@@ -1,6 +1,6 @@
 """Unit tests for PortfolioSnapshotService.
 
-The math here is dead simple (cash + Σ shares × price, with a flat
+The math here is dead simple (cash + sum of shares x price, with a flat
 fallback to ``average_buy_price`` for players not yet ticked) — so each
 expected value below is computed BY HAND from the inputs, NOT by
 re-running the service's own helpers. That keeps the tests adversarial
