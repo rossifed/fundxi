@@ -15,6 +15,11 @@ export interface SquadPlayer {
   position: string;
   detailed_position: string | null;
   image_path: string | null;
+  age: number | null;
+  foot: string | null;
+  height: number | null;
+  weight: number | null;
+  club: string | null;
   valuation: {
     current_price: number;
     change_since_inception: number;

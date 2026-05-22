@@ -22,9 +22,18 @@ import type { Match } from "@/domain/match/match";
 import type { Position } from "@/domain/player/player";
 import type { Team } from "@/domain/team/team";
 import { PlayerCard } from "@/ui/components/PlayerCard";
+import { position_color } from "@/ui/design/tokens";
 import { color_for_sign } from "@/ui/helpers/format";
 import { useLiveRefetch, useMatchesLiveVersion, useStandingsLiveVersion } from "@/ui/hooks/use_live_updates";
 import { useLiveValuations } from "@/ui/hooks/use_live_valuations";
+
+// Squad sections, in pitch order.
+const POSITION_GROUPS: { key: Position; label: string }[] = [
+  { key: "GK", label: "Goalkeepers" },
+  { key: "DF", label: "Defenders" },
+  { key: "MF", label: "Midfielders" },
+  { key: "FW", label: "Forwards" },
+];
 
 interface TeamPageProps {
   team: Team;
@@ -125,20 +134,60 @@ export function TeamPage({ team, on_open_player, on_open_match, on_back }: TeamP
         ) : squad.length === 0 ? (
           <Muted>No players found for this team.</Muted>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10 }}>
-            {squad.map(p => (
-              <PlayerCard
-                key={p.id}
-                name={p.name}
-                jersey_number={p.jersey_number}
-                position={p.position as Position}
-                image_path={p.image_path}
-                team_color={team.color}
-                current_price={p.valuation.current_price}
-                change_pct={p.valuation.change_since_inception}
-                on_click={() => on_open_player(p.id)}
-              />
-            ))}
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {POSITION_GROUPS.map(grp => {
+              const players = squad.filter(p => p.position === grp.key);
+              if (players.length === 0) return null;
+              return (
+                <div key={grp.key} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                    <span
+                      style={{ width: 7, height: 7, borderRadius: 4, background: position_color[grp.key] }}
+                    />
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        letterSpacing: 0.5,
+                        textTransform: "uppercase",
+                        color: "rgba(255,255,255,.6)",
+                      }}
+                    >
+                      {grp.label}
+                    </span>
+                    <span style={{ fontSize: 11, color: "rgba(255,255,255,.3)", fontWeight: 600 }}>
+                      {players.length}
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fill, minmax(165px, 1fr))",
+                      gap: 10,
+                    }}
+                  >
+                    {players.map(p => (
+                      <PlayerCard
+                        key={p.id}
+                        name={p.name}
+                        jersey_number={p.jersey_number}
+                        position={p.position as Position}
+                        image_path={p.image_path}
+                        team_color={team.color}
+                        club={p.club}
+                        age={p.age}
+                        foot={p.foot}
+                        height={p.height}
+                        weight={p.weight}
+                        current_price={p.valuation.current_price}
+                        change_pct={p.valuation.change_since_inception}
+                        on_click={() => on_open_player(p.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </Section>
