@@ -57,7 +57,10 @@ function fmt_match_date(iso: string | undefined): string {
 }
 
 export function TeamPage({ team, on_open_player, on_open_match, on_open_team, on_back }: TeamPageProps) {
-  const live_valuations = useLiveValuations();
+  // Subscribe to the shared live-valuations stream: this component
+  // re-renders on every price-tick wave, and the squad cards read fresh
+  // prices from the shared cache below — no per-tick squad refetch.
+  useLiveValuations();
   const standings_version = useStandingsLiveVersion();
   const [fixtures_version, set_fixtures_version] = useState(0);
   // Quick-trade from a flipped squad card — one shared TradeDialog,
@@ -70,7 +73,9 @@ export function TeamPage({ team, on_open_player, on_open_match, on_open_team, on
     void matches_api.refresh_fixtures().then(() => set_fixtures_version(v => v + 1));
   });
 
-  // Squad — refetched on every shared price-tick wave so the cards stay live.
+  // Squad — fetched ONCE per team. Live prices are overlaid at render
+  // time from the shared valuations cache; only the static identity and
+  // tournament-cumulative stats come from this snapshot.
   const [squad, set_squad] = useState<SquadPlayer[] | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -80,7 +85,7 @@ export function TeamPage({ team, on_open_player, on_open_match, on_open_team, on
     return () => {
       cancelled = true;
     };
-  }, [team.id, live_valuations]);
+  }, [team.id]);
 
   // Tournament record — the team's row in the group standings.
   const [standing, set_standing] = useState<StandingRow | null>(null);
@@ -228,25 +233,31 @@ export function TeamPage({ team, on_open_player, on_open_match, on_open_team, on
                       padding: 12,
                     }}
                   >
-                    {players.map(p => (
-                      <PlayerCard
-                        key={p.id}
-                        name={p.name}
-                        jersey_number={p.jersey_number}
-                        position={p.position as Position}
-                        image_path={p.image_path}
-                        team_color={team.color}
-                        age={p.age}
-                        height={p.height}
-                        weight={p.weight}
-                        current_price={p.valuation.current_price}
-                        change_pct={p.valuation.change_since_inception}
-                        stats={p.stats}
-                        spark_data={valuations_api.get_sparkline(p.id)}
-                        on_click={() => on_open_player(p.id)}
-                        on_trade={kind => open_trade(p.id, kind)}
-                      />
-                    ))}
+                    {players.map(p => {
+                      // Live price overlaid from the shared valuations
+                      // cache (refreshed once per tick wave); the squad
+                      // snapshot only seeds the fallback.
+                      const live = valuations_api.get_for_player(p.id);
+                      return (
+                        <PlayerCard
+                          key={p.id}
+                          name={p.name}
+                          jersey_number={p.jersey_number}
+                          position={p.position as Position}
+                          image_path={p.image_path}
+                          team_color={team.color}
+                          age={p.age}
+                          height={p.height}
+                          weight={p.weight}
+                          current_price={live?.current_price ?? p.valuation.current_price}
+                          change_pct={live?.change_since_inception ?? p.valuation.change_since_inception}
+                          stats={p.stats}
+                          spark_data={valuations_api.get_sparkline(p.id)}
+                          on_click={() => on_open_player(p.id)}
+                          on_trade={kind => open_trade(p.id, kind)}
+                        />
+                      );
+                    })}
                   </div>
                 </section>
               );
