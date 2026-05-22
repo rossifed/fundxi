@@ -2,8 +2,10 @@ import { useState } from "react";
 import { matches_api } from "@/api/matches_api";
 import { players_api } from "@/api/players_api";
 import { portfolio_api } from "@/api/portfolio_api";
+import { teams_api } from "@/api/teams_api";
 import type { Match } from "@/domain/match/match";
 import type { Player } from "@/domain/player/player";
+import type { Team } from "@/domain/team/team";
 import { ambient_gradient } from "@/ui/design/tokens";
 import { HomePage } from "@/ui/pages/home/HomePage";
 import { ScreenerPage } from "@/ui/pages/screener/ScreenerPage";
@@ -12,6 +14,7 @@ import { PortfolioPage } from "@/ui/pages/portfolio/PortfolioPage";
 import { LeaguesPage } from "@/ui/pages/leagues/LeaguesPage";
 import { ProfilePage } from "@/ui/pages/profile/ProfilePage";
 import { MatchView } from "@/ui/pages/match/MatchView";
+import { TeamPage } from "@/ui/pages/team/TeamPage";
 import { PlayerSheet } from "@/ui/pages/player/PlayerSheet";
 import { Header } from "./Header";
 import { PortfolioBar } from "./PortfolioBar";
@@ -44,6 +47,7 @@ export function App() {
   const [tab, set_tab] = useState<TabId>(initial_join_code ? "leagues" : "home");
   const [selected_player, set_selected_player] = useState<Player | null>(null);
   const [selected_match, set_selected_match] = useState<Match | null>(null);
+  const [selected_team, set_selected_team] = useState<Team | null>(null);
   const [watchlist, set_watchlist] = useState<Set<number>>(DEFAULT_WATCHLIST);
 
   const toggle_watch = (id: number) => {
@@ -56,10 +60,21 @@ export function App() {
   const navigate = (id: string) => {
     set_tab(id as TabId);
     set_selected_match(null);
+    set_selected_team(null);
   };
 
   const open_player = (player: Player) => set_selected_player(player);
   const close_player = () => set_selected_player(null);
+
+  // Open a team's page — clears any open match / player overlay so the
+  // team page is the focused content (it replaces the content area).
+  const open_team = (team_id: string) => {
+    const t = teams_api.get(team_id);
+    if (!t) return;
+    set_selected_player(null);
+    set_selected_match(null);
+    set_selected_team(t);
+  };
 
   const go_portfolio = () => {
     set_selected_player(null);
@@ -87,6 +102,21 @@ export function App() {
         go_portfolio={go_portfolio}
       />
     );
+  } else if (selected_team) {
+    content = (
+      <TeamPage
+        team={selected_team}
+        on_open_player={(id: number) => {
+          const p = players_api.get(id);
+          if (p) set_selected_player(p);
+        }}
+        on_open_match={(m: Match) => {
+          set_selected_team(null);
+          set_selected_match(m);
+        }}
+        on_back={() => set_selected_team(null)}
+      />
+    );
   } else if (tab === "home") {
     content = (
       <HomePage
@@ -100,7 +130,7 @@ export function App() {
   } else if (tab === "screener") {
     content = <ScreenerPage on_open_player={open_player} watchlist={watchlist} toggle_watch={toggle_watch} />;
   } else if (tab === "fixtures") {
-    content = <FixturesPage on_open_match={set_selected_match} />;
+    content = <FixturesPage on_open_match={set_selected_match} on_open_team={open_team} />;
   } else if (tab === "portfolio") {
     content = <PortfolioPage on_open_player={open_player} />;
   } else if (tab === "leagues") {
@@ -110,7 +140,7 @@ export function App() {
   }
 
   const current_tab_label = tab === "profile" ? "Profile" : NAV_TABS.find(t => t.id === tab)?.label ?? "";
-  const show_rail = !selected_match && PAGES_WITH_RAIL.includes(tab);
+  const show_rail = !selected_match && !selected_team && PAGES_WITH_RAIL.includes(tab);
 
   return (
     <div
@@ -176,7 +206,7 @@ export function App() {
             }}
           >
             <div style={{ padding: "24px 32px 64px", width: "100%" }}>
-              {!selected_match && tab !== "home" && (
+              {!selected_match && !selected_team && tab !== "home" && (
                 <div
                   style={{
                     display: "flex",
@@ -216,6 +246,7 @@ export function App() {
           on_close={close_player}
           go_portfolio={go_portfolio}
           go_match={open_match_by_fixture_id}
+          on_open_team={open_team}
           watchlist={watchlist}
           toggle_watch={toggle_watch}
         />

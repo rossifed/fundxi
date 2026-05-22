@@ -44,6 +44,7 @@ const STAGE_CHIP: Record<string, string> = {
 
 interface FixturesPageProps {
   on_open_match: (match: Match) => void;
+  on_open_team: (team_id: string) => void;
 }
 
 interface DayGroup {
@@ -128,7 +129,7 @@ function phase_chip(fixture: Fixture): string {
   return "KO";
 }
 
-export function FixturesPage({ on_open_match }: FixturesPageProps) {
+export function FixturesPage({ on_open_match, on_open_team }: FixturesPageProps) {
   const [filter, set_filter] = useState<StatusFilter>("all");
   const [view_mode, set_view_mode] = useState<ViewMode>(read_view_mode);
   useEffect(() => {
@@ -265,7 +266,7 @@ export function FixturesPage({ on_open_match }: FixturesPageProps) {
       {view_mode === "bracket" ? (
         <BracketView fixtures={all} on_open={handle_open} />
       ) : view_mode === "groups" ? (
-        <GroupsView />
+        <GroupsView on_open_team={on_open_team} />
       ) : (
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {days.map(day => (
@@ -411,7 +412,7 @@ const GROUP_TABLE_GRID = "22px minmax(0,1fr) 22px 22px 22px 22px 36px 34px";
 /** Group-stage standings: every group's table, fed by /api/standings
  * (one request, team name + flag already joined server-side). Refreshes
  * on the live ``standings`` SSE topic. */
-function GroupsView() {
+function GroupsView({ on_open_team }: { on_open_team: (team_id: string) => void }) {
   const standings_version = useStandingsLiveVersion();
   const [groups, set_groups] = useState<GroupStanding[] | null>(null);
 
@@ -444,13 +445,19 @@ function GroupsView() {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 12 }}>
       {groups.map(g => (
-        <GroupTable key={g.group} group={g} />
+        <GroupTable key={g.group} group={g} on_open_team={on_open_team} />
       ))}
     </div>
   );
 }
 
-function GroupTable({ group }: { group: GroupStanding }) {
+function GroupTable({
+  group,
+  on_open_team,
+}: {
+  group: GroupStanding;
+  on_open_team: (team_id: string) => void;
+}) {
   return (
     <div style={BRACKET_COL_PANEL}>
       <div style={{ ...BRACKET_COL_CHIP, marginBottom: 6 }}>GROUP {group.group}</div>
@@ -483,6 +490,8 @@ function GroupTable({ group }: { group: GroupStanding }) {
         return (
           <div
             key={r.team_id}
+            onClick={() => on_open_team(r.team_id)}
+            title={`Open ${r.team_name}`}
             style={{
               display: "grid",
               gridTemplateColumns: GROUP_TABLE_GRID,
@@ -490,9 +499,12 @@ function GroupTable({ group }: { group: GroupStanding }) {
               alignItems: "center",
               padding: "5px 6px",
               fontSize: 12,
+              cursor: "pointer",
               borderTop: "1px solid rgba(255,255,255,.04)",
               borderLeft: `2px solid ${qualifies ? "var(--color-positive)" : "transparent"}`,
             }}
+            onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.04)")}
+            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
           >
             <span
               className="mono"

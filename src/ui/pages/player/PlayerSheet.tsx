@@ -82,11 +82,20 @@ interface PlayerSheetProps {
   on_close: () => void;
   go_portfolio?: () => void;
   go_match?: (fixture_id: number) => void;
+  on_open_team?: (team_id: string) => void;
   watchlist?: Set<number>;
   toggle_watch?: (id: number) => void;
 }
 
-export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlist, toggle_watch }: PlayerSheetProps) {
+export function PlayerSheet({
+  player,
+  on_close,
+  go_portfolio,
+  go_match,
+  on_open_team,
+  watchlist,
+  toggle_watch,
+}: PlayerSheetProps) {
   const team = teams_api.get(player.team_id) ?? {
     id: "?",
     name: "?",
@@ -283,13 +292,16 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
                 </button>
               </div>
               <div
+                onClick={on_open_team ? () => on_open_team(player.team_id) : undefined}
+                title={on_open_team ? `View ${team.name}` : undefined}
                 style={{
-                  display: "flex",
+                  display: "inline-flex",
                   alignItems: "center",
                   gap: 8,
                   marginTop: 6,
                   fontSize: 13,
                   color: "rgba(255,255,255,.65)",
+                  cursor: on_open_team ? "pointer" : "default",
                 }}
               >
                 {team.flag_url ? (
@@ -301,7 +313,16 @@ export function PlayerSheet({ player, on_close, go_portfolio, go_match, watchlis
                 ) : team.flag ? (
                   <span style={{ fontSize: 18, lineHeight: 1 }}>{team.flag}</span>
                 ) : null}
-                <span style={{ fontWeight: 700 }}>{team.name}</span>
+                <span
+                  style={{
+                    fontWeight: 700,
+                    textDecoration: on_open_team ? "underline" : "none",
+                    textDecorationColor: "rgba(255,255,255,.25)",
+                    textUnderlineOffset: 3,
+                  }}
+                >
+                  {team.name}
+                </span>
               </div>
             </div>
           </div>
