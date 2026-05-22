@@ -42,6 +42,23 @@ interface TopicChannel {
 
 const _channels = new Map<string, TopicChannel>();
 
+// ── Stream connection status ────────────────────────────────────────
+// EventSources auto-reconnect under the hood; we surface their
+// connected/dropped state so the UI can show a "live offline" hint
+// instead of silently going stale. Global — every topic hits the same
+// streaming service, so all channels share fate.
+
+export type StreamStatus = "online" | "offline" | "unknown";
+
+let _stream_status: StreamStatus = "unknown";
+const _status_listeners = new Set<() => void>();
+
+function _set_stream_status(next: StreamStatus): void {
+  if (next === _stream_status) return;
+  _stream_status = next;
+  for (const listener of _status_listeners) listener();
+}
+
 /** Subscribe to an SSE topic's ``update`` frames. Returns an
  * unsubscribe function. The underlying EventSource is shared across
  * all subscribers of the same topic. */
@@ -54,6 +71,8 @@ export function subscribe_topic(topic_path: string, on_update: () => void): () =
     source.addEventListener("update", () => {
       for (const listener of listeners) listener();
     });
+    source.onopen = () => _set_stream_status("online");
+    source.onerror = () => _set_stream_status("offline");
     channel = { source, listeners };
     _channels.set(topic_path, channel);
   }
@@ -67,6 +86,22 @@ export function subscribe_topic(topic_path: string, on_update: () => void): () =
       _channels.delete(topic_path);
     }
   };
+}
+
+/** The shared SSE connection status: "online" once a stream connects,
+ * "offline" when it drops (the EventSource keeps retrying underneath),
+ * "unknown" before any stream is opened. */
+export function useStreamStatus(): StreamStatus {
+  const [status, set_status] = useState<StreamStatus>(_stream_status);
+  useEffect(() => {
+    const listener = () => set_status(_stream_status);
+    _status_listeners.add(listener);
+    listener();
+    return () => {
+      _status_listeners.delete(listener);
+    };
+  }, []);
+  return status;
 }
 
 /** Subscribe to an SSE topic; return a counter that increments on each `update`. */

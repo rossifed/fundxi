@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/ui/shell/AuthContext";
+import { StreamStatus } from "@/ui/shell/StreamStatus";
 
 export interface NavTab {
   id: string;
@@ -50,6 +51,8 @@ export function Sidebar({ active_tab, on_navigate }: SidebarProps) {
       </nav>
 
       <div style={{ flex: 1 }} />
+
+      <StreamStatus />
 
       {status === "authenticated" && user && (
         <div style={{ borderTop: "1px solid rgba(255,255,255,.04)", paddingTop: 8, marginTop: 8 }}>
