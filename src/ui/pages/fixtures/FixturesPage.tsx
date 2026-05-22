@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { matches_api } from "@/api/matches_api";
+import { portfolio_api } from "@/api/portfolio_api";
 import { standings_api, type GroupStanding } from "@/api/standings_api";
 import { teams_api } from "@/api/teams_api";
 import type { Fixture, FixtureStatus } from "@/domain/match/fixture";
@@ -47,7 +48,8 @@ interface FixturesPageProps {
 
 interface DayGroup {
   day_key: string;
-  day_label: string;
+  weekday: string; // "Sat"
+  date_label: string; // "18 Dec"
   is_today: boolean;
   fixtures: Fixture[];
 }
@@ -69,7 +71,8 @@ function group_by_day(fixtures: Fixture[]): DayGroup[] {
     if (!g) {
       g = {
         day_key: key,
-        day_label: format_day_header(fx.date),
+        weekday: format_weekday(fx.date),
+        date_label: format_date_label(fx.date),
         is_today: key === today,
         fixtures: [],
       };
@@ -87,13 +90,17 @@ function compare_by_kickoff(a: Fixture, b: Fixture): number {
   return a.date.localeCompare(b.date);
 }
 
-function format_day_header(iso: string | undefined): string {
+function format_weekday(iso: string | undefined): string {
   if (!iso) return "TBD";
+  return new Date(iso).toLocaleDateString(undefined, { weekday: "long" });
+}
+
+function format_date_label(iso: string | undefined): string {
+  if (!iso) return "Date to be confirmed";
   const d = new Date(iso);
-  const weekday = d.toLocaleDateString(undefined, { weekday: "short" });
-  const month = d.toLocaleDateString(undefined, { month: "short" });
   const day = d.getDate();
-  return `${weekday} · ${month} ${day}`.toUpperCase();
+  const month = d.toLocaleDateString(undefined, { month: "long" });
+  return `${day} ${month}`;
 }
 
 function format_kickoff_time(iso: string | undefined): string {
@@ -139,6 +146,43 @@ export function FixturesPage({ on_open_match }: FixturesPageProps) {
   const all = useMemo(() => matches_api.list_fixtures(), [data_version]);
   const fixtures = filter === "all" ? all : all.filter(f => f.status === filter);
   const days = group_by_day(fixtures);
+
+  // Portfolio exposure: which teams the user holds a player from, so the
+  // calendar can mark the fixtures that move the user's book. Recomputed
+  // on a trade (holdings change only then — a price tick does not).
+  const [portfolio_version, set_portfolio_version] = useState(0);
+  useEffect(() => portfolio_api.subscribe(() => set_portfolio_version(v => v + 1)), []);
+  const held_names_by_team = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const h of portfolio_api.get_holdings()) {
+      const list = map.get(h.player.team_id) ?? [];
+      list.push(h.player.name);
+      map.set(h.player.team_id, list);
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [portfolio_version]);
+  const held_players_for = (fx: Fixture): string[] => [
+    ...(held_names_by_team.get(fx.home_team_id) ?? []),
+    ...(held_names_by_team.get(fx.away_team_id) ?? []),
+  ];
+
+  // Auto-scroll to today's section when the calendar opens — the WC
+  // calendar is a long list. Scrolls once per entry into the calendar
+  // view (reset when leaving), never on a live re-fetch.
+  const today_ref = useRef<HTMLElement | null>(null);
+  const did_scroll_to_today = useRef(false);
+  useEffect(() => {
+    if (view_mode !== "calendar") {
+      did_scroll_to_today.current = false;
+      return;
+    }
+    if (did_scroll_to_today.current) return;
+    if (today_ref.current) {
+      today_ref.current.scrollIntoView({ block: "start" });
+      did_scroll_to_today.current = true;
+    }
+  }, [view_mode, days]);
 
   const handle_open = async (fx: Fixture) => {
     const match = await matches_api.get_match_by_fixture_id(fx.id);
@@ -225,29 +269,46 @@ export function FixturesPage({ on_open_match }: FixturesPageProps) {
       ) : (
       <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
         {days.map(day => (
-          <section key={day.day_key} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <section
+            key={day.day_key}
+            ref={day.is_today ? today_ref : undefined}
+            style={{ display: "flex", flexDirection: "column", gap: 10, scrollMarginTop: 8 }}
+          >
             <header
               style={{
                 position: "sticky",
                 top: 0,
                 zIndex: 1,
-                padding: "6px 2px",
-                background: "linear-gradient(to bottom, rgba(13,13,15,.95) 65%, rgba(13,13,15,0))",
+                padding: "8px 2px",
+                background: "linear-gradient(to bottom, rgba(13,13,15,.97) 70%, rgba(13,13,15,0))",
                 backdropFilter: "blur(6px)",
                 display: "flex",
-                alignItems: "center",
+                alignItems: "baseline",
                 gap: 10,
               }}
             >
+              {/* Prominent date: the day number + month is the anchor,
+                  the weekday sits above it small. */}
               <span
                 style={{
-                  fontSize: day.is_today ? 12 : 11,
-                  letterSpacing: 1.2,
-                  fontWeight: day.is_today ? 800 : 700,
-                  color: day.is_today ? "#fff" : "rgba(255,255,255,.45)",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: 1,
+                  textTransform: "uppercase",
+                  color: day.is_today ? "var(--color-brand-green)" : "rgba(255,255,255,.4)",
                 }}
               >
-                {day.day_label}
+                {day.weekday}
+              </span>
+              <span
+                style={{
+                  fontSize: 17,
+                  fontWeight: 800,
+                  letterSpacing: -0.2,
+                  color: day.is_today ? "#fff" : "rgba(255,255,255,.82)",
+                }}
+              >
+                {day.date_label}
               </span>
               {day.is_today && (
                 <span
@@ -268,17 +329,18 @@ export function FixturesPage({ on_open_match }: FixturesPageProps) {
                 style={{
                   flex: 1,
                   height: 1,
-                  background: day.is_today ? "rgba(72,255,67,.25)" : "rgba(255,255,255,.05)",
+                  alignSelf: "center",
+                  background: day.is_today ? "rgba(72,255,67,.25)" : "rgba(255,255,255,.06)",
                 }}
               />
               <span
                 style={{
-                  fontSize: 10,
-                  color: day.is_today ? "rgba(255,255,255,.55)" : "rgba(255,255,255,.25)",
+                  fontSize: 11,
+                  color: day.is_today ? "rgba(255,255,255,.6)" : "rgba(255,255,255,.3)",
                   fontWeight: 600,
                 }}
               >
-                {day.fixtures.length}
+                {day.fixtures.length} {day.fixtures.length > 1 ? "matches" : "match"}
               </span>
             </header>
             <div
@@ -305,6 +367,7 @@ export function FixturesPage({ on_open_match }: FixturesPageProps) {
                     home_name={home.name}
                     away_flag={away.flag}
                     away_name={away.name}
+                    held_players={held_players_for(fx)}
                     clickable
                     on_click={() => void handle_open(fx)}
                   />
@@ -801,6 +864,7 @@ function FixtureCard({
   home_name,
   away_flag,
   away_name,
+  held_players = [],
   clickable,
   on_click,
 }: {
@@ -809,6 +873,9 @@ function FixtureCard({
   home_name: string;
   away_flag: string;
   away_name: string;
+  /** Names of players the user holds whose team plays in this fixture —
+   * drives the discreet "you're exposed" marker. Empty ⇒ no marker. */
+  held_players?: string[];
   clickable: boolean;
   on_click: () => void;
 }) {
@@ -863,6 +930,26 @@ function FixtureCard({
           >
             {chip_label}
           </span>
+          {held_players.length > 0 && (
+            <span
+              title={`In your portfolio: ${held_players.join(", ")}`}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                fontSize: 10,
+                fontWeight: 700,
+                color: "var(--color-positive)",
+                background: "rgba(72,255,67,.10)",
+                border: "1px solid rgba(72,255,67,.28)",
+                padding: "2px 7px",
+                borderRadius: 4,
+              }}
+            >
+              <span style={{ width: 5, height: 5, borderRadius: 3, background: "var(--color-positive)" }} />
+              {held_players.length === 1 ? held_players[0] : `${held_players.length} holdings`}
+            </span>
+          )}
         </div>
         {kickoff_time && (
           <span className="mono" style={{ fontSize: 11, color: "rgba(255,255,255,.35)" }}>{kickoff_time}</span>
