@@ -134,27 +134,42 @@ export function TeamPage({ team, on_open_player, on_open_match, on_back }: TeamP
         ) : squad.length === 0 ? (
           <Muted>No players found for this team.</Muted>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {POSITION_GROUPS.map(grp => {
               const players = squad.filter(p => p.position === grp.key);
               if (players.length === 0) return null;
               const accent = position_color[grp.key];
               return (
-                <div key={grp.key} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  {/* Position section header — a coloured title with a
-                      fading rule so each block is unmistakably its own. */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <span
-                      style={{ width: 10, height: 10, borderRadius: 5, background: accent, flexShrink: 0 }}
-                    />
+                // Each position is its own bordered panel with a tinted
+                // header band — same grouping pattern as the Calendar
+                // day panels and the bracket pools.
+                <section
+                  key={grp.key}
+                  style={{
+                    background: "rgba(255,255,255,.02)",
+                    border: "1px solid rgba(255,255,255,.06)",
+                    borderRadius: 12,
+                    overflow: "hidden",
+                  }}
+                >
+                  <header
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 9,
+                      padding: "10px 14px",
+                      background: `${accent}16`,
+                      borderBottom: `1px solid ${accent}33`,
+                    }}
+                  >
+                    <span style={{ width: 9, height: 9, borderRadius: 5, background: accent, flexShrink: 0 }} />
                     <span
                       style={{
-                        fontSize: 16,
+                        fontSize: 13,
                         fontWeight: 800,
-                        letterSpacing: 1.2,
+                        letterSpacing: 1,
                         textTransform: "uppercase",
-                        color: accent,
-                        whiteSpace: "nowrap",
+                        color: "#fff",
                       }}
                     >
                       {grp.label}
@@ -163,29 +178,21 @@ export function TeamPage({ team, on_open_player, on_open_match, on_back }: TeamP
                       style={{
                         fontSize: 11,
                         fontWeight: 800,
-                        color: "rgba(255,255,255,.55)",
-                        background: "rgba(255,255,255,.06)",
+                        color: "rgba(255,255,255,.6)",
+                        background: "rgba(0,0,0,.25)",
                         borderRadius: 20,
                         padding: "2px 8px",
-                        flexShrink: 0,
                       }}
                     >
                       {players.length}
                     </span>
-                    <span
-                      style={{
-                        flex: 1,
-                        height: 2,
-                        borderRadius: 1,
-                        background: `linear-gradient(90deg, ${accent}66, rgba(255,255,255,.04) 60%, transparent)`,
-                      }}
-                    />
-                  </div>
+                  </header>
                   <div
                     style={{
                       display: "grid",
                       gridTemplateColumns: "repeat(auto-fill, minmax(165px, 1fr))",
                       gap: 10,
+                      padding: 12,
                     }}
                   >
                     {players.map(p => (
@@ -207,7 +214,7 @@ export function TeamPage({ team, on_open_player, on_open_match, on_back }: TeamP
                       />
                     ))}
                   </div>
-                </div>
+                </section>
               );
             })}
           </div>
