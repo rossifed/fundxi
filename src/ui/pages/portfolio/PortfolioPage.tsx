@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { compute_period_return } from "@/domain/market/return";
 import { players_api } from "@/api/players_api";
 import { portfolio_api } from "@/api/portfolio_api";
@@ -7,6 +7,7 @@ import { POSITION_ABBR, POSITION_LABEL } from "@/domain/player/player";
 import type { Player } from "@/domain/player/player";
 import type { HoldingMetrics } from "@/domain/portfolio/portfolio_metrics";
 import type { Trade } from "@/domain/portfolio/trade";
+import { ClosePositionsDialog } from "@/ui/components/ClosePositionsDialog";
 import { PlayerChip } from "@/ui/components/PlayerChip";
 import { PerformanceChart } from "@/ui/components/PerformanceChart";
 import { Donut } from "@/ui/components/Donut";
@@ -75,15 +76,16 @@ function trade_sort_value(t: Trade, key: string): string | number {
 }
 
 // Shared column template for the positions table header + rows so the
-// two grids cannot drift. Every track is ``minmax(0, <n>fr)`` — fully
-// proportional, so the grid is ALWAYS exactly the container width: it
-// never overflows (no horizontal scroll) and never clips. Columns just
-// get tighter on a narrow container; the Player cell ellipsises.
-// 8 columns: Player, Side, Opened, Shares, Avg buy, Price, Value, P&L.
-// (Position is shown as an acronym inside the Player cell, not as a
-// dedicated column — it carries no financial meaning here.)
+// two grids cannot drift. A leading fixed 34px checkbox track, then 8
+// ``minmax(0, <n>fr)`` proportional tracks — the fr tracks absorb the
+// remainder so the grid is ALWAYS exactly the container width: it never
+// overflows (no horizontal scroll) and never clips. Columns just get
+// tighter on a narrow container; the Player cell ellipsises.
+// Checkbox + 8 columns: Player, Side, Opened, Shares, Avg buy, Price,
+// Value, P&L. (Position is shown as an acronym inside the Player cell,
+// not as a dedicated column — it carries no financial meaning here.)
 const POSITIONS_GRID =
-  "minmax(0,2.4fr) minmax(0,0.75fr) minmax(0,0.95fr) minmax(0,0.7fr) " +
+  "34px minmax(0,2.4fr) minmax(0,0.75fr) minmax(0,0.95fr) minmax(0,0.7fr) " +
   "minmax(0,0.95fr) minmax(0,0.95fr) minmax(0,0.95fr) minmax(0,1.15fr)";
 
 // Palette built around the PerformanceChart accent ``var(--color-chart-primary)``. Same
@@ -100,6 +102,23 @@ const CHART_PALETTE = [
   "var(--color-chart-primary)",
   "#15326D",
 ];
+
+/** Style for a Positions bulk-action bar button. ``ghost`` = the
+ * lower-emphasis outline variant (used for the destructive "Close
+ * all"); the filled variant carries the sell accent. */
+function bar_button_style(disabled: boolean, ghost: boolean): CSSProperties {
+  return {
+    padding: "7px 14px",
+    fontSize: 12,
+    fontWeight: 700,
+    borderRadius: 8,
+    fontFamily: "inherit",
+    cursor: disabled ? "not-allowed" : "pointer",
+    background: disabled ? "rgba(255,255,255,.04)" : ghost ? "transparent" : "var(--color-action-sell)",
+    color: disabled ? "rgba(255,255,255,.25)" : ghost ? "rgba(255,255,255,.7)" : "#fff",
+    border: ghost ? "1px solid rgba(255,255,255,.12)" : "1px solid transparent",
+  };
+}
 
 interface PortfolioPageProps {
   on_open_player: (player: Player) => void;
@@ -232,6 +251,34 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
     () => sort_rows([...trades], trade_sort, trade_sort_value),
     [trades, trade_sort],
   );
+
+  // --- Position selection / batch close -----------------------------
+  // ``selected`` holds the player_ids ticked in the Positions table.
+  // ``close_targets`` is the snapshot handed to the close dialog
+  // (null = dialog closed).
+  const [selected, set_selected] = useState<Set<number>>(new Set());
+  const [close_targets, set_close_targets] = useState<HoldingRow[] | null>(null);
+
+  const some_selected = selected.size > 0;
+  const all_selected = holdings.length > 0 && selected.size === holdings.length;
+
+  const toggle_one = (player_id: number) =>
+    set_selected(prev => {
+      const next = new Set(prev);
+      if (next.has(player_id)) next.delete(player_id);
+      else next.add(player_id);
+      return next;
+    });
+  const toggle_all = () =>
+    set_selected(all_selected ? new Set() : new Set(holdings.map(h => h.player_id)));
+  const close_selected = () => set_close_targets(holdings.filter(h => selected.has(h.player_id)));
+  const close_all = () => set_close_targets([...holdings]);
+  // On dismiss, drop ids whose position no longer exists (just closed)
+  // and keep the rest — so cancelling preserves the user's selection.
+  const dismiss_close_dialog = () => {
+    set_close_targets(null);
+    set_selected(prev => new Set([...prev].filter(id => holdings.some(h => h.player_id === id))));
+  };
 
   const team_items = by_team.map((t, i) => ({
     label: `${t.flag} ${t.name}`,
@@ -380,6 +427,35 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
 
         {positions_tab === "positions" ? (
           <>
+            {holdings.length > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "10px 18px",
+                  borderBottom: "1px solid rgba(255,255,255,.05)",
+                  gap: 12,
+                }}
+              >
+                <span style={{ fontSize: 12, color: "rgba(255,255,255,.45)" }}>
+                  {some_selected ? `${selected.size} selected` : "Select positions to close"}
+                </span>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={close_selected}
+                    disabled={!some_selected}
+                    style={bar_button_style(!some_selected, false)}
+                  >
+                    Close selected
+                  </button>
+                  <button type="button" onClick={close_all} style={bar_button_style(false, true)}>
+                    Close all
+                  </button>
+                </div>
+              </div>
+            )}
             <div
               style={{
                 display: "grid",
@@ -394,6 +470,16 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
                 gap: 12,
               }}
             >
+              <input
+                type="checkbox"
+                checked={all_selected}
+                ref={el => {
+                  if (el) el.indeterminate = some_selected && !all_selected;
+                }}
+                onChange={toggle_all}
+                aria-label="Select all positions"
+                style={{ cursor: "pointer", accentColor: "var(--color-positive)", alignSelf: "center" }}
+              />
               {(
                 [
                   { key: "player", label: "Player", align: "left" },
@@ -437,6 +523,18 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
                   onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.025)")}
                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                 >
+                  <span
+                    onClick={e => e.stopPropagation()}
+                    style={{ display: "flex", alignItems: "center" }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected.has(h.player_id)}
+                      onChange={() => toggle_one(h.player_id)}
+                      aria-label={`Select ${h.player.name}`}
+                      style={{ cursor: "pointer", accentColor: "var(--color-positive)" }}
+                    />
+                  </span>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
                     <PlayerAvatar player={h.player} team_color={team?.color ?? "#666"} size={36} />
                     <div style={{ minWidth: 0 }}>
@@ -616,6 +714,9 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
         </aside>
       </div>
 
+      {close_targets && (
+        <ClosePositionsDialog open={true} positions={close_targets} on_close={dismiss_close_dialog} />
+      )}
     </div>
   );
 }
