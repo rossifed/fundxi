@@ -3,7 +3,10 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "workspaces": ["packages/*", "apps/*"],
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
     "dev": "npm run dev --workspace apps/web",
     "build": "npm run build --workspace apps/web",
@@ -12,6 +15,6 @@
     "test": "npm run test --workspaces --if-present"
   },
   "devDependencies": {
-    "typescript": "^5.6.0"
+    "typescript": "~6.0.3"
   }
 }
