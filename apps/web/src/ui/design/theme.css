@@ -1,5 +1,10 @@
 /* Design tokens — CSS custom properties.
  *
+ * Source of truth: ``packages/core/src/design/palette.ts``. The values
+ * below MUST mirror it. When mobile lands its unistyles theme (Phase 1
+ * step 5) we'll wire a parity test / generator; for now keep them in
+ * sync by hand and edit ``palette.ts`` first.
+ *
  * Every visual color the app uses is defined here. Components reference
  * them via ``var(--color-…)`` (either directly in a CSS file, or via
  * ``tokens`` exports in ``tokens.ts`` for React inline styles).
