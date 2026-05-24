@@ -266,10 +266,13 @@ consume `@fundxi/core` like the web app does. See
 
 ## Tooling
 
-Package manager: **bun** (monorepo workspaces, `bun.lockb` committed).
-Root scripts delegate to workspaces:
-- `bun run dev` / `build` / `preview` → `apps/web` (`--filter @fundxi/web`)
-- `bun run tc` / `test` → every workspace (`--filter '*'`)
+Package manager: **npm** with workspaces (`package-lock.json` committed).
+Chosen for robustness — boring, no security approval gates, full Expo /
+React Native compatibility. Node 22 LTS (Vite 6 + Vitest 4 require Node 20+).
+
+Root scripts delegate:
+- `npm run dev` / `build` / `preview` → `apps/web` (via `--workspace`)
+- `npm run tc` / `test` → every workspace (`--workspaces --if-present`)
 
 Type checker: `tsc --noEmit` per workspace. Tests: `vitest` (Node env) in
 `packages/core` — 66 tests including a `fast-check` property suite on
@@ -297,7 +300,7 @@ Done
   pure projector functions, bootstrap Application Service, CLI worker.
   38 unit tests passing, ruff clean, pyright strict clean.
 - Mobile Phase 0 — Monorepo extraction: `packages/core` (DDD layers) +
-  `apps/web` (Vite). Migrated to bun workspaces. Web behaviour byte-identical;
+  `apps/web` (Vite) under npm workspaces. Web behaviour byte-identical;
   tc + 66 vitest tests + production build all green.
 
 In progress

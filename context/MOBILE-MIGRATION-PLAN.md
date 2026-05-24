@@ -187,7 +187,7 @@ Repeatable recipe now that primitives + one page pattern exist.
 
 ## 6. Status
 
-- [ ] Phase 0 — Monorepo extraction
+- [x] Phase 0 — Monorepo extraction (commit 24752c2, bun workspaces)
 - [ ] Phase 1 — Expo scaffold + Home slice
 - [ ] Phase 2 — Shared primitives & charts
 - [ ] Phase 3 — Page port

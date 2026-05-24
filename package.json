@@ -5,11 +5,11 @@
   "type": "module",
   "workspaces": ["packages/*", "apps/*"],
   "scripts": {
-    "dev": "bun run --filter @fundxi/web dev",
-    "build": "bun run --filter @fundxi/web build",
-    "preview": "bun run --filter @fundxi/web preview",
-    "tc": "bun run --filter '*' tc",
-    "test": "bun run --filter '*' test"
+    "dev": "npm run dev --workspace apps/web",
+    "build": "npm run build --workspace apps/web",
+    "preview": "npm run preview --workspace apps/web",
+    "tc": "npm run tc --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
   },
   "devDependencies": {
     "typescript": "^5.6.0"
