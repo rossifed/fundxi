@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
@@ -14,30 +14,52 @@ import type { Fixture } from "@fundxi/core/domain/match/fixture";
 import type { News } from "@fundxi/core/domain/news/news";
 
 import { Spark } from "@/components/Spark";
+import { useMatchesLiveVersion, useStreamStatus } from "@/components/live";
+import { PlayerSheet, type PlayerSheetHandle } from "@/components/PlayerSheet";
 
 const palette = themes.dark;
 
 export default function HomeScreen() {
   const router = useRouter();
+  const sheet_ref = useRef<PlayerSheetHandle>(null);
+  const open_player = (player: PlayerWithValuation) => sheet_ref.current?.open(player);
+
+  // Subscribe to the global "matches" SSE topic. The hook returns a counter
+  // that ticks on every `update` frame; we re-read the synchronous repo
+  // caches whenever it changes (and refresh fixtures from the BFF first).
+  const matches_version = useMatchesLiveVersion();
+  const stream_status = useStreamStatus();
+  const [refresh_tag, set_refresh_tag] = useState(0);
+
+  useEffect(() => {
+    if (matches_version === 0) return; // skip the initial render
+    void matches_api.refresh_fixtures().then(() => set_refresh_tag(t => t + 1));
+  }, [matches_version]);
 
   const upcoming = useMemo(
     () => matches_api.list_fixtures().filter(f => f.status === "upcoming").slice(0, 3),
-    [],
+    [refresh_tag],
   );
-  const top_up = useMemo(() => players_api.top_movers(5, "up"), []);
-  const top_down = useMemo(() => players_api.top_movers(5, "down"), []);
-  const news = useMemo(() => news_api.list().slice(0, 6), []);
+  const top_up = useMemo(() => players_api.top_movers(5, "up"), [refresh_tag]);
+  const top_down = useMemo(() => players_api.top_movers(5, "down"), [refresh_tag]);
+  const news = useMemo(() => news_api.list().slice(0, 6), [refresh_tag]);
 
   return (
-    <ScrollView
-      style={styles.scroll}
-      contentContainerStyle={styles.scroll_content}
-      showsVerticalScrollIndicator={false}
-    >
-      <Hero />
+    <View style={styles.screen}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scroll_content}
+        showsVerticalScrollIndicator={false}
+      >
+        <Hero />
 
       <SectionCard>
-        <SectionHeader title="Match Center" cta="All fixtures →" on_cta={() => router.push("/fixtures")} />
+        <SectionHeader
+          title="Match Center"
+          cta="All fixtures →"
+          on_cta={() => router.push("/fixtures")}
+          live={stream_status}
+        />
         <Text style={styles.section_subtitle}>Up next</Text>
         {upcoming.length === 0 ? (
           <Text style={styles.empty}>No upcoming fixtures scheduled.</Text>
@@ -52,9 +74,9 @@ export default function HomeScreen() {
           cta="Open screener →"
           on_cta={() => router.push("/screener")}
         />
-        <MoversColumn label="Top gainers" players={top_up} />
+        <MoversColumn label="Top gainers" players={top_up} on_open={open_player} />
         <View style={styles.movers_divider} />
-        <MoversColumn label="Top losers" players={top_down} />
+        <MoversColumn label="Top losers" players={top_down} on_open={open_player} />
       </SectionCard>
 
       <SectionCard>
@@ -64,8 +86,11 @@ export default function HomeScreen() {
         ) : (
           news.map((n, i) => <NewsRow key={n.id} item={n} divider={i > 0} />)
         )}
-      </SectionCard>
-    </ScrollView>
+        </SectionCard>
+      </ScrollView>
+
+      <PlayerSheet ref={sheet_ref} />
+    </View>
   );
 }
 
@@ -91,21 +116,38 @@ function SectionHeader({
   cta,
   on_cta,
   meta,
+  live,
 }: {
   title: string;
   cta?: string;
   on_cta?: () => void;
   meta?: string;
+  live?: "online" | "offline" | "unknown";
 }) {
   return (
     <View style={styles.section_header}>
-      <Text style={styles.section_title}>{title}</Text>
+      <View style={styles.section_title_row}>
+        <Text style={styles.section_title}>{title}</Text>
+        {live && <LiveDot status={live} />}
+      </View>
       {cta && on_cta && (
         <Pressable onPress={on_cta}>
           <Text style={styles.cta}>{cta}</Text>
         </Pressable>
       )}
       {meta && <Text style={styles.meta}>{meta}</Text>}
+    </View>
+  );
+}
+
+function LiveDot({ status }: { status: "online" | "offline" | "unknown" }) {
+  const color =
+    status === "online" ? palette.positive : status === "offline" ? palette.negative : "rgba(255,255,255,0.3)";
+  const label = status === "online" ? "live" : status === "offline" ? "offline" : "…";
+  return (
+    <View style={styles.live_dot_row}>
+      <View style={[styles.live_dot, { backgroundColor: color }]} />
+      <Text style={[styles.live_dot_label, { color }]}>{label}</Text>
     </View>
   );
 }
@@ -132,18 +174,34 @@ function FixtureRow({ fixture, divider }: { fixture: Fixture; divider: boolean }
   );
 }
 
-function MoversColumn({ label, players }: { label: string; players: PlayerWithValuation[] }) {
+function MoversColumn({
+  label,
+  players,
+  on_open,
+}: {
+  label: string;
+  players: PlayerWithValuation[];
+  on_open: (player: PlayerWithValuation) => void;
+}) {
   return (
     <View>
       <Text style={styles.section_subtitle}>{label}</Text>
       {players.map((p, i) => (
-        <MoverRow key={p.id} player={p} divider={i > 0} />
+        <MoverRow key={p.id} player={p} divider={i > 0} on_open={on_open} />
       ))}
     </View>
   );
 }
 
-function MoverRow({ player, divider }: { player: PlayerWithValuation; divider: boolean }) {
+function MoverRow({
+  player,
+  divider,
+  on_open,
+}: {
+  player: PlayerWithValuation;
+  divider: boolean;
+  on_open: (player: PlayerWithValuation) => void;
+}) {
   const team = teams_api.get(player.team_id);
   const tournament_return = compute_return_pct(
     player.valuation.current_price,
@@ -151,7 +209,12 @@ function MoverRow({ player, divider }: { player: PlayerWithValuation; divider: b
   );
   const up = tournament_return >= 0;
   return (
-    <View style={[styles.mover_row, divider && styles.row_divider]}>
+    <Pressable
+      style={[styles.mover_row, divider && styles.row_divider]}
+      onPress={() => on_open(player)}
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${player.name}`}
+    >
       {player.image_path ? (
         <Image source={{ uri: player.image_path }} style={styles.mover_avatar} resizeMode="contain" />
       ) : (
@@ -178,7 +241,7 @@ function MoverRow({ player, divider }: { player: PlayerWithValuation; divider: b
           {tournament_return.toFixed(1)}%
         </Text>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -197,6 +260,10 @@ function NewsRow({ item, divider }: { item: News; divider: boolean }) {
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: palette.bg,
+  },
   scroll: {
     flex: 1,
     backgroundColor: palette.bg,
@@ -249,11 +316,32 @@ const styles = StyleSheet.create({
     borderBottomColor: "rgba(255,255,255,0.04)",
     borderBottomWidth: 1,
   },
+  section_title_row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   section_title: {
     color: "#fff",
     fontSize: 13,
     fontWeight: "700",
     letterSpacing: 0.3,
+  },
+  live_dot_row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  live_dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  live_dot_label: {
+    fontSize: 9,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   cta: {
     color: "rgba(255,255,255,0.5)",
