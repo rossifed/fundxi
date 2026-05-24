@@ -242,8 +242,16 @@ the repo.
 
 ## Stack
 
-**Frontend (current)**: Vite 6 + React 19 + TypeScript 5 strict. npm. Path
-alias `@/*` → `src/*`. Dev server on `:5173`.
+Monorepo (bun workspaces, `packages/*` + `apps/*`).
+
+**`@fundxi/core`** (`packages/core/`): `domain/`, `application/`, `api/`,
+`infrastructure/`. Pure TS, no React, no DOM (except `fetch` / `EventSource`
+in two infra adapters). Reused 100% by every app.
+
+**`@fundxi/web`** (`apps/web/`): Vite 6 + React 19 + TypeScript 5 strict. Dev
+server on `:5173`. Path aliases:
+- `@/*` → `apps/web/src/*` (intra-app)
+- `@fundxi/core/*` → `packages/core/src/*` (cross-package)
 
 **Backend (in progress)**: Python 3.12 + FastAPI + PostgreSQL/TimescaleDB
 running in Docker Compose locally. uv + ruff + pyright strict + pytest/anyio.
@@ -252,8 +260,20 @@ provider. Same DDD layering as frontend. Production infra deferred. Auth: TBD.
 See `backend/docs/architecture.md` for the full data-architecture and cost
 decisions.
 
-**Mobile (later)**: React Native + Expo. Will require monorepo refactor:
-extract `domain/`, `application/`, `api/` into a shared `packages/core`.
+**Mobile (in progress)**: React Native + Expo. Will live in `apps/mobile/`,
+consume `@fundxi/core` like the web app does. See
+`context/MOBILE-MIGRATION-PLAN.md`.
+
+## Tooling
+
+Package manager: **bun** (monorepo workspaces, `bun.lockb` committed).
+Root scripts delegate to workspaces:
+- `bun run dev` / `build` / `preview` → `apps/web` (`--filter @fundxi/web`)
+- `bun run tc` / `test` → every workspace (`--filter '*'`)
+
+Type checker: `tsc --noEmit` per workspace. Tests: `vitest` (Node env) in
+`packages/core` — 66 tests including a `fast-check` property suite on
+`trade_calc`.
 
 ## Status
 
@@ -276,12 +296,16 @@ Done
   event archive (idempotent on response_hash), Sportmonks httpx client,
   pure projector functions, bootstrap Application Service, CLI worker.
   38 unit tests passing, ruff clean, pyright strict clean.
+- Mobile Phase 0 — Monorepo extraction: `packages/core` (DDD layers) +
+  `apps/web` (Vite). Migrated to bun workspaces. Web behaviour byte-identical;
+  tc + 66 vitest tests + production build all green.
 
 In progress
 
 - Desktop refonte: sidebar layout, modal player sheet.
 - Backend M2 E2E — blocked on Sportmonks 14-day trial token to validate
   projectors against real payloads.
+- Mobile Phase 1 — `apps/mobile` Expo scaffold + Home vertical slice.
 
 Next
 
