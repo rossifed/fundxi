@@ -23,4 +23,14 @@ config.resolver.nodeModulesPaths = [
 // workspace.
 config.resolver.disableHierarchicalLookup = true;
 
+// @fundxi/core ships TypeScript source from packages/core/src, with no
+// `exports` field and no build step. Without this alias Metro would try
+// `node_modules/@fundxi/core/api/...` (which doesn't exist — the files
+// live under /src/) and fail at runtime. Mirrors the vite alias in
+// apps/web/vite.config.ts and the tsconfig path in apps/mobile.
+config.resolver.alias = {
+  ...(config.resolver.alias ?? {}),
+  "@fundxi/core": path.resolve(workspaceRoot, "packages/core/src"),
+};
+
 module.exports = config;
