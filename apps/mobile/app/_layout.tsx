@@ -4,7 +4,17 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 
+import { set_api_base } from '@fundxi/core/infrastructure/api_client';
+import { set_stream_base } from '@fundxi/core/infrastructure/stream_client';
+
 import { useColorScheme } from '@/components/useColorScheme';
+
+// Expo inlines EXPO_PUBLIC_* at build time. @fundxi/core uses a setter so
+// the platform-specific env read stays out of `core`.
+const api_url = process.env.EXPO_PUBLIC_API_URL;
+if (api_url) set_api_base(api_url);
+const stream_url_env = process.env.EXPO_PUBLIC_STREAM_URL;
+if (stream_url_env) set_stream_base(stream_url_env);
 
 export {
   // Catch any errors thrown by the Layout component.
