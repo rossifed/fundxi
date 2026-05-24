@@ -11,3 +11,7 @@ SESSION.md
 .env.*
 .envrc
 .envrc.*
+
+# Expo runtime caches (device list, dev server settings, etc.)
+.expo/
+apps/*/.expo/
