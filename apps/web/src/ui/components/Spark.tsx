@@ -1,11 +1,12 @@
 import { useId } from "react";
 
+import { compute_spark_geometry } from "@fundxi/core/design/spark";
+
 interface SparkProps {
-  data: number[];
-  // Optional override. When omitted, the color is derived from the data:
+  data: ReadonlyArray<number>;
+  // Optional override. When omitted, the colour is derived from the data:
   // last >= first → up (blue), last < first → down (red). Flat / empty data
-  // (e.g. player who didn't play) defaults to up. This keeps Spark and the
-  // bigger Chart components in lockstep with one another.
+  // (e.g. player who didn't play) defaults to up.
   color?: string;
   width?: number;
   height?: number;
@@ -16,14 +17,8 @@ const DOWN_COLOR = "var(--color-action-sell)";
 
 export function Spark({ data, color, width = 60, height = 20 }: SparkProps) {
   const gradient_id = useId().replace(/:/g, "");
-  const min = Math.min(...data);
-  const max = Math.max(...data);
-  const range = max - min || 1;
-  const points = data
-    .map((v, i) => `${(i / (data.length - 1)) * width},${height - ((v - min) / range) * height}`)
-    .join(" ");
-  const auto_up = data.length < 2 || data[data.length - 1] >= data[0];
-  const stroke = color ?? (auto_up ? UP_COLOR : DOWN_COLOR);
+  const { points, filled_points, is_up } = compute_spark_geometry(data, width, height);
+  const stroke = color ?? (is_up ? UP_COLOR : DOWN_COLOR);
 
   return (
     <svg width={width} height={height} style={{ display: "block" }}>
@@ -34,7 +29,7 @@ export function Spark({ data, color, width = 60, height = 20 }: SparkProps) {
           <stop offset="100%" stopColor={stroke} stopOpacity="0" />
         </linearGradient>
       </defs>
-      <polygon points={`0,${height} ${points} ${width},${height}`} fill={`url(#${gradient_id})`} />
+      <polygon points={filled_points} fill={`url(#${gradient_id})`} />
       <polyline
         points={points}
         fill="none"
