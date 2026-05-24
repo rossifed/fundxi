@@ -1,5 +1,5 @@
 import { useFonts } from 'expo-font';
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -9,7 +9,6 @@ import { set_api_base } from '@fundxi/core/infrastructure/api_client';
 import { set_stream_base } from '@fundxi/core/infrastructure/stream_client';
 
 import { BootstrapGate } from '@/components/BootstrapGate';
-import { useColorScheme } from '@/components/useColorScheme';
 
 // Expo inlines EXPO_PUBLIC_* at build time. @fundxi/core uses a setter so
 // the platform-specific env read stays out of `core`.
@@ -51,22 +50,16 @@ export default function RootLayout() {
     return null;
   }
 
-  return <RootLayoutNav />;
-}
-
-function RootLayoutNav() {
-  const colorScheme = useColorScheme();
-
+  // fundxi is dark-only — no React Navigation ThemeProvider needed; our
+  // screens read colours directly from @fundxi/core/design/palette.
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <BootstrapGate>
-          <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-          </Stack>
-        </BootstrapGate>
-      </ThemeProvider>
+      <BootstrapGate>
+        <Stack>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+        </Stack>
+      </BootstrapGate>
     </GestureHandlerRootView>
   );
 }
