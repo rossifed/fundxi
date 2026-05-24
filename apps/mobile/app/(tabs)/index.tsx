@@ -1,42 +1,13 @@
-import { StyleSheet } from "react-native";
+import { PlaceholderScreen } from "@/components/PlaceholderScreen";
 
-import EditScreenInfo from "@/components/EditScreenInfo";
-import { Text, View } from "@/components/Themed";
-import type { Player, Position } from "@fundxi/core/domain/player/player";
-
-// Smoke check that @fundxi/core resolves from the mobile workspace through
-// both tsc (path alias) and Metro (watchFolders). If this file type-checks
-// and the bundler boots, the monorepo plumbing is correct.
-const sample_position: Position = "FW";
-const sample_player_keys: ReadonlyArray<keyof Player> = ["id", "name"];
-
-export default function TabOneScreen() {
+// Home — featured matches, news, movers, watchlist. Implemented in
+// Phase 1 step 5 (see context/MOBILE-MIGRATION-PLAN.md). Stub for now
+// so the shell can be navigated end-to-end.
+export default function HomeScreen() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Tab One</Text>
-      <Text>
-        @fundxi/core ok — position {sample_position}, keys{" "}
-        {sample_player_keys.join(", ")}
-      </Text>
-      <View style={styles.separator} lightColor="#eee" darkColor="rgba(255,255,255,0.1)" />
-      <EditScreenInfo path="app/(tabs)/index.tsx" />
-    </View>
+    <PlaceholderScreen
+      title="Home"
+      message="Featured matches, news, movers and watchlist will land here in Phase 1 step 5."
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-  separator: {
-    marginVertical: 30,
-    height: 1,
-    width: "80%",
-  },
-});

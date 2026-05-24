@@ -1,70 +1,50 @@
-import { SymbolView } from 'expo-symbols';
-import { Link, Tabs } from 'expo-router';
-import { Platform, Pressable } from 'react-native';
+// Five bottom tabs mirroring the web sidebar (apps/web/src/ui/shell/Sidebar.tsx).
+// Labels + Unicode glyph icons are kept identical so users recognise the same
+// app when switching desktop ↔ mobile (see fundxi/CLAUDE.md "UI direction").
 
-import Colors from '@/constants/Colors';
-import { useColorScheme } from '@/components/useColorScheme';
-import { useClientOnlyValue } from '@/components/useClientOnlyValue';
+import { Tabs } from "expo-router";
+import { Text } from "react-native";
+
+import { themes } from "@fundxi/core/design/palette";
+
+const palette = themes.dark;
+
+const TABS = [
+  { name: "index", title: "Home", icon: "◆" },
+  { name: "screener", title: "Screener", icon: "◎" },
+  { name: "fixtures", title: "Fixtures", icon: "⬡" },
+  { name: "portfolio", title: "Portfolio", icon: "◈" },
+  { name: "leagues", title: "Leagues", icon: "▲" },
+] as const;
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme].tint,
-        // Disable the static render of the header on web
-        // to prevent a hydration error in React Navigation v6.
-        headerShown: useClientOnlyValue(false, true),
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Tab One',
-          tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{
-                ios: 'chevron.left.forwardslash.chevron.right',
-                android: 'code',
-                web: 'code',
-              }}
-              tintColor={color}
-              size={28}
-            />
-          ),
-          headerRight: () => (
-            <Link href="/modal" asChild>
-              <Pressable style={{ marginRight: 15 }}>
-                {({ pressed }) => (
-                  <SymbolView
-                    name={{ ios: 'info.circle', android: 'info', web: 'info' }}
-                    size={25}
-                    tintColor={Colors[colorScheme].text}
-                    style={{ opacity: pressed ? 0.5 : 1 }}
-                  />
-                )}
-              </Pressable>
-            </Link>
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="two"
-        options={{
-          title: 'Tab Two',
-          tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{
-                ios: 'chevron.left.forwardslash.chevron.right',
-                android: 'code',
-                web: 'code',
-              }}
-              tintColor={color}
-              size={28}
-            />
-          ),
-        }}
-      />
+        tabBarActiveTintColor: "#fff",
+        tabBarInactiveTintColor: "rgba(255,255,255,0.5)",
+        tabBarStyle: {
+          backgroundColor: palette.bg,
+          borderTopColor: "rgba(255,255,255,0.04)",
+        },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
+        headerStyle: { backgroundColor: palette.bg },
+        headerTintColor: "#fff",
+        headerTitleStyle: { fontWeight: "800" },
+      }}
+    >
+      {TABS.map(tab => (
+        <Tabs.Screen
+          key={tab.name}
+          name={tab.name}
+          options={{
+            title: tab.title,
+            tabBarIcon: ({ color }) => (
+              <Text style={{ color, fontSize: 18 }}>{tab.icon}</Text>
+            ),
+          }}
+        />
+      ))}
     </Tabs>
   );
 }
