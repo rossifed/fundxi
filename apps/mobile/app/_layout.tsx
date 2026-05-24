@@ -7,6 +7,7 @@ import 'react-native-reanimated';
 import { set_api_base } from '@fundxi/core/infrastructure/api_client';
 import { set_stream_base } from '@fundxi/core/infrastructure/stream_client';
 
+import { BootstrapGate } from '@/components/BootstrapGate';
 import { useColorScheme } from '@/components/useColorScheme';
 
 // Expo inlines EXPO_PUBLIC_* at build time. @fundxi/core uses a setter so
@@ -57,10 +58,12 @@ function RootLayoutNav() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-      </Stack>
+      <BootstrapGate>
+        <Stack>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+        </Stack>
+      </BootstrapGate>
     </ThemeProvider>
   );
 }
