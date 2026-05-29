@@ -1,0 +1,13 @@
+FROM python:3.13-slim
+
+WORKDIR /app
+
+# Copy the backend directory
+COPY backend /app
+
+# Install uv
+RUN pip install uv
+
+# Run migrations
+CMD ["uv", "run", "alembic", "upgrade", "head"]
+
