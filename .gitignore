@@ -15,3 +15,7 @@ SESSION.md
 # Expo runtime caches (device list, dev server settings, etc.)
 .expo/
 apps/*/.expo/
+
+# Expo auto-generates a root tsconfig.json stub (extends expo/tsconfig.base)
+# when the dev server runs from the repo root — not part of the source tree.
+/tsconfig.json

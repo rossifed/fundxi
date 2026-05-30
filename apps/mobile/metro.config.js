@@ -18,10 +18,13 @@ config.resolver.nodeModulesPaths = [
   path.resolve(workspaceRoot, "node_modules"),
 ];
 
-// npm workspaces give a flat node_modules layout — disable the parent-dir
-// walk so Metro doesn't accidentally pick up packages from outside the
-// workspace.
-config.resolver.disableHierarchicalLookup = true;
+// Keep Metro's hierarchical (parent-dir) lookup enabled. npm does NOT always
+// hoist every transitive dependency to the workspace root — e.g. several of
+// `expo`'s own deps (expo-asset, expo-file-system, babel-preset-expo, ...)
+// land nested under node_modules/expo/node_modules. Disabling the walk-up
+// makes those nested packages unresolvable ("Unable to resolve expo-asset").
+// The official Expo monorepo guide leaves hierarchical lookup on.
+config.resolver.disableHierarchicalLookup = false;
 
 // @fundxi/core ships TypeScript source from packages/core/src, with no
 // `exports` field and no build step. Without this alias Metro would try
