@@ -69,6 +69,31 @@ export function useMatchesLiveVersion(): number {
   return useTopicVersion("matches");
 }
 
+/** Every player's price ticks — Screener / Portfolio / Leagues filter
+ * client-side. Mirrors the web "prices" topic. */
+export function usePricesLiveVersion(): number {
+  return useTopicVersion("prices");
+}
+
+/** One player's price ticks — PlayerSheet subscribes to refresh its
+ * valuation + price history. Mirrors the web "player/{id}" topic. Pass
+ * null (e.g. sheet closed) to subscribe to nothing. */
+export function usePlayerLiveVersion(player_id: number | null): number {
+  return useTopicVersion(player_id === null ? null : `player/${player_id}`);
+}
+
+/** Convenience: run `on_update` whenever `version` changes (skips the
+ * initial 0). Mirrors apps/web useLiveRefetch. */
+export function useLiveRefetch(version: number, on_update: () => void): void {
+  useEffect(() => {
+    if (version === 0) return;
+    on_update();
+    // on_update identity is the caller's responsibility; we intentionally
+    // depend only on the version counter (the SSE "something changed" hint).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [version]);
+}
+
 /** Stream connection status shared across every topic — surface in the
  * UI so users see a "live offline" hint rather than silent staleness. */
 export function useStreamStatus(): StreamStatus {
