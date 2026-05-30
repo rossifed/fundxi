@@ -94,6 +94,11 @@ export function useLiveRefetch(version: number, on_update: () => void): void {
   }, [version]);
 }
 
+/** Group-stage standings refreshed — Fixtures Groups view subscribes. */
+export function useStandingsLiveVersion(): number {
+  return useTopicVersion("standings");
+}
+
 /** Stream connection status shared across every topic — surface in the
  * UI so users see a "live offline" hint rather than silent staleness. */
 export function useStreamStatus(): StreamStatus {
