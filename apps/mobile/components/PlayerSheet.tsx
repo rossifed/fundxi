@@ -8,6 +8,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import * as Haptics from "expo-haptics";
 import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetScrollView,
@@ -106,8 +107,10 @@ function PlayerDetail({ player }: { player: Player }) {
       .catch(() => {});
   });
 
-  const gate_trade = () =>
+  const gate_trade = () => {
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     Alert.alert("Trading", "Trading opens once accounts land on mobile (auth in progress).");
+  };
 
   return (
     <View style={styles.detail}>

@@ -8,7 +8,7 @@
 // screen (app/match/[fixture_id]). Team navigation (TeamPage) is a later port.
 
 import { useEffect, useMemo, useState } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import { matches_api } from "@fundxi/core/api/matches_api";
@@ -20,6 +20,7 @@ import { build_bracket, type BracketLayout } from "@fundxi/core/domain/match/bra
 
 import { LiveBadge } from "@/components/LiveBadge";
 import { useLiveRefetch, useMatchesLiveVersion, useStandingsLiveVersion } from "@/components/live";
+import { useRefresh } from "@/components/use_refresh";
 import { palette, text } from "@/theme/tokens";
 
 type StatusFilter = "all" | FixtureStatus;
@@ -103,6 +104,10 @@ export default function FixturesScreen() {
     void matches_api.refresh_fixtures().then(() => set_data_version(v => v + 1));
   });
 
+  const { refreshing, onRefresh } = useRefresh(() =>
+    matches_api.refresh_fixtures().then(() => set_data_version(v => v + 1)),
+  );
+
   const all = useMemo(() => matches_api.list_fixtures(), [data_version]);
   const fixtures = filter === "all" ? all : all.filter(f => f.status === filter);
   const days = useMemo(() => group_by_day(fixtures), [fixtures]);
@@ -157,7 +162,11 @@ export default function FixturesScreen() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
+      >
         {view_mode === "calendar" ? (
           <CalendarView days={days} held_for={held_for} on_open={open_match} />
         ) : view_mode === "bracket" ? (

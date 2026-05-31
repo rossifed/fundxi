@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import { matches_api } from "@fundxi/core/api/matches_api";
@@ -15,6 +15,7 @@ import type { News } from "@fundxi/core/domain/news/news";
 
 import { Spark } from "@/components/Spark";
 import { useMatchesLiveVersion, useStreamStatus } from "@/components/live";
+import { useRefresh } from "@/components/use_refresh";
 import { PlayerSheet, type PlayerSheetHandle } from "@/components/PlayerSheet";
 
 const palette = themes.dark;
@@ -36,6 +37,10 @@ export default function HomeScreen() {
     void matches_api.refresh_fixtures().then(() => set_refresh_tag(t => t + 1));
   }, [matches_version]);
 
+  const { refreshing, onRefresh } = useRefresh(() =>
+    matches_api.refresh_fixtures().then(() => set_refresh_tag(t => t + 1)),
+  );
+
   const upcoming = useMemo(
     () => matches_api.list_fixtures().filter(f => f.status === "upcoming").slice(0, 3),
     [refresh_tag],
@@ -50,6 +55,7 @@ export default function HomeScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.scroll_content}
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
       >
         <Hero />
 

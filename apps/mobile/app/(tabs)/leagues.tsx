@@ -7,7 +7,8 @@
 // clipboard. Single-column layout throughout.
 
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View } from "react-native";
+import { useLocalSearchParams } from "expo-router";
 
 import { leagues_api } from "@fundxi/core/api/leagues_api";
 import { refresh_leagues, subscribe_leagues } from "@fundxi/core/infrastructure/repositories/leagues_repository";
@@ -16,14 +17,16 @@ import type { League } from "@fundxi/core/domain/league/league";
 
 import { Avatar } from "@/components/Avatar";
 import { useLiveRefetch, usePricesLiveVersion } from "@/components/live";
+import { useRefresh } from "@/components/use_refresh";
 import { color_for_sign } from "@/lib/format";
 import { palette, text } from "@/theme/tokens";
 
 type View_ = "board" | "create" | "join";
 
 export default function LeaguesScreen() {
+  const { join } = useLocalSearchParams<{ join?: string }>();
   const [, force] = useState(0);
-  const [view, set_view] = useState<View_>("board");
+  const [view, set_view] = useState<View_>(join ? "join" : "board");
   const [active_id, set_active_id] = useState<string | null>(null);
   const [detail, set_detail] = useState<League | null>(null);
   const [detail_state, set_detail_state] = useState<"idle" | "loading" | "error">("idle");
@@ -39,6 +42,9 @@ export default function LeaguesScreen() {
   useLiveRefetch(usePricesLiveVersion(), () => {
     void refresh_leagues().then(() => set_lb_version(v => v + 1));
   });
+  const { refreshing, onRefresh } = useRefresh(() =>
+    refresh_leagues().then(() => set_lb_version(v => v + 1)),
+  );
 
   const summaries = leagues_api.list_summaries();
   const selected_id = active_id ?? summaries[0]?.id ?? null;
@@ -78,6 +84,7 @@ export default function LeaguesScreen() {
   if (view === "join") {
     return (
       <JoinView
+        initial_code={join ?? ""}
         on_back={() => set_view("board")}
         on_joined={l => {
           set_active_id(l.id);
@@ -104,7 +111,11 @@ export default function LeaguesScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
+      >
         <View style={styles.tabs_row}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
             {summaries.map(l => {
@@ -255,8 +266,8 @@ function CreateView({ on_back, on_created }: { on_back: () => void; on_created: 
   );
 }
 
-function JoinView({ on_back, on_joined }: { on_back: () => void; on_joined: (l: League) => void }) {
-  const [code, set_code] = useState("");
+function JoinView({ initial_code, on_back, on_joined }: { initial_code: string; on_back: () => void; on_joined: (l: League) => void }) {
+  const [code, set_code] = useState(initial_code.toUpperCase());
   const [busy, set_busy] = useState(false);
   const [error, set_error] = useState<string | null>(null);
 

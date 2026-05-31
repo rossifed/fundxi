@@ -12,6 +12,7 @@ import {
   FlatList,
   Image,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -37,6 +38,7 @@ import { PositionBadge } from "@/components/PositionBadge";
 import { TickValue } from "@/components/TickValue";
 import { PlayerSheet, type PlayerSheetHandle } from "@/components/PlayerSheet";
 import { useLiveRefetch, usePricesLiveVersion } from "@/components/live";
+import { useRefresh } from "@/components/use_refresh";
 import { color_for_sign, fmt_signed_pct, price_label } from "@/lib/format";
 import { toggle_set } from "@/lib/state";
 import { palette, position_color, surface, text } from "@/theme/tokens";
@@ -107,6 +109,9 @@ export default function ScreenerScreen() {
   useLiveRefetch(usePricesLiveVersion(), () => {
     void refresh_screener_repository().then(() => set_data_version(v => v + 1));
   });
+  const { refreshing, onRefresh } = useRefresh(() =>
+    refresh_screener_repository().then(() => set_data_version(v => v + 1)),
+  );
 
   const all_entries = useMemo(() => screener_repository.find_all(), [data_version]);
   const sorted_team_ids = useMemo(() => {
@@ -319,6 +324,7 @@ export default function ScreenerScreen() {
         showsVerticalScrollIndicator={false}
         windowSize={10}
         initialNumToRender={14}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
         renderItem={({ item }) => (
           <ScreenerRow
             entry={item}

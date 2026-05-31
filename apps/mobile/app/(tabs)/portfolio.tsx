@@ -8,7 +8,7 @@
 // gated until mobile auth lands); positions still open the player sheet.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { players_api } from "@fundxi/core/api/players_api";
 import { portfolio_api } from "@fundxi/core/api/portfolio_api";
@@ -24,6 +24,7 @@ import { PlayerChip } from "@/components/PlayerChip";
 import { TickValue } from "@/components/TickValue";
 import { PlayerSheet, type PlayerSheetHandle } from "@/components/PlayerSheet";
 import { useLiveRefetch, usePricesLiveVersion } from "@/components/live";
+import { useRefresh } from "@/components/use_refresh";
 import { color_for_sign, fmt_eur_m, fmt_eur_m_signed, fmt_shares, fmt_signed_pct } from "@/lib/format";
 import { palette, position_color, text } from "@/theme/tokens";
 
@@ -50,6 +51,9 @@ export default function PortfolioScreen() {
   useLiveRefetch(usePricesLiveVersion(), () => {
     void valuations_api.refresh().then(() => set_data_version(v => v + 1));
   });
+  const { refreshing, onRefresh } = useRefresh(() =>
+    Promise.all([portfolio_api.refresh(), valuations_api.refresh()]).then(() => set_data_version(v => v + 1)),
+  );
 
   const holdings = useMemo(() => portfolio_api.get_holdings(), [data_version]);
   const trades = useMemo(() => portfolio_api.list_trades(), [data_version]);
@@ -125,7 +129,11 @@ export default function PortfolioScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
+      >
         {/* KPI grid */}
         <View style={styles.kpi_grid}>
           <Kpi label="Total Value" value={fmt_eur_m(total_value)} />

@@ -7,6 +7,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
 import { comments_api } from "@fundxi/core/api/comments_api";
@@ -76,6 +77,7 @@ function group_by_position(xi: MatchPlayer[]): Record<Position, MatchPlayer[]> {
 
 export default function MatchScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ fixture_id: string }>();
   const fixture_id = Number(params.fixture_id);
 
@@ -121,7 +123,7 @@ export default function MatchScreen() {
   return (
     <View style={styles.screen}>
       <Stack.Screen options={{ headerShown: false }} />
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 12 }]} showsVerticalScrollIndicator={false}>
         <Pressable style={styles.back} onPress={() => router.back()} hitSlop={8}>
           <Text style={styles.back_label}>← Back</Text>
         </Pressable>

@@ -1,14 +1,17 @@
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 
 import { set_api_base } from '@fundxi/core/infrastructure/api_client';
 import { set_stream_base } from '@fundxi/core/infrastructure/stream_client';
 
 import { BootstrapGate } from '@/components/BootstrapGate';
+import { OfflineBanner } from '@/components/OfflineBanner';
 
 // Expo inlines EXPO_PUBLIC_* at build time. @fundxi/core uses a setter so
 // the platform-specific env read stays out of `core`.
@@ -53,13 +56,17 @@ export default function RootLayout() {
   // fundxi is dark-only — no React Navigation ThemeProvider needed; our
   // screens read colours directly from @fundxi/core/design/palette.
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <BootstrapGate>
-        <Stack>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-        </Stack>
-      </BootstrapGate>
-    </GestureHandlerRootView>
+    <SafeAreaProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <StatusBar style="light" />
+        <BootstrapGate>
+          <Stack>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+          </Stack>
+          <OfflineBanner />
+        </BootstrapGate>
+      </GestureHandlerRootView>
+    </SafeAreaProvider>
   );
 }
