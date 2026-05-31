@@ -187,9 +187,14 @@ Repeatable recipe now that primitives + one page pattern exist.
 
 ## 6. Status
 
-- [x] Phase 0 — Monorepo extraction (commit 24752c2, bun workspaces)
-- [ ] Phase 1 — Expo scaffold + Home slice
-- [ ] Phase 2 — Shared primitives & charts
-- [ ] Phase 3 — Page port
-- [ ] Phase 4 — Live + native polish
-- [ ] Phase 5 — Distribution
+- [x] Phase 0 — Monorepo extraction (commit 24752c2)
+- [x] Phase 1 — Expo scaffold + Home slice (SDK 54; validated on a physical iPhone)
+- [x] Phase 2 — Shared primitives & charts (StyleSheet + palette; react-native-svg)
+- [x] Phase 3 — Page port (all 5 tabs + PlayerSheet + MatchView)
+- [x] Phase 4 — Live + native polish (SSE topics, safe-area, status bar, pull-to-refresh, haptics, fundxi:// deep link, offline banner)
+- [~] Phase 5 — Distribution: config ready (eas.json, bundle ids, app.json). Build/submit pending user accounts — see apps/mobile/DISTRIBUTION.md.
+
+Deferred (separate workstreams):
+- Mobile auth (bearer token + expo-secure-store) — gates trading + real leagues. Design: context/MOBILE-AUTH-PLAN.md.
+- TeamPage overlay; tactical PitchView + sub-reshaping in MatchView; player-tap from MatchView roster; Profile screen.
+- Branded app icon/splash (currently Expo template assets).
