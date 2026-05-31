@@ -4,11 +4,12 @@
 // status filter, live refresh and portfolio-exposure marker. The web bracket
 // is a 7-column mirrored desktop layout; on mobile the knockouts stack as
 // vertical round sections (R16 → QF → SF → Final → 3rd), which is the natural
-// single-column adaptation. Match/team navigation is display-only here —
-// MatchView and TeamPage are separate later ports.
+// single-column adaptation. Tapping a fixture opens the MatchView detail
+// screen (app/match/[fixture_id]). Team navigation (TeamPage) is a later port.
 
 import { useEffect, useMemo, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 
 import { matches_api } from "@fundxi/core/api/matches_api";
 import { portfolio_api } from "@fundxi/core/api/portfolio_api";
@@ -92,6 +93,8 @@ function phase_chip(fx: Fixture): string {
 }
 
 export default function FixturesScreen() {
+  const router = useRouter();
+  const open_match = (id: number) => router.push(`/match/${id}`);
   const [filter, set_filter] = useState<StatusFilter>("all");
   const [view_mode, set_view_mode] = useState<ViewMode>("calendar");
 
@@ -156,9 +159,9 @@ export default function FixturesScreen() {
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {view_mode === "calendar" ? (
-          <CalendarView days={days} held_for={held_for} />
+          <CalendarView days={days} held_for={held_for} on_open={open_match} />
         ) : view_mode === "bracket" ? (
-          <BracketView fixtures={all} />
+          <BracketView fixtures={all} on_open={open_match} />
         ) : (
           <GroupsView />
         )}
@@ -168,7 +171,7 @@ export default function FixturesScreen() {
 }
 
 // ── Calendar ──────────────────────────────────────────────────────────
-function CalendarView({ days, held_for }: { days: DayGroup[]; held_for: (fx: Fixture) => string[] }) {
+function CalendarView({ days, held_for, on_open }: { days: DayGroup[]; held_for: (fx: Fixture) => string[]; on_open: (id: number) => void }) {
   if (days.length === 0) return <Text style={styles.empty}>No fixtures for this filter.</Text>;
   return (
     <View style={{ gap: 16 }}>
@@ -189,7 +192,7 @@ function CalendarView({ days, held_for }: { days: DayGroup[]; held_for: (fx: Fix
           </View>
           <View style={styles.day_body}>
             {day.fixtures.map(fx => (
-              <FixtureCard key={fx.id} fixture={fx} held_players={held_for(fx)} />
+              <FixtureCard key={fx.id} fixture={fx} held_players={held_for(fx)} on_open={on_open} />
             ))}
           </View>
         </View>
@@ -198,7 +201,7 @@ function CalendarView({ days, held_for }: { days: DayGroup[]; held_for: (fx: Fix
   );
 }
 
-function FixtureCard({ fixture, held_players }: { fixture: Fixture; held_players: string[] }) {
+function FixtureCard({ fixture, held_players, on_open }: { fixture: Fixture; held_players: string[]; on_open: (id: number) => void }) {
   const home = teams_api.get(fixture.home_team_id);
   const away = teams_api.get(fixture.away_team_id);
   if (!home || !away) return null;
@@ -207,7 +210,7 @@ function FixtureCard({ fixture, held_players }: { fixture: Fixture; held_players
   const time = format_kickoff_time(fixture.date);
 
   return (
-    <View style={[styles.fx_card, is_live && styles.fx_card_live]}>
+    <Pressable style={[styles.fx_card, is_live && styles.fx_card_live]} onPress={() => on_open(fixture.id)} accessibilityRole="button">
       <View style={styles.fx_top}>
         <View style={styles.fx_top_left}>
           {is_live ? <LiveBadge /> : is_finished ? <View style={styles.ft}><Text style={styles.ft_label}>FT</Text></View> : <Text style={styles.upcoming}>Upcoming</Text>}
@@ -247,12 +250,12 @@ function FixtureCard({ fixture, held_players }: { fixture: Fixture; held_players
           {fixture.note}
         </Text>
       )}
-    </View>
+    </Pressable>
   );
 }
 
 // ── Bracket (vertical rounds) ───────────────────────────────────────────
-function BracketView({ fixtures }: { fixtures: Fixture[] }) {
+function BracketView({ fixtures, on_open }: { fixtures: Fixture[]; on_open: (id: number) => void }) {
   const by_group = new Map<string, Fixture[]>();
   for (const fx of fixtures) {
     if (fx.stage_name === "Group Stage" && fx.group) {
@@ -286,7 +289,7 @@ function BracketView({ fixtures }: { fixtures: Fixture[] }) {
                 </View>
                 <View style={{ gap: 4 }}>
                   {(by_group.get(letter) ?? []).map(fx => (
-                    <CompactCell key={fx.id} fixture={fx} />
+                    <CompactCell key={fx.id} fixture={fx} on_open={on_open} />
                   ))}
                 </View>
               </View>
@@ -308,7 +311,7 @@ function BracketView({ fixtures }: { fixtures: Fixture[] }) {
               <View style={styles.ko_grid}>
                 {present.map(fx => (
                   <View key={fx.id} style={styles.ko_cell}>
-                    <CompactCell fixture={fx} />
+                    <CompactCell fixture={fx} on_open={on_open} />
                   </View>
                 ))}
               </View>
@@ -320,7 +323,7 @@ function BracketView({ fixtures }: { fixtures: Fixture[] }) {
   );
 }
 
-function CompactCell({ fixture }: { fixture: Fixture }) {
+function CompactCell({ fixture, on_open }: { fixture: Fixture; on_open: (id: number) => void }) {
   const home = teams_api.get(fixture.home_team_id);
   const away = teams_api.get(fixture.away_team_id);
   const is_live = fixture.status === "live";
@@ -329,11 +332,11 @@ function CompactCell({ fixture }: { fixture: Fixture }) {
   const time = format_kickoff_time(fixture.date);
 
   return (
-    <View style={[styles.cc, is_today && styles.cc_today, is_live && styles.cc_live]}>
+    <Pressable style={[styles.cc, is_today && styles.cc_today, is_live && styles.cc_live]} onPress={() => on_open(fixture.id)}>
       <CellTeamRow flag={home?.flag} code={fixture.home_team_id} score={fixture.home_score} played={played} />
       <CellTeamRow flag={away?.flag} code={fixture.away_team_id} score={fixture.away_score} played={played} />
       {!played && <Text style={[styles.cc_time, is_today && styles.cc_time_today]}>{time || "·"}</Text>}
-    </View>
+    </Pressable>
   );
 }
 

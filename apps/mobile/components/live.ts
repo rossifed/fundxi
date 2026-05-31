@@ -99,6 +99,12 @@ export function useStandingsLiveVersion(): number {
   return useTopicVersion("standings");
 }
 
+/** One fixture's events/comments/status/lineup — MatchView subscribes.
+ * Mirrors the web "fixture/{id}" topic. Pass null to subscribe to nothing. */
+export function useFixtureLiveVersion(fixture_id: number | null | undefined): number {
+  return useTopicVersion(fixture_id == null ? null : `fixture/${fixture_id}`);
+}
+
 /** Stream connection status shared across every topic — surface in the
  * UI so users see a "live offline" hint rather than silent staleness. */
 export function useStreamStatus(): StreamStatus {
