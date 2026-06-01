@@ -26,7 +26,7 @@ import { PlayerSheet, type PlayerSheetHandle } from "@/components/PlayerSheet";
 import { useLiveRefetch, usePricesLiveVersion } from "@/components/live";
 import { useRefresh } from "@/components/use_refresh";
 import { color_for_sign, fmt_eur_m, fmt_eur_m_signed, fmt_shares, fmt_signed_pct } from "@/lib/format";
-import { palette, position_color, text } from "@/theme/tokens";
+import { mono, palette, position_color, text } from "@/theme/tokens";
 
 type PositionsTab = "positions" | "trades";
 
@@ -44,15 +44,20 @@ export default function PortfolioScreen() {
   const [positions_tab, set_positions_tab] = useState<PositionsTab>("positions");
   const [data_version, set_data_version] = useState(0);
 
+  // /api/portfolio is auth-gated and mobile has no auth yet (401) — swallow
+  // the failure so it doesn't surface as an unhandled rejection; the screen
+  // then just shows an empty portfolio until auth lands.
   useEffect(() => portfolio_api.subscribe(() => set_data_version(v => v + 1)), []);
   useEffect(() => {
-    void portfolio_api.refresh().then(() => set_data_version(v => v + 1));
+    void portfolio_api.refresh().then(() => set_data_version(v => v + 1)).catch(() => {});
   }, []);
   useLiveRefetch(usePricesLiveVersion(), () => {
-    void valuations_api.refresh().then(() => set_data_version(v => v + 1));
+    void valuations_api.refresh().then(() => set_data_version(v => v + 1)).catch(() => {});
   });
   const { refreshing, onRefresh } = useRefresh(() =>
-    Promise.all([portfolio_api.refresh(), valuations_api.refresh()]).then(() => set_data_version(v => v + 1)),
+    Promise.all([portfolio_api.refresh(), valuations_api.refresh()])
+      .then(() => set_data_version(v => v + 1))
+      .catch(() => {}),
   );
 
   const holdings = useMemo(() => portfolio_api.get_holdings(), [data_version]);
@@ -63,10 +68,13 @@ export default function PortfolioScreen() {
   const [perf, set_perf] = useState<PerfPoint[]>([]);
   useEffect(() => {
     let cancelled = false;
-    void portfolio_api.fetch_history("all").then(dto => {
-      if (cancelled) return;
-      set_perf(dto.points.map(p => ({ v: p.value, pnl: p.pnl_vs_open })));
-    });
+    void portfolio_api
+      .fetch_history("all")
+      .then(dto => {
+        if (cancelled) return;
+        set_perf(dto.points.map(p => ({ v: p.value, pnl: p.pnl_vs_open })));
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -154,7 +162,7 @@ export default function PortfolioScreen() {
             </View>
             <Text style={[styles.value_pct, { color: color_for_sign(period_return) }]}>{fmt_signed_pct(period_return, 1)}</Text>
           </View>
-          {perf.length > 0 ? <PerformanceChart data={perf} height={200} /> : <Text style={styles.chart_empty}>No history yet</Text>}
+          {perf.length > 0 ? <PerformanceChart data={perf} height={200} format_value={p => fmt_eur_m(p.v)} /> : <Text style={styles.chart_empty}>No history yet</Text>}
         </View>
 
         {/* Positions / Trades */}
@@ -431,9 +439,8 @@ function Cell({ label, value, color }: { label: string; value: string; color?: s
   );
 }
 
-const mono = "SpaceMono";
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: palette.bg },
+  screen: { flex: 1 },
   scroll: { padding: 16, gap: 16 },
 
   kpi_grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },

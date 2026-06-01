@@ -19,12 +19,13 @@ import { valuations_api } from "@fundxi/core/api/valuations_api";
 import type { Match, MatchEvent, MatchPlayer } from "@fundxi/core/domain/match/match";
 import type { MatchComment } from "@fundxi/core/domain/match/match_comment";
 import type { TeamMatchStats } from "@fundxi/core/domain/match/team_match_stats";
-import type { Position } from "@fundxi/core/domain/player/player";
+import type { Player, Position } from "@fundxi/core/domain/player/player";
 
+import { PlayerSheet, type PlayerSheetHandle } from "@/components/PlayerSheet";
 import { TickValue } from "@/components/TickValue";
 import { useFixtureLiveVersion, useLiveRefetch, usePricesLiveVersion } from "@/components/live";
 import { color_for_sign, fmt_signed_pct } from "@/lib/format";
-import { palette, text } from "@/theme/tokens";
+import { mono, palette, text } from "@/theme/tokens";
 
 const GOAL_GLYPHS = new Set(["⚽", "🎯"]);
 const POSITION_GROUPS: { key: Position; label: string }[] = [
@@ -80,6 +81,7 @@ export default function MatchScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ fixture_id: string }>();
   const fixture_id = Number(params.fixture_id);
+  const sheet_ref = useRef<PlayerSheetHandle>(null);
 
   const [match, set_match] = useState<Match | null>(null);
   const [comments, set_comments] = useState<MatchComment[] | null>(null);
@@ -130,9 +132,10 @@ export default function MatchScreen() {
         {match === null ? (
           <Text style={styles.loading}>Loading match…</Text>
         ) : (
-          <MatchBody match={match} comments={comments} stats={stats} />
+          <MatchBody match={match} comments={comments} stats={stats} on_open={p => sheet_ref.current?.open(p)} />
         )}
       </ScrollView>
+      <PlayerSheet ref={sheet_ref} />
     </View>
   );
 }
@@ -141,10 +144,12 @@ function MatchBody({
   match,
   comments,
   stats,
+  on_open,
 }: {
   match: Match;
   comments: MatchComment[] | null;
   stats: TeamMatchStats | null;
+  on_open: (player: Player) => void;
 }) {
   const home = teams_api.get(match.home_team_id);
   const away = teams_api.get(match.away_team_id);
@@ -213,8 +218,8 @@ function MatchBody({
               <View key={g.key}>
                 <Divider label={g.label} />
                 <View style={styles.two_col}>
-                  <View style={styles.col}>{h.map(p => <RosterCard key={p.id} p={p} color={home_color} counts={counts.get(p.id)} />)}</View>
-                  <View style={styles.col}>{a.map(p => <RosterCard key={p.id} p={p} color={away_color} counts={counts.get(p.id)} />)}</View>
+                  <View style={styles.col}>{h.map(p => <RosterCard key={p.id} p={p} color={home_color} counts={counts.get(p.id)} on_open={on_open} />)}</View>
+                  <View style={styles.col}>{a.map(p => <RosterCard key={p.id} p={p} color={away_color} counts={counts.get(p.id)} on_open={on_open} />)}</View>
                 </View>
               </View>
             );
@@ -223,8 +228,8 @@ function MatchBody({
             <>
               <Divider label="Substitutes" />
               <View style={styles.two_col}>
-                <View style={styles.col}>{home_bench.map(p => <RosterCard key={p.id} p={p} color={home_color} counts={counts.get(p.id)} sub />)}</View>
-                <View style={styles.col}>{away_bench.map(p => <RosterCard key={p.id} p={p} color={away_color} counts={counts.get(p.id)} sub />)}</View>
+                <View style={styles.col}>{home_bench.map(p => <RosterCard key={p.id} p={p} color={home_color} counts={counts.get(p.id)} on_open={on_open} sub />)}</View>
+                <View style={styles.col}>{away_bench.map(p => <RosterCard key={p.id} p={p} color={away_color} counts={counts.get(p.id)} on_open={on_open} sub />)}</View>
               </View>
             </>
           )}
@@ -258,19 +263,27 @@ function RosterCard({
   p,
   color,
   counts,
+  on_open,
   sub,
 }: {
   p: MatchPlayer;
   color?: string;
   counts?: EventCounts;
+  on_open: (player: Player) => void;
   sub?: boolean;
 }) {
   const ref_player = players_api.get(p.id);
   const live_price = valuations_api.get_for_player(p.id)?.current_price ?? p.value;
   const match_change = p.change_last_match ?? 0;
   const photo = ref_player?.image_path;
+  // Tap opens the player sheet — only for players in our tradable universe
+  // (others have no reference Player, so there is nothing to show).
   return (
-    <View style={[styles.rc, color ? { borderLeftColor: color, borderLeftWidth: 3 } : null, sub && styles.rc_sub]}>
+    <Pressable
+      onPress={ref_player ? () => on_open(ref_player) : undefined}
+      disabled={!ref_player}
+      style={[styles.rc, color ? { borderLeftColor: color, borderLeftWidth: 3 } : null, sub && styles.rc_sub]}
+    >
       <View style={styles.rc_avatar_wrap}>
         {photo ? (
           <Image source={{ uri: photo }} style={styles.rc_avatar} resizeMode="cover" />
@@ -296,7 +309,7 @@ function RosterCard({
           <Text style={[styles.rc_delta, { color: color_for_sign(match_change) }]}>{fmt_signed_pct(match_change, 1)}</Text>
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -384,9 +397,8 @@ function Divider({ label }: { label: string }) {
   );
 }
 
-const mono = "SpaceMono";
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: palette.bg },
+  screen: { flex: 1 },
   scroll: { padding: 16, paddingTop: 12, gap: 16 },
   back: { alignSelf: "flex-start", backgroundColor: "rgba(255,255,255,0.04)", borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8 },
   back_label: { color: text.secondary, fontSize: 12, fontWeight: "600" },

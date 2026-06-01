@@ -28,8 +28,12 @@ export const surface = {
 export const border = "rgba(255,255,255,0.05)";
 export const borderSoft = "rgba(255,255,255,0.04)";
 
-// Monospace face — loaded as "SpaceMono" in app/_layout.tsx (useFonts).
-export const mono = "SpaceMono";
+// Type faces — embedded natively via the expo-font config plugin (app.json),
+// matching the web (Inter body + JetBrains Mono numerals). Weights are real
+// font files registered under one family each, so `fontWeight` selects the
+// right cut. `sans` is also wired as the global Text default in _layout.tsx.
+export const sans = "Inter";
+export const mono = "JetBrains Mono";
 
 // Position UI tokens (presentation only — domain stays in core player.ts).
 export const position_color: Record<Position, string> = {

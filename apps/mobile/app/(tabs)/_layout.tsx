@@ -3,11 +3,44 @@
 // app when switching desktop ↔ mobile (see fundxi/CLAUDE.md "UI direction").
 
 import { Tabs } from "expo-router";
-import { Text } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themes } from "@fundxi/core/design/palette";
 
+import { PortfolioBar } from "@/components/PortfolioBar";
+
 const palette = themes.dark;
+
+// Custom header: screen title row + the always-on PortfolioBar underneath,
+// mirroring the web shell (Header + sticky PortfolioBar). We own the top
+// safe-area inset since we replace the native header.
+function TabHeader({ title }: { title: string }) {
+  const insets = useSafeAreaInsets();
+  // Transparent so the root ambient gradient (brightest top-right) shows
+  // behind the title + portfolio bar — the premium glow the web has.
+  return (
+    <View style={{ paddingTop: insets.top }}>
+      <View style={header_styles.title_row}>
+        <Text style={header_styles.title}>{title}</Text>
+        <Text style={header_styles.brand}>WC 2026</Text>
+      </View>
+      <PortfolioBar />
+    </View>
+  );
+}
+
+const header_styles = StyleSheet.create({
+  title_row: {
+    height: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+  },
+  title: { color: "#fff", fontSize: 20, fontWeight: "800" },
+  brand: { color: "rgba(255,255,255,0.35)", fontSize: 10, fontWeight: "700", letterSpacing: 0.5 },
+});
 
 const TABS = [
   { name: "index", title: "Home", icon: "◆" },
@@ -28,9 +61,7 @@ export default function TabLayout() {
           borderTopColor: "rgba(255,255,255,0.04)",
         },
         tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
-        headerStyle: { backgroundColor: palette.bg },
-        headerTintColor: "#fff",
-        headerTitleStyle: { fontWeight: "800" },
+        header: ({ options }) => <TabHeader title={options.title ?? ""} />,
       }}
     >
       {TABS.map(tab => (

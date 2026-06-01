@@ -38,7 +38,35 @@
           "backgroundColor": "#020406"
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-font",
+        {
+          "fonts": [
+            {
+              "fontFamily": "Inter",
+              "fontDefinitions": [
+                { "path": "./assets/fonts/Inter-Regular.ttf", "weight": 400 },
+                { "path": "./assets/fonts/Inter-Medium.ttf", "weight": 500 },
+                { "path": "./assets/fonts/Inter-SemiBold.ttf", "weight": 600 },
+                { "path": "./assets/fonts/Inter-Bold.ttf", "weight": 700 },
+                { "path": "./assets/fonts/Inter-ExtraBold.ttf", "weight": 800 },
+                { "path": "./assets/fonts/Inter-Black.ttf", "weight": 900 }
+              ]
+            },
+            {
+              "fontFamily": "JetBrains Mono",
+              "fontDefinitions": [
+                { "path": "./assets/fonts/JetBrainsMono-Regular.ttf", "weight": 400 },
+                { "path": "./assets/fonts/JetBrainsMono-Medium.ttf", "weight": 500 },
+                { "path": "./assets/fonts/JetBrainsMono-SemiBold.ttf", "weight": 600 },
+                { "path": "./assets/fonts/JetBrainsMono-Bold.ttf", "weight": 700 },
+                { "path": "./assets/fonts/JetBrainsMono-ExtraBold.ttf", "weight": 800 }
+              ]
+            }
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

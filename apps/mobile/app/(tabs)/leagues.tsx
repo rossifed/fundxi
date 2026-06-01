@@ -19,7 +19,7 @@ import { Avatar } from "@/components/Avatar";
 import { useLiveRefetch, usePricesLiveVersion } from "@/components/live";
 import { useRefresh } from "@/components/use_refresh";
 import { color_for_sign } from "@/lib/format";
-import { palette, text } from "@/theme/tokens";
+import { mono, palette, text } from "@/theme/tokens";
 
 type View_ = "board" | "create" | "join";
 
@@ -364,9 +364,8 @@ function ErrorBanner({ message }: { message: string }) {
   );
 }
 
-const mono = "SpaceMono";
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: palette.bg },
+  screen: { flex: 1 },
   scroll: { padding: 16, gap: 16 },
 
   tabs_row: { flexDirection: "row" },

@@ -21,7 +21,7 @@ import { build_bracket, type BracketLayout } from "@fundxi/core/domain/match/bra
 import { LiveBadge } from "@/components/LiveBadge";
 import { useLiveRefetch, useMatchesLiveVersion, useStandingsLiveVersion } from "@/components/live";
 import { useRefresh } from "@/components/use_refresh";
-import { palette, text } from "@/theme/tokens";
+import { mono, palette, text } from "@/theme/tokens";
 
 type StatusFilter = "all" | FixtureStatus;
 type ViewMode = "calendar" | "bracket" | "groups";
@@ -361,6 +361,7 @@ function CellTeamRow({ flag, code, score, played }: { flag?: string; code: strin
 
 // ── Groups (standings tables) ──────────────────────────────────────────
 function GroupsView() {
+  const router = useRouter();
   const standings_version = useStandingsLiveVersion();
   const [groups, set_groups] = useState<GroupStanding[] | null>(null);
 
@@ -397,7 +398,7 @@ function GroupsView() {
           {g.rows.map(r => {
             const q = r.position <= 2;
             return (
-              <View key={r.team_id} style={[styles.std_row, q && styles.std_row_q]}>
+              <Pressable key={r.team_id} style={[styles.std_row, q && styles.std_row_q]} onPress={() => router.push(`/team/${r.team_id}`)}>
                 <Text style={[styles.std_pos, { color: q ? palette.positive : text.tertiary }]}>{r.position}</Text>
                 <View style={styles.std_team_cell}>
                   {r.flag ? <Image source={{ uri: r.flag }} style={styles.std_flag} resizeMode="contain" /> : <View style={styles.std_flag} />}
@@ -409,7 +410,7 @@ function GroupsView() {
                 <Text style={[styles.std_num, styles.std_dim]}>{r.lost}</Text>
                 <Text style={styles.std_gd}>{r.goal_difference > 0 ? "+" : ""}{r.goal_difference}</Text>
                 <Text style={styles.std_pts}>{r.points}</Text>
-              </View>
+              </Pressable>
             );
           })}
         </View>
@@ -428,9 +429,8 @@ function Divider({ label }: { label: string }) {
   );
 }
 
-const mono = "SpaceMono";
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: palette.bg },
+  screen: { flex: 1 },
   toolbar: { paddingHorizontal: 16, paddingTop: 12, gap: 10 },
   status_tabs: { flexDirection: "row", gap: 6, paddingRight: 8 },
   status_tab: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", backgroundColor: "rgba(255,255,255,0.02)" },

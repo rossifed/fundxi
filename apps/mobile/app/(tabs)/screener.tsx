@@ -41,7 +41,8 @@ import { useLiveRefetch, usePricesLiveVersion } from "@/components/live";
 import { useRefresh } from "@/components/use_refresh";
 import { color_for_sign, fmt_signed_pct, price_label } from "@/lib/format";
 import { toggle_set } from "@/lib/state";
-import { palette, position_color, surface, text } from "@/theme/tokens";
+import { useWatchlist, watchlist } from "@/lib/watchlist";
+import { mono, palette, position_color, surface, text } from "@/theme/tokens";
 
 type Tab = "valuation" | "statistics" | "personal";
 type SortDir = "asc" | "desc";
@@ -103,7 +104,9 @@ export default function ScreenerScreen() {
   const [tab, set_tab] = useState<Tab>("valuation");
   const [sort_key, set_sort_key] = useState<SortKey>("value");
   const [sort_dir, set_sort_dir] = useState<SortDir>("desc");
-  const [watchlist, set_watchlist] = useState<Set<number>>(new Set());
+  // Shared session store so the watchlist survives tab navigation and is
+  // readable from Home (the RN parity for the web RightRail watchlist).
+  const watched_ids = useWatchlist();
 
   const [data_version, set_data_version] = useState(0);
   useLiveRefetch(usePricesLiveVersion(), () => {
@@ -162,14 +165,6 @@ export default function ScreenerScreen() {
     const p = players_api.get(id);
     if (p) sheet_ref.current?.open(p);
   };
-  const toggle_watch = (id: number) =>
-    set_watchlist(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-
   // Sort chips: Value + Name + the current tab's columns (replaces the web's
   // clickable column headers, which have no place in a single-column list).
   const sort_chips: StatCol[] = [
@@ -329,10 +324,10 @@ export default function ScreenerScreen() {
           <ScreenerRow
             entry={item}
             tab={tab}
-            watched={watchlist.has(item.id)}
+            watched={watched_ids.has(item.id)}
             held={held_ids.has(item.id)}
             on_open={() => open_player(item.id)}
-            on_toggle_watch={() => toggle_watch(item.id)}
+            on_toggle_watch={() => watchlist.toggle(item.id)}
           />
         )}
         ListEmptyComponent={<Text style={styles.empty}>No players match your filters</Text>}
@@ -481,7 +476,7 @@ function stat_display(e: ScreenerEntry, key: SortKey): { value: string; color?: 
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: palette.bg },
+  screen: { flex: 1 },
   list_content: { paddingHorizontal: 16, paddingBottom: 32 },
   header_block: { paddingTop: 12, gap: 12 },
 
@@ -623,7 +618,7 @@ const styles = StyleSheet.create({
   },
   identity: { flex: 1, minWidth: 0 },
   name_row: { flexDirection: "row", alignItems: "center", gap: 6 },
-  jersey: { fontFamily: "SpaceMono", fontSize: 11, fontWeight: "700", color: text.tertiary },
+  jersey: { fontFamily: mono, fontSize: 11, fontWeight: "700", color: text.tertiary },
   name: { fontSize: 14, fontWeight: "700", color: "#fff", flexShrink: 1 },
   held: {
     backgroundColor: "rgba(72,255,67,0.14)",
@@ -639,7 +634,7 @@ const styles = StyleSheet.create({
   team_flag_img: { width: 16, height: 16 },
   team_name: { fontSize: 12, color: text.secondary, flexShrink: 1 },
   price_col: { alignItems: "flex-end", minWidth: 78 },
-  price: { fontFamily: "SpaceMono", fontSize: 13, fontWeight: "700", color: "#fff" },
+  price: { fontFamily: mono, fontSize: 13, fontWeight: "700", color: "#fff" },
 
   stat_strip: { flexDirection: "row", gap: 14, paddingLeft: 46, alignItems: "center" },
   stat_cell: { minWidth: 38 },
@@ -652,7 +647,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     marginBottom: 2,
   },
-  stat_value: { fontFamily: "SpaceMono", fontSize: 12, fontWeight: "700", color: "#fff" },
+  stat_value: { fontFamily: mono, fontSize: 12, fontWeight: "700", color: "#fff" },
 
   empty: { padding: 40, textAlign: "center", color: text.muted, fontSize: 13 },
 });

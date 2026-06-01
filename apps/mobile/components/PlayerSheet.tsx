@@ -9,6 +9,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
 import * as Haptics from "expo-haptics";
+import { useRouter } from "expo-router";
 import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetScrollView,
@@ -32,13 +33,14 @@ import { PerformanceChart } from "@/components/PerformanceChart";
 import { TickValue } from "@/components/TickValue";
 import { useLiveRefetch, usePlayerLiveVersion } from "@/components/live";
 import { color_for_sign, fmt_eur_m, fmt_eur_m_signed, fmt_signed_pct } from "@/lib/format";
-import { palette, text } from "@/theme/tokens";
+import { mono, palette, text } from "@/theme/tokens";
 
 export interface PlayerSheetHandle {
   open(player: Player): void;
 }
 
 export const PlayerSheet = forwardRef<PlayerSheetHandle, object>(function PlayerSheet(_props, ref) {
+  const router = useRouter();
   const sheet_ref = useRef<BottomSheet>(null);
   const snap_points = useMemo(() => ["92%"], []);
   const [player, set_player] = useState<Player | null>(null);
@@ -49,6 +51,12 @@ export const PlayerSheet = forwardRef<PlayerSheetHandle, object>(function Player
       sheet_ref.current?.expand();
     },
   }));
+
+  // Tap the team → close the sheet and push the team hub.
+  const open_team = (team_id: string) => {
+    sheet_ref.current?.close();
+    router.push(`/team/${team_id}`);
+  };
 
   const render_backdrop = (props: BottomSheetBackdropProps) => (
     <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.6} />
@@ -66,13 +74,13 @@ export const PlayerSheet = forwardRef<PlayerSheetHandle, object>(function Player
       handleIndicatorStyle={styles.handle}
     >
       <BottomSheetScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {player && <PlayerDetail player={player} />}
+        {player && <PlayerDetail player={player} on_open_team={open_team} />}
       </BottomSheetScrollView>
     </BottomSheet>
   );
 });
 
-function PlayerDetail({ player }: { player: Player }) {
+function PlayerDetail({ player, on_open_team }: { player: Player; on_open_team: (team_id: string) => void }) {
   const team = teams_api.get(player.team_id);
   const valuation = valuations_api.get_for_player(player.id);
   const current_price = valuation?.current_price ?? 0;
@@ -114,7 +122,7 @@ function PlayerDetail({ player }: { player: Player }) {
 
   return (
     <View style={styles.detail}>
-      <Header player={player} team_color={team?.color ?? "#888"} team_name={team?.name ?? "?"} team_flag={team?.flag} team_flag_url={team?.flag_url} />
+      <Header player={player} team_color={team?.color ?? "#888"} team_name={team?.name ?? "?"} team_flag={team?.flag} team_flag_url={team?.flag_url} on_open_team={() => on_open_team(player.team_id)} />
 
       <ValuationRibbon
         player_id={player.id}
@@ -187,12 +195,14 @@ function Header({
   team_name,
   team_flag,
   team_flag_url,
+  on_open_team,
 }: {
   player: Player;
   team_color: string;
   team_name: string;
   team_flag?: string;
   team_flag_url?: string;
+  on_open_team: () => void;
 }) {
   return (
     <View style={styles.header}>
@@ -208,14 +218,14 @@ function Header({
             {player.full_name ?? player.name}
           </Text>
         </View>
-        <View style={styles.team_row}>
+        <Pressable style={styles.team_row} onPress={on_open_team} hitSlop={6}>
           {team_flag_url ? (
             <Image source={{ uri: team_flag_url }} style={styles.team_flag_img} resizeMode="contain" />
           ) : (
             <Text style={styles.team_flag}>{team_flag}</Text>
           )}
           <Text style={styles.team_name}>{team_name}</Text>
-        </View>
+        </Pressable>
       </View>
     </View>
   );
@@ -280,7 +290,7 @@ function PriceChart({ price_history }: { price_history: PricePoint[] | null }) {
   if (price_history.length < 2) {
     return <Text style={styles.chart_empty}>No matches played yet</Text>;
   }
-  return <PerformanceChart data={price_history.map(p => ({ v: p.price }))} height={180} />;
+  return <PerformanceChart data={price_history.map(p => ({ v: p.price }))} height={180} format_value={p => fmt_eur_m(p.v)} />;
 }
 
 function MatchLog({ player_id }: { player_id: number }) {
@@ -508,7 +518,7 @@ const styles = StyleSheet.create({
   photo: { width: 64, height: 64, borderRadius: 10, backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
   identity: { flex: 1, minWidth: 0 },
   name_row: { flexDirection: "row", alignItems: "baseline", gap: 10 },
-  jersey: { fontFamily: "SpaceMono", fontSize: 20, fontWeight: "800", color: "rgba(255,255,255,0.55)", letterSpacing: -0.5 },
+  jersey: { fontFamily: mono, fontSize: 20, fontWeight: "800", color: "rgba(255,255,255,0.55)", letterSpacing: -0.5 },
   name: { fontSize: 20, fontWeight: "800", color: "#fff", letterSpacing: -0.5, flexShrink: 1 },
   team_row: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 },
   team_flag: { fontSize: 18 },
@@ -530,7 +540,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   kpi_label: { fontSize: 9, color: text.tertiary, textTransform: "uppercase", letterSpacing: 0.4, fontWeight: "600" },
-  kpi_value: { fontFamily: "SpaceMono", fontSize: 13, fontWeight: "800", color: "#fff", marginTop: 1 },
+  kpi_value: { fontFamily: mono, fontSize: 13, fontWeight: "800", color: "#fff", marginTop: 1 },
 
   chart_loading: { color: text.tertiary, fontSize: 12, paddingVertical: 24, textAlign: "center" },
   chart_empty: { color: text.tertiary, fontSize: 13, fontWeight: "600", paddingVertical: 36, textAlign: "center" },
@@ -571,8 +581,8 @@ const styles = StyleSheet.create({
   ml_meta: { flex: 1, minWidth: 0 },
   ml_opp: { fontSize: 12, fontWeight: "700", color: "#fff" },
   ml_date: { fontSize: 10, color: text.tertiary, marginTop: 1 },
-  ml_score: { fontFamily: "SpaceMono", fontSize: 12, fontWeight: "800", color: "#fff" },
-  ml_pct: { fontFamily: "SpaceMono", fontSize: 11, fontWeight: "800", minWidth: 56, textAlign: "right" },
+  ml_score: { fontFamily: mono, fontSize: 12, fontWeight: "800", color: "#fff" },
+  ml_pct: { fontFamily: mono, fontSize: 11, fontWeight: "800", minWidth: 56, textAlign: "right" },
 
   news_row: {
     flexDirection: "row",

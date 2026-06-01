@@ -14,9 +14,11 @@ import type { Fixture } from "@fundxi/core/domain/match/fixture";
 import type { News } from "@fundxi/core/domain/news/news";
 
 import { Spark } from "@/components/Spark";
-import { useMatchesLiveVersion, useStreamStatus } from "@/components/live";
+import { useMatchesLiveVersion, usePricesLiveVersion, useStreamStatus } from "@/components/live";
 import { useRefresh } from "@/components/use_refresh";
 import { PlayerSheet, type PlayerSheetHandle } from "@/components/PlayerSheet";
+import { useWatchlist } from "@/lib/watchlist";
+import { mono } from "@/theme/tokens";
 
 const palette = themes.dark;
 
@@ -45,9 +47,23 @@ export default function HomeScreen() {
     () => matches_api.list_fixtures().filter(f => f.status === "upcoming").slice(0, 3),
     [refresh_tag],
   );
+  // Live-match entry point — the RN parity for the web RightRail live ticker.
+  const live_fx = useMemo(
+    () => matches_api.list_fixtures().find(f => f.status === "live"),
+    [refresh_tag],
+  );
   const top_up = useMemo(() => players_api.top_movers(5, "up"), [refresh_tag]);
   const top_down = useMemo(() => players_api.top_movers(5, "down"), [refresh_tag]);
   const news = useMemo(() => news_api.list().slice(0, 6), [refresh_tag]);
+
+  // Watchlist surface — the RN parity for the web RightRail watchlist. Reads
+  // the shared session store; prices refresh live so the figures stay current.
+  const watched_ids = useWatchlist();
+  const prices_version = usePricesLiveVersion();
+  const watched = useMemo(
+    () => players_api.search({}).filter(p => watched_ids.has(p.id)),
+    [watched_ids, refresh_tag, prices_version],
+  );
 
   return (
     <View style={styles.screen}>
@@ -66,6 +82,7 @@ export default function HomeScreen() {
           on_cta={() => router.push("/fixtures")}
           live={stream_status}
         />
+        {live_fx && <LiveMatchCard fixture={live_fx} on_open={() => router.push(`/match/${live_fx.id}`)} />}
         <Text style={styles.section_subtitle}>Up next</Text>
         {upcoming.length === 0 ? (
           <Text style={styles.empty}>No upcoming fixtures scheduled.</Text>
@@ -73,6 +90,15 @@ export default function HomeScreen() {
           upcoming.map((fx, i) => <FixtureRow key={fx.id} fixture={fx} divider={i > 0} />)
         )}
       </SectionCard>
+
+      {watched.length > 0 && (
+        <SectionCard>
+          <SectionHeader title="Watchlist" meta={`${watched.length} ★`} />
+          {watched.map((p, i) => (
+            <MoverRow key={p.id} player={p} divider={i > 0} on_open={open_player} />
+          ))}
+        </SectionCard>
+      )}
 
       <SectionCard>
         <SectionHeader
@@ -180,6 +206,24 @@ function FixtureRow({ fixture, divider }: { fixture: Fixture; divider: boolean }
   );
 }
 
+function LiveMatchCard({ fixture, on_open }: { fixture: Fixture; on_open: () => void }) {
+  const home = teams_api.get(fixture.home_team_id);
+  const away = teams_api.get(fixture.away_team_id);
+  return (
+    <Pressable style={styles.live_card} onPress={on_open} accessibilityRole="button" accessibilityLabel="Open live match">
+      <View style={styles.live_card_badge_row}>
+        <View style={styles.live_card_dot} />
+        <Text style={styles.live_card_min}>{fixture.minute != null ? `${fixture.minute}'` : "LIVE"}</Text>
+      </View>
+      <View style={styles.live_card_teams}>
+        <Text style={styles.live_card_team} numberOfLines={1}>{home?.flag} {home?.name ?? fixture.home_team_id}</Text>
+        <Text style={styles.live_card_score}>{fixture.home_score ?? 0} : {fixture.away_score ?? 0}</Text>
+        <Text style={[styles.live_card_team, { textAlign: "right" }]} numberOfLines={1}>{away?.name ?? fixture.away_team_id} {away?.flag}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
 function MoversColumn({
   label,
   players,
@@ -268,11 +312,9 @@ function NewsRow({ item, divider }: { item: News; divider: boolean }) {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: palette.bg,
   },
   scroll: {
     flex: 1,
-    backgroundColor: palette.bg,
   },
   scroll_content: {
     paddingHorizontal: 16,
@@ -424,6 +466,52 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: "rgba(255,255,255,0.04)",
     marginVertical: 4,
+  },
+  live_card: {
+    marginHorizontal: 12,
+    marginTop: 12,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: "rgba(72,255,67,0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(72,255,67,0.12)",
+    gap: 10,
+  },
+  live_card_badge_row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  live_card_dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: palette.brandGreen,
+  },
+  live_card_min: {
+    fontFamily: mono,
+    fontSize: 11,
+    fontWeight: "800",
+    color: palette.brandGreen,
+    letterSpacing: 0.5,
+  },
+  live_card_teams: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  live_card_team: {
+    flex: 1,
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  live_card_score: {
+    fontFamily: mono,
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#fff",
+    letterSpacing: -0.5,
   },
   mover_row: {
     flexDirection: "row",
