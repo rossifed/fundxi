@@ -459,7 +459,7 @@ export function TradeDialog({
           >
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <button
-                onClick={() => set_custom_shares(Math.max(0, custom_shares - 1))}
+                onClick={() => set_custom_shares(Math.max(0, Math.round((custom_shares - 0.1) * 10) / 10))}
                 style={{
                   width: 34,
                   height: 34,
@@ -480,13 +480,13 @@ export function TradeDialog({
                 type="range"
                 min={0}
                 max={slider_max}
-                step={1}
+                step={0.1}
                 value={custom_shares}
-                onChange={e => set_custom_shares(parseInt(e.target.value))}
+                onChange={e => set_custom_shares(Math.round(parseFloat(e.target.value) * 10) / 10)}
                 style={{ flex: 1 }}
               />
               <button
-                onClick={() => set_custom_shares(Math.min(slider_max, custom_shares + 1))}
+                onClick={() => set_custom_shares(Math.min(slider_max, Math.round((custom_shares + 0.1) * 10) / 10))}
                 style={{
                   width: 34,
                   height: 34,
