@@ -3,14 +3,48 @@
 // app when switching desktop ↔ mobile (see fundxi/CLAUDE.md "UI direction").
 
 import { Tabs } from "expo-router";
-import { StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themes } from "@fundxi/core/design/palette";
 
+import { useAuth } from "@/components/AuthContext";
 import { PortfolioBar } from "@/components/PortfolioBar";
 
 const palette = themes.dark;
+
+// Right-side auth control: "Sign in" when anonymous, the user's initial
+// (tap to sign out) when authenticated — the RN parity for the web header
+// auth buttons / avatar.
+function AuthControl() {
+  const { status, user, prompt, logout } = useAuth();
+  if (status === "authenticated" && user) {
+    const initial = (user.name || user.email).trim().charAt(0).toUpperCase();
+    return (
+      <Pressable
+        onPress={() =>
+          Alert.alert("Account", user.email, [
+            { text: "Cancel", style: "cancel" },
+            { text: "Sign out", style: "destructive", onPress: () => void logout() },
+          ])
+        }
+        hitSlop={8}
+      >
+        <View style={header_styles.avatar}>
+          <Text style={header_styles.avatar_text}>{initial}</Text>
+        </View>
+      </Pressable>
+    );
+  }
+  if (status === "anonymous") {
+    return (
+      <Pressable onPress={() => prompt("login")} hitSlop={8}>
+        <Text style={header_styles.signin}>Sign in</Text>
+      </Pressable>
+    );
+  }
+  return null;
+}
 
 // Custom header: screen title row + the always-on PortfolioBar underneath,
 // mirroring the web shell (Header + sticky PortfolioBar). We own the top
@@ -23,7 +57,7 @@ function TabHeader({ title }: { title: string }) {
     <View style={{ paddingTop: insets.top }}>
       <View style={header_styles.title_row}>
         <Text style={header_styles.title}>{title}</Text>
-        <Text style={header_styles.brand}>WC 2026</Text>
+        <AuthControl />
       </View>
       <PortfolioBar />
     </View>
@@ -39,7 +73,18 @@ const header_styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   title: { color: "#fff", fontSize: 20, fontWeight: "800" },
-  brand: { color: "rgba(255,255,255,0.35)", fontSize: 10, fontWeight: "700", letterSpacing: 0.5 },
+  signin: { color: "#fff", fontSize: 13, fontWeight: "700" },
+  avatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatar_text: { color: "#fff", fontSize: 13, fontWeight: "800" },
 });
 
 const TABS = [

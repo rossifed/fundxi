@@ -5,7 +5,7 @@
 // legend is the parent's responsibility (matches web layout).
 
 import { StyleSheet, Text, View } from "react-native";
-import Svg, { Path } from "react-native-svg";
+import Svg, { Circle, Path } from "react-native-svg";
 
 interface Segment {
   value: number;
@@ -48,6 +48,29 @@ export function Donut({ segments, size = 90, hole = true }: { segments: Segment[
   const outer = size / 2 - 2;
   const inner = hole ? Math.max(0, outer - Math.max(12, size * 0.28)) : 0;
   const gap = non_zero.length > 1 ? 2 : 0; // degrees of padding between slices
+
+  // A single 100% slice is a full circle — an SVG arc whose start == end is
+  // degenerate (draws nothing), so render it as a real ring/disc instead.
+  if (non_zero.length === 1) {
+    const only = non_zero[0];
+    return (
+      <Svg width={size} height={size}>
+        {inner > 0 ? (
+          <Circle
+            cx={cx}
+            cy={cy}
+            r={(outer + inner) / 2}
+            fill="none"
+            stroke={only.color}
+            strokeOpacity={0.55}
+            strokeWidth={outer - inner}
+          />
+        ) : (
+          <Circle cx={cx} cy={cy} r={outer} fill={only.color} fillOpacity={0.55} />
+        )}
+      </Svg>
+    );
+  }
 
   let cursor = 0;
   const paths = non_zero.map((s, i) => {

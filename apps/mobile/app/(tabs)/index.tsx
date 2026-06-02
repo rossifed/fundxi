@@ -6,6 +6,7 @@ import { matches_api } from "@fundxi/core/api/matches_api";
 import { players_api } from "@fundxi/core/api/players_api";
 import { teams_api } from "@fundxi/core/api/teams_api";
 import { news_api } from "@fundxi/core/api/news_api";
+import { leagues_api } from "@fundxi/core/api/leagues_api";
 import { compute_return_pct } from "@fundxi/core/domain/market/return";
 import { spark_for_player } from "@fundxi/core/infrastructure/repositories/valuations_repository";
 import { themes } from "@fundxi/core/design/palette";
@@ -14,9 +15,10 @@ import type { Fixture } from "@fundxi/core/domain/match/fixture";
 import type { News } from "@fundxi/core/domain/news/news";
 
 import { Spark } from "@/components/Spark";
-import { useMatchesLiveVersion, usePricesLiveVersion, useStreamStatus } from "@/components/live";
+import { useMatchesLiveVersion, usePricesLiveVersion } from "@/components/live";
 import { useRefresh } from "@/components/use_refresh";
 import { PlayerSheet, type PlayerSheetHandle } from "@/components/PlayerSheet";
+import { useAuth } from "@/components/AuthContext";
 import { useWatchlist } from "@/lib/watchlist";
 import { mono } from "@/theme/tokens";
 
@@ -31,7 +33,6 @@ export default function HomeScreen() {
   // that ticks on every `update` frame; we re-read the synchronous repo
   // caches whenever it changes (and refresh fixtures from the BFF first).
   const matches_version = useMatchesLiveVersion();
-  const stream_status = useStreamStatus();
   const [refresh_tag, set_refresh_tag] = useState(0);
 
   useEffect(() => {
@@ -44,7 +45,12 @@ export default function HomeScreen() {
   );
 
   const upcoming = useMemo(
-    () => matches_api.list_fixtures().filter(f => f.status === "upcoming").slice(0, 3),
+    () =>
+      matches_api
+        .list_fixtures()
+        .filter(f => f.status === "upcoming")
+        .sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""))
+        .slice(0, 4),
     [refresh_tag],
   );
   // Live-match entry point — the RN parity for the web RightRail live ticker.
@@ -52,9 +58,13 @@ export default function HomeScreen() {
     () => matches_api.list_fixtures().find(f => f.status === "live"),
     [refresh_tag],
   );
+  // Match Center focal = the live match if any, else the soonest upcoming one
+  // (shown with kickoff + venue); the rest are the compact "Up next" list.
+  const next_fx = live_fx ? undefined : upcoming[0];
+  const rest_upcoming = live_fx ? upcoming.slice(0, 2) : upcoming.slice(1, 3);
   const top_up = useMemo(() => players_api.top_movers(5, "up"), [refresh_tag]);
   const top_down = useMemo(() => players_api.top_movers(5, "down"), [refresh_tag]);
-  const news = useMemo(() => news_api.list().slice(0, 6), [refresh_tag]);
+  const news = useMemo(() => news_api.list().slice(0, 20), [refresh_tag]);
 
   // Watchlist surface — the RN parity for the web RightRail watchlist. Reads
   // the shared session store; prices refresh live so the figures stay current.
@@ -64,6 +74,19 @@ export default function HomeScreen() {
     () => players_api.search({}).filter(p => watched_ids.has(p.id)),
     [watched_ids, refresh_tag, prices_version],
   );
+
+  // Top movers: one direction at a time (toggle) — half the rows, less scroll.
+  const [movers_dir, set_movers_dir] = useState<"up" | "down">("up");
+
+  // Your leagues — rank + return, web parity. Per-user, so it needs auth; the
+  // cache loads on login, refreshed here and on price ticks (rank shifts).
+  const { status: auth_status } = useAuth();
+  useEffect(() => {
+    if (auth_status === "authenticated") {
+      void leagues_api.refresh().then(() => set_refresh_tag(t => t + 1)).catch(() => {});
+    }
+  }, [auth_status, prices_version]);
+  const my_leagues = useMemo(() => leagues_api.list_summaries(), [auth_status, refresh_tag]);
 
   return (
     <View style={styles.screen}>
@@ -76,20 +99,45 @@ export default function HomeScreen() {
         <Hero />
 
       <SectionCard>
-        <SectionHeader
-          title="Match Center"
-          cta="All fixtures →"
-          on_cta={() => router.push("/fixtures")}
-          live={stream_status}
-        />
-        {live_fx && <LiveMatchCard fixture={live_fx} on_open={() => router.push(`/match/${live_fx.id}`)} />}
-        <Text style={styles.section_subtitle}>Up next</Text>
-        {upcoming.length === 0 ? (
-          <Text style={styles.empty}>No upcoming fixtures scheduled.</Text>
+        <SectionHeader title="Match Center" cta="All fixtures →" on_cta={() => router.push("/fixtures")} />
+        {live_fx ? (
+          <LiveMatchCard fixture={live_fx} on_open={() => router.push(`/match/${live_fx.id}`)} />
+        ) : next_fx ? (
+          <NextMatchCard fixture={next_fx} on_open={() => router.push(`/match/${next_fx.id}`)} />
         ) : (
-          upcoming.map((fx, i) => <FixtureRow key={fx.id} fixture={fx} divider={i > 0} />)
+          <Text style={styles.empty}>No upcoming fixtures scheduled.</Text>
+        )}
+        {rest_upcoming.length > 0 && (
+          <>
+            <Text style={styles.section_subtitle}>Up next</Text>
+            {rest_upcoming.map((fx, i) => <FixtureRow key={fx.id} fixture={fx} divider={i > 0} />)}
+          </>
         )}
       </SectionCard>
+
+      {auth_status === "authenticated" && my_leagues.length > 0 && (
+        <SectionCard>
+          <SectionHeader title="Your leagues" cta="See all →" on_cta={() => router.push("/leagues")} />
+          {my_leagues.map((l, i) => (
+            <Pressable
+              key={l.id}
+              style={[styles.league_row, i > 0 && styles.row_divider]}
+              onPress={() => router.push("/leagues")}
+            >
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.league_name} numberOfLines={1}>{l.name}</Text>
+                <Text style={styles.league_meta}>{l.member_count} members</Text>
+              </View>
+              <View style={{ alignItems: "flex-end" }}>
+                <Text style={styles.league_rank}>#{l.my_rank}</Text>
+                <Text style={[styles.league_return, { color: l.my_return_pct >= 0 ? palette.positive : palette.negative }]}>
+                  {l.my_return_pct >= 0 ? "+" : ""}{l.my_return_pct}%
+                </Text>
+              </View>
+            </Pressable>
+          ))}
+        </SectionCard>
+      )}
 
       {watched.length > 0 && (
         <SectionCard>
@@ -102,13 +150,23 @@ export default function HomeScreen() {
 
       <SectionCard>
         <SectionHeader
-          title="Top movers · since tournament start"
+          title="Top movers"
           cta="Open screener →"
           on_cta={() => router.push("/screener")}
         />
-        <MoversColumn label="Top gainers" players={top_up} on_open={open_player} />
-        <View style={styles.movers_divider} />
-        <MoversColumn label="Top losers" players={top_down} on_open={open_player} />
+        <View style={styles.movers_toggle}>
+          {([["up", "Gainers"], ["down", "Losers"]] as const).map(([d, label]) => {
+            const on = movers_dir === d;
+            return (
+              <Pressable key={d} onPress={() => set_movers_dir(d)} style={[styles.mtoggle, on && styles.mtoggle_on]}>
+                <Text style={[styles.mtoggle_label, on && styles.mtoggle_label_on]}>{label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        {(movers_dir === "up" ? top_up : top_down).map((p, i) => (
+          <MoverRow key={p.id} player={p} divider={i > 0} on_open={open_player} />
+        ))}
       </SectionCard>
 
       <SectionCard>
@@ -159,11 +217,11 @@ function SectionHeader({
   return (
     <View style={styles.section_header}>
       <View style={styles.section_title_row}>
-        <Text style={styles.section_title}>{title}</Text>
+        <Text style={styles.section_title} numberOfLines={1}>{title}</Text>
         {live && <LiveDot status={live} />}
       </View>
       {cta && on_cta && (
-        <Pressable onPress={on_cta}>
+        <Pressable onPress={on_cta} style={styles.cta_btn} hitSlop={8}>
           <Text style={styles.cta}>{cta}</Text>
         </Pressable>
       )}
@@ -184,13 +242,55 @@ function LiveDot({ status }: { status: "online" | "offline" | "unknown" }) {
   );
 }
 
+function fmt_kickoff(iso?: string): string {
+  if (!iso) return "Date TBD";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(undefined, { weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+function fmt_fixture_short(iso?: string): string {
+  if (!iso) return "TBD";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(undefined, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+function fmt_venue(fixture: Fixture): string {
+  return [fixture.venue_name, fixture.venue_city].filter(Boolean).join(", ");
+}
+
+// Focal upcoming match — teams + kickoff (date & time) + venue. Shown in Match
+// Center when no match is live (the user's spec: live, else next with info).
+function NextMatchCard({ fixture, on_open }: { fixture: Fixture; on_open: () => void }) {
+  const home = teams_api.get(fixture.home_team_id);
+  const away = teams_api.get(fixture.away_team_id);
+  const venue = fmt_venue(fixture);
+  return (
+    <Pressable style={styles.next_card} onPress={on_open} accessibilityRole="button" accessibilityLabel="Open next match">
+      <Text style={styles.next_kicker}>NEXT MATCH</Text>
+      <View style={styles.next_teams}>
+        <View style={styles.next_team}>
+          <Text style={styles.next_flag}>{home?.flag}</Text>
+          <Text style={styles.next_name} numberOfLines={1}>{home?.name ?? fixture.home_team_id}</Text>
+        </View>
+        <Text style={styles.next_vs}>vs</Text>
+        <View style={[styles.next_team, { justifyContent: "flex-end" }]}>
+          <Text style={styles.next_name} numberOfLines={1}>{away?.name ?? fixture.away_team_id}</Text>
+          <Text style={styles.next_flag}>{away?.flag}</Text>
+        </View>
+      </View>
+      <Text style={styles.next_meta}>{fmt_kickoff(fixture.date)}</Text>
+      {venue !== "" && <Text style={styles.next_venue}>{venue}</Text>}
+    </Pressable>
+  );
+}
+
 function FixtureRow({ fixture, divider }: { fixture: Fixture; divider: boolean }) {
   const home = teams_api.get(fixture.home_team_id);
   const away = teams_api.get(fixture.away_team_id);
   if (!home || !away) return null;
   return (
     <View style={[styles.fixture_row, divider && styles.row_divider]}>
-      <Text style={styles.fixture_date}>{fixture.date ?? "TBD"}</Text>
+      <Text style={styles.fixture_date}>{fmt_fixture_short(fixture.date)}</Text>
       <View style={styles.fixture_teams}>
         <View style={styles.fixture_team_right}>
           <Text style={styles.team_name}>{home.name}</Text>
@@ -221,25 +321,6 @@ function LiveMatchCard({ fixture, on_open }: { fixture: Fixture; on_open: () => 
         <Text style={[styles.live_card_team, { textAlign: "right" }]} numberOfLines={1}>{away?.name ?? fixture.away_team_id} {away?.flag}</Text>
       </View>
     </Pressable>
-  );
-}
-
-function MoversColumn({
-  label,
-  players,
-  on_open,
-}: {
-  label: string;
-  players: PlayerWithValuation[];
-  on_open: (player: PlayerWithValuation) => void;
-}) {
-  return (
-    <View>
-      <Text style={styles.section_subtitle}>{label}</Text>
-      {players.map((p, i) => (
-        <MoverRow key={p.id} player={p} divider={i > 0} on_open={on_open} />
-      ))}
-    </View>
   );
 }
 
@@ -295,14 +376,23 @@ function MoverRow({
   );
 }
 
+function fmt_news_ts(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? ""
+    : d.toLocaleString(undefined, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
 function NewsRow({ item, divider }: { item: News; divider: boolean }) {
   const icon = item.type === "postmatch" ? "🏁" : "📰";
+  const meta = [item.fixture_label, fmt_news_ts(item.published_at)].filter(Boolean).join("  ·  ");
   return (
     <View style={[styles.news_row, divider && styles.row_divider]}>
       <Text style={styles.news_icon}>{icon}</Text>
       <View style={styles.news_body}>
         <Text style={styles.news_title}>{item.title}</Text>
-        {item.fixture_label && <Text style={styles.news_label}>{item.fixture_label}</Text>}
+        {meta !== "" && <Text style={styles.news_label}>{meta}</Text>}
       </View>
       <Text style={styles.news_kind}>{item.type === "prematch" ? "pre-match" : "post-match"}</Text>
     </View>
@@ -368,12 +458,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    flexShrink: 1,
+    minWidth: 0,
   },
   section_title: {
     color: "#fff",
     fontSize: 13,
     fontWeight: "700",
     letterSpacing: 0.3,
+    flexShrink: 1,
   },
   live_dot_row: {
     flexDirection: "row",
@@ -391,6 +484,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
+  cta_btn: { flexShrink: 0, paddingLeft: 10 },
   cta: {
     color: "rgba(255,255,255,0.5)",
     fontSize: 11,
@@ -467,6 +561,24 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.04)",
     marginVertical: 4,
   },
+  movers_toggle: { flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
+  mtoggle: {
+    flex: 1,
+    paddingVertical: 7,
+    alignItems: "center",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+  mtoggle_on: { backgroundColor: "rgba(255,255,255,0.12)", borderColor: "rgba(255,255,255,0.22)" },
+  mtoggle_label: { color: "rgba(255,255,255,0.5)", fontSize: 12, fontWeight: "700" },
+  mtoggle_label_on: { color: "#fff" },
+  league_row: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 11 },
+  league_name: { color: "#fff", fontSize: 13, fontWeight: "700" },
+  league_meta: { color: "rgba(255,255,255,0.35)", fontSize: 10, marginTop: 2 },
+  league_rank: { fontFamily: mono, color: "#fff", fontSize: 16, fontWeight: "800" },
+  league_return: { fontFamily: mono, fontSize: 11, fontWeight: "700", marginTop: 1 },
   live_card: {
     marginHorizontal: 12,
     marginTop: 12,
@@ -513,6 +625,24 @@ const styles = StyleSheet.create({
     color: "#fff",
     letterSpacing: -0.5,
   },
+  next_card: {
+    marginHorizontal: 12,
+    marginTop: 12,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.07)",
+    gap: 8,
+  },
+  next_kicker: { fontSize: 9, fontWeight: "800", letterSpacing: 1, color: "rgba(255,255,255,0.4)", textTransform: "uppercase" },
+  next_teams: { flexDirection: "row", alignItems: "center", gap: 10 },
+  next_team: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
+  next_flag: { fontSize: 24 },
+  next_name: { color: "#fff", fontSize: 15, fontWeight: "800", flexShrink: 1 },
+  next_vs: { color: "rgba(255,255,255,0.3)", fontSize: 12, fontWeight: "700" },
+  next_meta: { fontFamily: mono, color: "rgba(255,255,255,0.75)", fontSize: 13, fontWeight: "700" },
+  next_venue: { color: "rgba(255,255,255,0.45)", fontSize: 12 },
   mover_row: {
     flexDirection: "row",
     alignItems: "center",

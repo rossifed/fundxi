@@ -29,6 +29,15 @@ import { color_for_sign, fmt_eur_m, fmt_eur_m_signed, fmt_shares, fmt_signed_pct
 import { mono, palette, position_color, text } from "@/theme/tokens";
 
 type PositionsTab = "positions" | "trades";
+type AnalyticsTab = "exposure" | "winloss" | "team" | "position" | "age";
+
+const ANALYTICS_TABS: { k: AnalyticsTab; label: string }[] = [
+  { k: "exposure", label: "Exposure" },
+  { k: "winloss", label: "Win / Loss" },
+  { k: "team", label: "Team" },
+  { k: "position", label: "Position" },
+  { k: "age", label: "Age" },
+];
 
 // Chart palette in the perf-chart hue family (last entry = the theme accent).
 const CHART_PALETTE = ["#7C92E5", "#5E7AD4", "#4561C2", "#3F5BBE", "#2D4AA5", "#1F3D8B", palette.chartPrimary, "#15326D"];
@@ -42,6 +51,9 @@ function fmt_short_date(iso?: string): string {
 export default function PortfolioScreen() {
   const sheet_ref = useRef<PlayerSheetHandle>(null);
   const [positions_tab, set_positions_tab] = useState<PositionsTab>("positions");
+  // Analytics is a single tabbed block (one chart at a time) under the main
+  // KPI → chart → positions/trades flow — compact, no deep scroll.
+  const [analytics_tab, set_analytics_tab] = useState<AnalyticsTab>("exposure");
   const [data_version, set_data_version] = useState(0);
 
   // /api/portfolio is auth-gated and mobile has no auth yet (401) — swallow
@@ -72,7 +84,19 @@ export default function PortfolioScreen() {
       .fetch_history("all")
       .then(dto => {
         if (cancelled) return;
-        set_perf(dto.points.map(p => ({ v: p.value, pnl: p.pnl_vs_open })));
+        set_perf(
+          dto.points.map(p => ({
+            v: p.value,
+            pnl: p.pnl_vs_open,
+            // Date label for the scrub tooltip (web parity: shows the date).
+            label: new Date(p.ts).toLocaleString(undefined, {
+              day: "2-digit",
+              month: "short",
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          })),
+        );
       })
       .catch(() => {});
     return () => {
@@ -142,15 +166,21 @@ export default function PortfolioScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
       >
-        {/* KPI grid */}
+        {/* KPI grid — two tidy rows of 4 equal cells (the web shows the same
+            7 metrics in one desktop row; on mobile they wrap, evenly). */}
         <View style={styles.kpi_grid}>
-          <Kpi label="Total Value" value={fmt_eur_m(total_value)} />
-          <Kpi label="Cash" value={fmt_eur_m(totals.cash)} />
-          <Kpi label="Invested" value={fmt_eur_m(totals.total_cost)} />
-          <Kpi label="Positions" value={String(holdings.length)} />
-          <Kpi label="P&L" value={fmt_eur_m_signed(totals.pnl)} color={color_for_sign(totals.pnl)} />
-          <Kpi label="Return" value={fmt_signed_pct(totals.return_pct, 1)} color={color_for_sign(totals.return_pct)} />
-          <Kpi label="Trades" value={String(trades.length)} />
+          <View style={styles.kpi_row}>
+            <Kpi label="Total Value" value={fmt_eur_m(total_value)} />
+            <Kpi label="Cash" value={fmt_eur_m(totals.cash)} />
+            <Kpi label="Invested" value={fmt_eur_m(totals.total_cost)} />
+            <Kpi label="Positions" value={String(holdings.length)} />
+          </View>
+          <View style={styles.kpi_row}>
+            <Kpi label="P&L" value={fmt_eur_m_signed(totals.pnl)} color={color_for_sign(totals.pnl)} />
+            <Kpi label="Return" value={fmt_signed_pct(totals.return_pct, 1)} color={color_for_sign(totals.return_pct)} />
+            <Kpi label="Trades" value={String(trades.length)} />
+            <View style={{ flex: 1 }} />
+          </View>
         </View>
 
         {/* Portfolio value chart */}
@@ -165,7 +195,7 @@ export default function PortfolioScreen() {
           {perf.length > 0 ? <PerformanceChart data={perf} height={200} format_value={p => fmt_eur_m(p.v)} /> : <Text style={styles.chart_empty}>No history yet</Text>}
         </View>
 
-        {/* Positions / Trades */}
+        {/* Positions / Trades — kept in the main flow, right under the chart */}
         <View style={styles.card}>
           <View style={styles.tabbar}>
             {([
@@ -198,12 +228,23 @@ export default function PortfolioScreen() {
           )}
         </View>
 
-        {/* Analytics stack */}
-        <ExposureCard total_value={total_value} />
-        <WinLossCard holdings={holdings} />
-        <BreakdownCard title="By team" items={with_color(by_team)} chart="bars" />
-        <BreakdownCard title="By position" items={with_color(by_position)} chart="pie" />
-        <BreakdownCard title="By age" items={with_color(by_age)} chart="pie" />
+        {/* Analytics — one chart at a time via tabs (no long stack/scroll) */}
+        <Text style={styles.analytics_label}>Analytics</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.atab_row}>
+          {ANALYTICS_TABS.map(t => {
+            const on = analytics_tab === t.k;
+            return (
+              <Pressable key={t.k} onPress={() => set_analytics_tab(t.k)} style={[styles.atab, on && styles.atab_on]}>
+                <Text style={[styles.atab_label, on && styles.atab_label_on]}>{t.label}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+        {analytics_tab === "exposure" && <ExposureCard total_value={total_value} />}
+        {analytics_tab === "winloss" && <WinLossCard holdings={holdings} />}
+        {analytics_tab === "team" && <BreakdownCard title="By team" items={with_color(by_team)} chart="bars" />}
+        {analytics_tab === "position" && <BreakdownCard title="By position" items={with_color(by_position)} chart="pie" />}
+        {analytics_tab === "age" && <BreakdownCard title="By age" items={with_color(by_age)} chart="pie" />}
       </ScrollView>
       <PlayerSheet ref={sheet_ref} />
     </View>
@@ -424,8 +465,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function Kpi({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <View style={styles.kpi}>
-      <Text style={styles.kpi_label}>{label}</Text>
-      <Text style={[styles.kpi_value, color ? { color } : null]}>{value}</Text>
+      <Text style={styles.kpi_label} numberOfLines={1}>{label}</Text>
+      <Text style={[styles.kpi_value, color ? { color } : null]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{value}</Text>
     </View>
   );
 }
@@ -443,10 +484,24 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   scroll: { padding: 16, gap: 16 },
 
-  kpi_grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  kpi: { flexGrow: 1, flexBasis: "30%", minWidth: 100, backgroundColor: "rgba(255,255,255,0.025)", borderWidth: 1, borderColor: "rgba(255,255,255,0.05)", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12 },
-  kpi_label: { fontSize: 10, color: text.tertiary, letterSpacing: 0.4, textTransform: "uppercase", fontWeight: "600" },
-  kpi_value: { fontFamily: mono, fontSize: 20, fontWeight: "800", color: "#fff", marginTop: 4 },
+  analytics_label: { fontSize: 11, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase", color: text.secondary, marginTop: 4 },
+  atab_row: { gap: 8, paddingVertical: 2 },
+  atab: {
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  atab_on: { backgroundColor: "rgba(255,255,255,0.12)", borderColor: "rgba(255,255,255,0.22)" },
+  atab_label: { color: text.secondary, fontSize: 13, fontWeight: "700" },
+  atab_label_on: { color: "#fff" },
+  kpi_grid: { gap: 8 },
+  kpi_row: { flexDirection: "row", gap: 8 },
+  kpi: { flex: 1, backgroundColor: "rgba(255,255,255,0.025)", borderWidth: 1, borderColor: "rgba(255,255,255,0.05)", borderRadius: 10, paddingHorizontal: 9, paddingVertical: 8 },
+  kpi_label: { fontSize: 9, color: text.tertiary, letterSpacing: 0.3, textTransform: "uppercase", fontWeight: "600" },
+  kpi_value: { fontFamily: mono, fontSize: 15, fontWeight: "800", color: "#fff", marginTop: 3 },
 
   card: { backgroundColor: "rgba(255,255,255,0.02)", borderWidth: 1, borderColor: "rgba(255,255,255,0.04)", borderRadius: 12, overflow: "hidden" },
   value_head: { flexDirection: "row", alignItems: "center", padding: 16, paddingBottom: 8 },

@@ -13,20 +13,26 @@ import { router } from "expo-router";
 import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import { valuations_api } from "@fundxi/core/api/valuations_api";
 
+import { useAuth } from "@/components/AuthContext";
 import { useLiveRefetch, usePricesLiveVersion } from "@/components/live";
 import { fmt_eur_m, fmt_eur_m_signed } from "@/lib/format";
 import { mono, palette, text } from "@/theme/tokens";
 
 export function PortfolioBar() {
+  const { status } = useAuth();
   const [data_version, set_data_version] = useState(0);
-  // The portfolio is per-user and auth-gated; mobile has no auth yet (bearer
-  // token deferred — see api_client.ts / MOBILE-MIGRATION-PLAN R7), so
-  // /api/portfolio returns 401. Until that lands we hide the bar rather than
-  // show a misleading €0 — no fabricated data (CLAUDE.md data-sourcing rule).
+  // The portfolio is per-user and auth-gated, so the bar only shows once the
+  // session is authenticated and the totals have loaded — never a misleading
+  // €0 for an anonymous visitor (CLAUDE.md data-sourcing rule). It lights up
+  // automatically on login and hides on logout.
   const [ready, set_ready] = useState(false);
 
   useEffect(() => portfolio_api.subscribe(() => set_data_version(v => v + 1)), []);
   useEffect(() => {
+    if (status !== "authenticated") {
+      set_ready(false);
+      return;
+    }
     let mounted = true;
     portfolio_api
       .refresh()
@@ -39,7 +45,7 @@ export function PortfolioBar() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [status]);
   // Recompute on a shared-valuations refresh (price tick) or a local trade.
   useLiveRefetch(usePricesLiveVersion(), () => {
     void valuations_api.refresh().then(() => set_data_version(v => v + 1)).catch(() => {});

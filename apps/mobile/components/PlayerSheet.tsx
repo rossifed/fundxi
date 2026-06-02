@@ -7,7 +7,7 @@
 // explain that on tap.
 
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import BottomSheet, {
@@ -28,9 +28,11 @@ import type { PlayerMatchEntry } from "@fundxi/core/infrastructure/repositories/
 import type { PlayerNewsEntry } from "@fundxi/core/infrastructure/repositories/player_news_repository";
 import type { PricePoint } from "@fundxi/core/infrastructure/repositories/valuations_repository";
 
+import { useAuth } from "@/components/AuthContext";
 import { PlayerChip } from "@/components/PlayerChip";
 import { PerformanceChart } from "@/components/PerformanceChart";
 import { TickValue } from "@/components/TickValue";
+import { TradeSheet } from "@/components/TradeSheet";
 import { useLiveRefetch, usePlayerLiveVersion } from "@/components/live";
 import { color_for_sign, fmt_eur_m, fmt_eur_m_signed, fmt_signed_pct } from "@/lib/format";
 import { mono, palette, text } from "@/theme/tokens";
@@ -81,6 +83,7 @@ export const PlayerSheet = forwardRef<PlayerSheetHandle, object>(function Player
 });
 
 function PlayerDetail({ player, on_open_team }: { player: Player; on_open_team: (team_id: string) => void }) {
+  const { status: auth_status, prompt: auth_prompt } = useAuth();
   const team = teams_api.get(player.team_id);
   const valuation = valuations_api.get_for_player(player.id);
   const current_price = valuation?.current_price ?? 0;
@@ -115,9 +118,21 @@ function PlayerDetail({ player, on_open_team }: { player: Player; on_open_team: 
       .catch(() => {});
   });
 
-  const gate_trade = () => {
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    Alert.alert("Trading", "Trading opens once accounts land on mobile (auth in progress).");
+  const [trade_kind, set_trade_kind] = useState<"buy" | "sell" | null>(null);
+  // Bumped after a successful order so YourPosition / the ribbon re-read the
+  // updated holding (portfolio caches are refreshed inside trades_api.execute).
+  const [, set_trade_version] = useState(0);
+
+  // Anonymous → open the sign-in sheet (register mode); authenticated → open
+  // the order-entry sheet for that side.
+  const gate_trade = (k: "buy" | "sell") => {
+    if (auth_status === "authenticated") {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      set_trade_kind(k);
+    } else {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      auth_prompt("register");
+    }
   };
 
   return (
@@ -178,13 +193,22 @@ function PlayerDetail({ player, on_open_team }: { player: Player; on_open_team: 
       <YourPosition player={player} current_price={current_price} />
 
       <View style={styles.trade_row}>
-        <Pressable style={[styles.trade_btn, { backgroundColor: palette.actionBuy }]} onPress={gate_trade}>
+        <Pressable style={[styles.trade_btn, { backgroundColor: palette.actionBuy }]} onPress={() => gate_trade("buy")}>
           <Text style={styles.trade_label}>Buy</Text>
         </Pressable>
-        <Pressable style={[styles.trade_btn, { backgroundColor: palette.actionSell }]} onPress={gate_trade}>
+        <Pressable style={[styles.trade_btn, { backgroundColor: palette.actionSell }]} onPress={() => gate_trade("sell")}>
           <Text style={styles.trade_label}>Sell</Text>
         </Pressable>
       </View>
+
+      <TradeSheet
+        visible={trade_kind !== null}
+        player={player}
+        current_price={current_price}
+        initial_kind={trade_kind ?? "buy"}
+        on_close={() => set_trade_kind(null)}
+        on_done={() => set_trade_version(v => v + 1)}
+      />
     </View>
   );
 }

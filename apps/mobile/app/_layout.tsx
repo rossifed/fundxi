@@ -12,6 +12,7 @@ import { set_api_base } from '@fundxi/core/infrastructure/api_client';
 import { set_stream_base } from '@fundxi/core/infrastructure/stream_client';
 
 import { AppBackground } from '@/components/AppBackground';
+import { AuthProvider } from '@/components/AuthContext';
 import { BootstrapGate } from '@/components/BootstrapGate';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { sans } from '@/theme/tokens';
@@ -65,10 +66,12 @@ export default function RootLayout() {
           <StatusBar style="light" />
           <AppBackground />
           <BootstrapGate>
-            <Stack screenOptions={{ contentStyle: { backgroundColor: 'transparent' } }}>
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            </Stack>
-            <OfflineBanner />
+            <AuthProvider>
+              <Stack screenOptions={{ contentStyle: { backgroundColor: 'transparent' } }}>
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              </Stack>
+              <OfflineBanner />
+            </AuthProvider>
           </BootstrapGate>
         </ThemeProvider>
       </GestureHandlerRootView>

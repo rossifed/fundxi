@@ -19,6 +19,7 @@ import {
 } from "react-native";
 import Svg, { Circle, Defs, Line, LinearGradient, Path, Stop } from "react-native-svg";
 
+import { color_for_sign, fmt_eur_m_signed, fmt_signed_pct } from "@/lib/format";
 import { mono, palette, text } from "@/theme/tokens";
 
 export interface PerfPoint {
@@ -100,12 +101,23 @@ export function PerformanceChart({
     );
 
     if (active != null) {
-      const label = format_value ? format_value(data[active], active) : data[active].v.toFixed(1);
-      const BUBBLE_W = 96;
+      // Mirror the web tooltip: value, signed % + €M vs the window open, date.
+      const p = data[active];
+      const value_label = format_value ? format_value(p, active) : p.v.toFixed(1);
+      const baseline = data[0].v;
+      const pnl_abs = p.pnl ?? p.v - baseline;
+      const pnl_pct = baseline === 0 ? 0 : (pnl_abs / baseline) * 100;
+      const BUBBLE_W = 132;
       const left = Math.max(0, Math.min(width - BUBBLE_W, ax - BUBBLE_W / 2));
       bubble = (
         <View style={[styles.bubble, { left, width: BUBBLE_W }]} pointerEvents="none">
-          <Text style={styles.bubble_text} numberOfLines={1}>{label}</Text>
+          <Text style={styles.bubble_value} numberOfLines={1}>{value_label}</Text>
+          <Text style={[styles.bubble_pct, { color: color_for_sign(pnl_abs) }]} numberOfLines={1}>
+            {fmt_signed_pct(pnl_pct, 2)}  {fmt_eur_m_signed(pnl_abs)}
+          </Text>
+          {p.label ? (
+            <Text style={styles.bubble_date} numberOfLines={1}>{p.label}</Text>
+          ) : null}
         </View>
       );
     }
@@ -137,10 +149,13 @@ const styles = StyleSheet.create({
     backgroundColor: palette.tooltipBg,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.1)",
-    borderRadius: 6,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
     alignItems: "center",
+    gap: 1,
   },
-  bubble_text: { fontFamily: mono, fontSize: 12, fontWeight: "800", color: text.primary },
+  bubble_value: { fontFamily: mono, fontSize: 13, fontWeight: "800", color: text.primary },
+  bubble_pct: { fontFamily: mono, fontSize: 11, fontWeight: "700" },
+  bubble_date: { fontSize: 10, fontWeight: "600", color: text.tertiary, marginTop: 1 },
 });

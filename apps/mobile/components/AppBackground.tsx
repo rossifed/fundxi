@@ -42,5 +42,8 @@ export function AppBackground() {
 }
 
 const styles = StyleSheet.create({
-  backdrop: { opacity: 0.07 },
+  // Web uses `screen` blend (only bright parts show) at 0.08; RN has no blend,
+  // so a flat low opacity reads as nearly invisible. Bumped so the stadium/sky
+  // actually shows. Tune this single value if it muddies the gradient.
+  backdrop: { opacity: 0.16 },
 });
