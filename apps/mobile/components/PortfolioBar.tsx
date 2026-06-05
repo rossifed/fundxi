@@ -62,18 +62,17 @@ export function PortfolioBar() {
 
   return (
     <Pressable onPress={() => router.navigate("/portfolio")} style={styles.bar}>
-      <View style={styles.group}>
+      <View style={styles.group_left}>
         <View style={[styles.dot, { backgroundColor: accent }]} />
-        <Text style={styles.label}>PORTFOLIO</Text>
-        <Text style={styles.value}>{fmt_eur_m(total_value)}</Text>
-        <Text style={[styles.return, { color: accent }]}>
+        <Text style={styles.value} numberOfLines={1}>{fmt_eur_m(total_value)}</Text>
+        <Text style={[styles.return, { color: accent }]} numberOfLines={1}>
           {return_pct >= 0 ? "+" : ""}
           {return_pct.toFixed(1)}%
         </Text>
       </View>
-      <View style={styles.group}>
+      <View style={styles.group_right}>
         <Stat label="Cash" value={fmt_eur_m(cash)} />
-        <Stat label="Hold" value={String(holdings_count)} />
+        <Stat label="Pos" value={String(holdings_count)} />
         <Stat label="P&L" value={fmt_eur_m_signed(pnl)} color={accent} />
       </View>
     </Pressable>
@@ -102,9 +101,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255,255,255,0.04)",
   },
-  group: { flexDirection: "row", alignItems: "center", gap: 10 },
+  // Left group can shrink (its total value truncates first); the right group
+  // holds priority so P&L is never clipped.
+  group_left: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1, minWidth: 0 },
+  group_right: { flexDirection: "row", alignItems: "center", gap: 12, flexShrink: 0, paddingLeft: 10 },
   dot: { width: 5, height: 5, borderRadius: 3 },
-  label: { fontSize: 10, color: text.tertiary, fontWeight: "600", letterSpacing: 0.3 },
   value: { fontFamily: mono, fontSize: 13, fontWeight: "800", color: "#fff" },
   return: { fontFamily: mono, fontSize: 12, fontWeight: "700" },
   stat: { flexDirection: "row", alignItems: "baseline", gap: 4 },

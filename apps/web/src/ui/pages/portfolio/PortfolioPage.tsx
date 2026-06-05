@@ -148,6 +148,11 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
   const total_value = totals.total_value;
   const pnl = totals.pnl;
   const return_pct = totals.return_pct;
+  // Win rate = share of open positions in profit (null when no positions).
+  const win_rate = useMemo(
+    () => (holdings.length > 0 ? (holdings.filter(h => h.pnl > 0).length / holdings.length) * 100 : null),
+    [holdings],
+  );
 
   const by_team = useMemo(() => {
     const map: Record<string, { id: string; name: string; flag: string; v: number }> = {};
@@ -303,7 +308,7 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       {/* KPI row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 12 }}>
         <KpiCard
           label="Total Value"
           value={fmt_eur_m(total_value)}
@@ -329,6 +334,11 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
           title="P&L as a percentage of what you invested (P&L / Invested). Profit on your positions vs their cost — not the same as the Portfolio value chart, which tracks total value (incl. cash) over time."
         />
         <KpiCard label="Trades" value={String(trades.length)} title="Total number of trades executed" />
+        <KpiCard
+          label="Win rate"
+          value={win_rate == null ? "—" : `${win_rate.toFixed(0)}%`}
+          title="Share of open positions currently in profit (winners / positions)."
+        />
       </div>
 
       {/* 2-col layout: stats + perf + positions on the left, breakdowns

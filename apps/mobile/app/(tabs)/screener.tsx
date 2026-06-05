@@ -354,7 +354,7 @@ function ScreenerRow({
 }) {
   const team = teams_api.get(e.team_id);
   return (
-    <Pressable style={styles.row} onPress={on_open} accessibilityRole="button">
+    <Pressable style={({ pressed }) => [styles.row, pressed && styles.row_pressed]} onPress={on_open} accessibilityRole="button">
       <View style={styles.row_top}>
         <Pressable onPress={on_toggle_watch} hitSlop={8}>
           <Text style={[styles.star, watched && styles.star_on]}>{watched ? "★" : "☆"}</Text>
@@ -395,6 +395,8 @@ function ScreenerRow({
         </View>
       </View>
 
+      {/* Hairline separates the player's identity from its stats inside the card */}
+      <View style={styles.row_divider} />
       {/* Tab-specific stat strip (horizontal scroll keeps every column present) */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.stat_strip}>
         {TAB_COLS[tab].map(c => (
@@ -600,11 +602,16 @@ const styles = StyleSheet.create({
   count: { fontSize: 11, color: text.tertiary, paddingHorizontal: 4 },
 
   row: {
-    paddingVertical: 12,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.07)",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
     gap: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.025)",
   },
+  row_pressed: { backgroundColor: "rgba(255,255,255,0.06)" },
+  row_divider: { height: 1, backgroundColor: "rgba(255,255,255,0.05)" },
   row_top: { flexDirection: "row", alignItems: "center", gap: 10 },
   star: { fontSize: 16, color: text.faint, lineHeight: 18 },
   star_on: { color: "#fff" },
@@ -636,7 +643,7 @@ const styles = StyleSheet.create({
   price_col: { alignItems: "flex-end", minWidth: 78 },
   price: { fontFamily: mono, fontSize: 13, fontWeight: "700", color: "#fff" },
 
-  stat_strip: { flexDirection: "row", gap: 14, paddingLeft: 46, alignItems: "center" },
+  stat_strip: { flexDirection: "row", gap: 16, paddingTop: 2, alignItems: "center" },
   stat_cell: { minWidth: 38 },
   spark_cell: { justifyContent: "center" },
   stat_label: {

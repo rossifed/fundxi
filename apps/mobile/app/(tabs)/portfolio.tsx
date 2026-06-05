@@ -29,13 +29,21 @@ import { color_for_sign, fmt_eur_m, fmt_eur_m_signed, fmt_shares, fmt_signed_pct
 import { mono, palette, position_color, text } from "@/theme/tokens";
 
 type PositionsTab = "positions" | "trades";
-type AnalyticsTab = "exposure" | "winloss" | "team" | "position" | "age";
+// Three analytics tabs (33% each → labels fit, nothing truncated): Exposure
+// (positioning) and Win/Loss (outcome) stay distinct — they aren't the same
+// concept — while the three breakdowns group under Allocation. "Role" (player
+// position FW/MF/DF/GK) is named so it isn't confused with portfolio positions.
+type AnalyticsTab = "exposure" | "winloss" | "allocation";
+type AllocTab = "team" | "role" | "age";
 
 const ANALYTICS_TABS: { k: AnalyticsTab; label: string }[] = [
   { k: "exposure", label: "Exposure" },
-  { k: "winloss", label: "Win / Loss" },
+  { k: "winloss", label: "Win/Loss" },
+  { k: "allocation", label: "Allocation" },
+];
+const ALLOC_TABS: { k: AllocTab; label: string }[] = [
   { k: "team", label: "Team" },
-  { k: "position", label: "Position" },
+  { k: "role", label: "Role" },
   { k: "age", label: "Age" },
 ];
 
@@ -54,6 +62,7 @@ export default function PortfolioScreen() {
   // Analytics is a single tabbed block (one chart at a time) under the main
   // KPI → chart → positions/trades flow — compact, no deep scroll.
   const [analytics_tab, set_analytics_tab] = useState<AnalyticsTab>("exposure");
+  const [alloc_tab, set_alloc_tab] = useState<AllocTab>("team");
   const [data_version, set_data_version] = useState(0);
 
   // /api/portfolio is auth-gated and mobile has no auth yet (401) — swallow
@@ -76,6 +85,11 @@ export default function PortfolioScreen() {
   const trades = useMemo(() => portfolio_api.list_trades(), [data_version]);
   const totals = useMemo(() => portfolio_api.get_totals(), [data_version]);
   const total_value = totals.total_value;
+  // Win rate = share of open positions in profit (null when no positions).
+  const win_rate = useMemo(
+    () => (holdings.length > 0 ? (holdings.filter(h => h.pnl > 0).length / holdings.length) * 100 : null),
+    [holdings],
+  );
 
   const [perf, set_perf] = useState<PerfPoint[]>([]);
   useEffect(() => {
@@ -179,7 +193,7 @@ export default function PortfolioScreen() {
             <Kpi label="P&L" value={fmt_eur_m_signed(totals.pnl)} color={color_for_sign(totals.pnl)} />
             <Kpi label="Return" value={fmt_signed_pct(totals.return_pct, 1)} color={color_for_sign(totals.return_pct)} />
             <Kpi label="Trades" value={String(trades.length)} />
-            <View style={{ flex: 1 }} />
+            <Kpi label="Win rate" value={win_rate == null ? "—" : `${win_rate.toFixed(0)}%`} />
           </View>
         </View>
 
@@ -195,8 +209,9 @@ export default function PortfolioScreen() {
           {perf.length > 0 ? <PerformanceChart data={perf} height={200} format_value={p => fmt_eur_m(p.v)} /> : <Text style={styles.chart_empty}>No history yet</Text>}
         </View>
 
-        {/* Positions / Trades — kept in the main flow, right under the chart */}
-        <View style={styles.card}>
+        {/* Positions / Trades — standalone tab header + per-row cards (clear
+            separation, like the screener), no nested cards. */}
+        <View>
           <View style={styles.tabbar}>
             {([
               { k: "positions" as PositionsTab, label: "Positions", count: holdings.length },
@@ -230,21 +245,38 @@ export default function PortfolioScreen() {
 
         {/* Analytics — one chart at a time via tabs (no long stack/scroll) */}
         <Text style={styles.analytics_label}>Analytics</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.atab_row}>
+        {/* Two wide tabs — full labels, nothing truncated or off-screen. */}
+        <View style={styles.atab_row}>
           {ANALYTICS_TABS.map(t => {
             const on = analytics_tab === t.k;
             return (
               <Pressable key={t.k} onPress={() => set_analytics_tab(t.k)} style={[styles.atab, on && styles.atab_on]}>
-                <Text style={[styles.atab_label, on && styles.atab_label_on]}>{t.label}</Text>
+                <Text style={[styles.atab_label, on && styles.atab_label_on]} numberOfLines={1}>{t.label}</Text>
               </Pressable>
             );
           })}
-        </ScrollView>
+        </View>
+
         {analytics_tab === "exposure" && <ExposureCard total_value={total_value} />}
         {analytics_tab === "winloss" && <WinLossCard holdings={holdings} />}
-        {analytics_tab === "team" && <BreakdownCard title="By team" items={with_color(by_team)} chart="bars" />}
-        {analytics_tab === "position" && <BreakdownCard title="By position" items={with_color(by_position)} chart="pie" />}
-        {analytics_tab === "age" && <BreakdownCard title="By age" items={with_color(by_age)} chart="pie" />}
+
+        {analytics_tab === "allocation" && (
+          <>
+            <View style={styles.atab_row}>
+              {ALLOC_TABS.map(t => {
+                const on = alloc_tab === t.k;
+                return (
+                  <Pressable key={t.k} onPress={() => set_alloc_tab(t.k)} style={[styles.atab, on && styles.atab_on]}>
+                    <Text style={[styles.atab_label, on && styles.atab_label_on]} numberOfLines={1}>{t.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {alloc_tab === "team" && <BreakdownCard title="By team" items={with_color(by_team)} chart="bars" />}
+            {alloc_tab === "role" && <BreakdownCard title="By role" items={with_color(by_position)} chart="pie" />}
+            {alloc_tab === "age" && <BreakdownCard title="By age" items={with_color(by_age)} chart="pie" />}
+          </>
+        )}
       </ScrollView>
       <PlayerSheet ref={sheet_ref} />
     </View>
@@ -263,7 +295,7 @@ function PositionRow({ h, opened, on_open }: { h: HoldingDetail; opened: string;
   const team = teams_api.get(h.player.team_id);
   const is_long = h.shares > 0;
   return (
-    <Pressable style={styles.row} onPress={on_open} accessibilityRole="button">
+    <Pressable style={({ pressed }) => [styles.row, pressed && styles.row_pressed]} onPress={on_open} accessibilityRole="button">
       <View style={styles.row_top}>
         <PlayerAvatar player={h.player} size={36} />
         <View style={styles.row_identity}>
@@ -283,6 +315,7 @@ function PositionRow({ h, opened, on_open }: { h: HoldingDetail; opened: string;
           <Text style={[styles.row_pnl_pct, { color: color_for_sign(h.return_pct) }]}>{fmt_signed_pct(h.return_pct, 1)}</Text>
         </View>
       </View>
+      <View style={styles.row_divider} />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.strip}>
         <StripCell label="Opened" value={opened} />
         <StripCell label="Shares" value={fmt_shares(h.shares)} />
@@ -329,9 +362,10 @@ function TradeRow({ trade: t }: { trade: import("@fundxi/core/domain/portfolio/t
         </View>
         <View style={styles.row_pnl}>
           <Text style={styles.trade_total}>{fmt_eur_m(t.total)}</Text>
-          <Text style={styles.trade_date}>{t.date}</Text>
+          <Text style={styles.trade_date}>{fmt_short_date(t.date)}</Text>
         </View>
       </View>
+      <View style={styles.row_divider} />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.strip}>
         <StripCell label="Shares" value={fmt_shares(t.shares)} />
         <StripCell label="Price" value={`€${t.price}M`} />
@@ -465,7 +499,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function Kpi({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <View style={styles.kpi}>
-      <Text style={styles.kpi_label} numberOfLines={1}>{label}</Text>
+      <Text style={styles.kpi_label} numberOfLines={2}>{label}</Text>
       <Text style={[styles.kpi_value, color ? { color } : null]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{value}</Text>
     </View>
   );
@@ -485,23 +519,31 @@ const styles = StyleSheet.create({
   scroll: { padding: 16, gap: 16 },
 
   analytics_label: { fontSize: 11, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase", color: text.secondary, marginTop: 4 },
-  atab_row: { gap: 8, paddingVertical: 2 },
+  atab_row: { flexDirection: "row", gap: 8, paddingVertical: 2 },
   atab: {
-    paddingVertical: 7,
-    paddingHorizontal: 14,
+    flex: 1,
+    minWidth: 0,
+    alignItems: "center",
+    paddingVertical: 9,
+    paddingHorizontal: 6,
     borderRadius: 8,
     backgroundColor: "rgba(255,255,255,0.03)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
   },
   atab_on: { backgroundColor: "rgba(255,255,255,0.12)", borderColor: "rgba(255,255,255,0.22)" },
-  atab_label: { color: text.secondary, fontSize: 13, fontWeight: "700" },
+  atab_label: { color: text.secondary, fontSize: 12, fontWeight: "700" },
   atab_label_on: { color: "#fff" },
   kpi_grid: { gap: 8 },
   kpi_row: { flexDirection: "row", gap: 8 },
-  kpi: { flex: 1, backgroundColor: "rgba(255,255,255,0.025)", borderWidth: 1, borderColor: "rgba(255,255,255,0.05)", borderRadius: 10, paddingHorizontal: 9, paddingVertical: 8 },
-  kpi_label: { fontSize: 9, color: text.tertiary, letterSpacing: 0.3, textTransform: "uppercase", fontWeight: "600" },
-  kpi_value: { fontFamily: mono, fontSize: 15, fontWeight: "800", color: "#fff", marginTop: 3 },
+  // minWidth:0 is essential — without it each cell claims its content's
+  // min-width (a long value widens the cell), breaking column equality.
+  kpi: { flex: 1, minWidth: 0, backgroundColor: "rgba(255,255,255,0.025)", borderWidth: 1, borderColor: "rgba(255,255,255,0.05)", borderRadius: 10, paddingHorizontal: 9, paddingVertical: 8 },
+  kpi_ghost: { backgroundColor: "transparent", borderColor: "transparent" },
+  // Reserve two lines so labels like "Total Value" never truncate and every
+  // cell's value sits on the same baseline across the row.
+  kpi_label: { fontSize: 9, lineHeight: 12, minHeight: 24, color: text.tertiary, letterSpacing: 0.3, textTransform: "uppercase", fontWeight: "600" },
+  kpi_value: { fontFamily: mono, fontSize: 15, fontWeight: "800", color: "#fff", marginTop: 2 },
 
   card: { backgroundColor: "rgba(255,255,255,0.02)", borderWidth: 1, borderColor: "rgba(255,255,255,0.04)", borderRadius: 12, overflow: "hidden" },
   value_head: { flexDirection: "row", alignItems: "center", padding: 16, paddingBottom: 8 },
@@ -510,7 +552,7 @@ const styles = StyleSheet.create({
   value_pct: { fontFamily: mono, fontSize: 18, fontWeight: "800" },
   chart_empty: { color: text.tertiary, fontSize: 12, textAlign: "center", paddingVertical: 40 },
 
-  tabbar: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.05)" },
+  tabbar: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.08)", marginBottom: 10 },
   tabbtn: { paddingHorizontal: 18, paddingVertical: 14, borderBottomWidth: 2, borderBottomColor: "transparent" },
   tabbtn_on: { borderBottomColor: "#fff" },
   tabbtn_label: { fontSize: 13, fontWeight: "500", color: text.tertiary },
@@ -518,7 +560,17 @@ const styles = StyleSheet.create({
   tabbtn_count: { fontSize: 11, color: text.muted, fontWeight: "600" },
   list_empty: { padding: 24, textAlign: "center", color: text.muted, fontSize: 13 },
 
-  row: { paddingHorizontal: 16, paddingVertical: 12, gap: 8, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.025)" },
+  row: {
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.07)",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    gap: 8,
+  },
+  row_pressed: { backgroundColor: "rgba(255,255,255,0.06)" },
+  row_divider: { height: 1, backgroundColor: "rgba(255,255,255,0.05)" },
   row_top: { flexDirection: "row", alignItems: "center", gap: 10 },
   avatar: { borderRadius: 8, backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
   row_identity: { flex: 1, minWidth: 0 },
@@ -536,7 +588,7 @@ const styles = StyleSheet.create({
   trade_total: { fontFamily: mono, fontSize: 13, fontWeight: "700", color: "#fff" },
   trade_date: { fontSize: 11, color: text.tertiary, marginTop: 1 },
 
-  strip: { flexDirection: "row", gap: 14, paddingLeft: 46, alignItems: "center" },
+  strip: { flexDirection: "row", gap: 16, paddingTop: 2, alignItems: "center" },
   strip_cell: { minWidth: 44 },
   strip_label: { fontSize: 8, fontWeight: "700", color: text.muted, letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 2 },
   strip_value: { fontFamily: mono, fontSize: 12, fontWeight: "700", color: "#fff" },
