@@ -94,14 +94,35 @@ async def post_trade(
     user_id: int = Depends(get_current_user_id),
     session: AsyncSession = Depends(get_session),
 ) -> TradeOutcomeResponse:
-    _, _, portfolio = await _resolve_user_and_portfolio(session, user_id)
+    user_repo = SqlAlchemyUserRepository(session)
+    user = await user_repo.get_by_id(user_id)
+    if user is None:
+        raise HTTPException(status_code=401, detail="user not found")
+
     portfolio_repo = SqlAlchemyPortfolioRepository(session)
+    # Lock the portfolio row FOR UPDATE: concurrent trade requests on the
+    # same portfolio now serialize on this lock (held until commit below),
+    # so the read-modify-write on cash/holdings can't lose an update.
+    portfolio = await portfolio_repo.get_by_user_id_for_update(user.id)
+    if portfolio is None:
+        raise HTTPException(status_code=503, detail=f"no portfolio for user {user.id}")
     trade_repo = SqlAlchemyTradeRepository(session)
 
     try:
         kind = TradeKind(body.kind)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=f"invalid kind={body.kind!r}") from exc
+
+    # Authoritative execution price = latest server-side valuation tick.
+    # ``body.price`` is advisory (client display only) and is NEVER trusted
+    # for execution — otherwise a client could buy low / sell high at will.
+    prices = await SqlAlchemyLatestPriceProvider(session).get_many([body.player_id])
+    server_price = prices.get(body.player_id)
+    if server_price is None or server_price <= 0:
+        raise HTTPException(
+            status_code=409,
+            detail=f"no current price for player {body.player_id}; cannot execute trade",
+        )
 
     try:
         outcome = await execute_trade(
@@ -110,7 +131,7 @@ async def post_trade(
                 player_id=body.player_id,
                 kind=kind,
                 shares=body.shares,
-                price=body.price,
+                price=server_price,
             ),
             portfolio=portfolio,
             portfolio_repo=portfolio_repo,

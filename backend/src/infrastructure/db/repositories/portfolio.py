@@ -49,6 +49,17 @@ class SqlAlchemyPortfolioRepository:
         row = result.scalar_one_or_none()
         return _portfolio_to_domain(row) if row else None
 
+    async def get_by_user_id_for_update(self, user_id: int) -> Portfolio | None:
+        """Same as ``get_by_user_id`` but takes a row-level ``FOR UPDATE``
+        lock. The lock is held until the surrounding transaction commits,
+        so concurrent trades on the same portfolio serialize instead of
+        clobbering each other's cash/holdings (lost-update prevention)."""
+        result = await self._session.execute(
+            select(PortfolioORM).where(PortfolioORM.user_id == user_id).with_for_update()
+        )
+        row = result.scalar_one_or_none()
+        return _portfolio_to_domain(row) if row else None
+
     async def create_for_user(self, *, user_id: int, cash: float) -> Portfolio:
         orm = PortfolioORM(user_id=user_id, cash=cash)
         self._session.add(orm)

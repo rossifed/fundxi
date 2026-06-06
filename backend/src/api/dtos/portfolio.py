@@ -39,7 +39,10 @@ class TradeRequestBody(BaseModel):
     player_id: int
     kind: str  # buy | sell
     shares: float
-    price: float
+    # Advisory only (client's displayed price). The server executes at its
+    # own authoritative latest tick — this value is NOT trusted. Optional so
+    # clients may stop sending it.
+    price: float | None = None
 
 
 class TradeOutcomeResponse(BaseModel):
