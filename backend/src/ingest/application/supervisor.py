@@ -73,12 +73,22 @@ class IngestSupervisor:
 
         # Reap finished or out-of-window tasks first so the cap check
         # below sees an accurate count.
+        reaped: list[asyncio.Task[None]] = []
         for fixture_id in list(self._tasks):
             task = self._tasks[fixture_id]
             if task.done() or fixture_id not in active_now:
                 task.cancel()
-                self._tasks.pop(fixture_id)
+                reaped.append(self._tasks.pop(fixture_id))
                 log.info("ingest.supervisor.poller_stopped", fixture_id=fixture_id)
+        # Await the cancelled/finished tasks so they actually unwind AND so
+        # any exception they raised is retrieved — otherwise a poller that
+        # died (rather than cancelled cleanly) leaks its error as an
+        # unretrieved-exception warning and we never learn it crashed.
+        if reaped:
+            results = await asyncio.gather(*reaped, return_exceptions=True)
+            for res in results:
+                if isinstance(res, BaseException) and not isinstance(res, asyncio.CancelledError):
+                    log.error("ingest.supervisor.poller_crashed", error=str(res))
 
         # Spawn missing pollers up to the concurrency cap.
         for fixture_id in active_now - self._tasks.keys():
@@ -94,7 +104,12 @@ class IngestSupervisor:
             log.info("ingest.supervisor.poller_spawned", fixture_id=fixture_id)
 
     async def _cancel_all(self) -> None:
+        tasks = list(self._tasks.values())
         for fixture_id, task in list(self._tasks.items()):
             task.cancel()
             log.info("ingest.supervisor.poller_cancelled_on_shutdown", fixture_id=fixture_id)
         self._tasks.clear()
+        # Await the cancellations so the pollers unwind and their exceptions
+        # are retrieved before the supervisor task itself finishes.
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)

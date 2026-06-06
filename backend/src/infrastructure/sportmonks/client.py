@@ -12,9 +12,22 @@ from typing import Any, Protocol
 
 import httpx
 import structlog
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 log = structlog.get_logger(__name__)
+
+
+def _is_retryable(exc: BaseException) -> bool:
+    """Only retry transient failures. A 4xx other than 429 (e.g. 401/403/422)
+    is a permanent error that will never recover — retrying it just burns the
+    full backoff budget before surfacing. Retry network/transport errors and
+    429 + 5xx only."""
+    if isinstance(exc, httpx.TransportError):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        code = exc.response.status_code
+        return code == 429 or 500 <= code < 600
+    return False
 
 
 class SportmonksClient(Protocol):
@@ -45,7 +58,7 @@ class HttpxSportmonksClient:
         await self.aclose()
 
     @retry(
-        retry=retry_if_exception_type((httpx.HTTPStatusError, httpx.TransportError)),
+        retry=retry_if_exception(_is_retryable),
         wait=wait_exponential(multiplier=1, min=1, max=20),
         stop=stop_after_attempt(5),
         reraise=True,
