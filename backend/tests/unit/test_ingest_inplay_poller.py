@@ -66,6 +66,9 @@ def _fake_session_factory(write_log: list[tuple[str, Any]]) -> Any:
         result_mock = MagicMock()
         result_mock.scalar_one_or_none = MagicMock(return_value=None)
         result_mock.scalar = MagicMock(return_value=None)
+        # Latest-price lookup (skip-unchanged guard in _price_players) reads
+        # result.all(); no prior ticks in the fake → every price is "new".
+        result_mock.all = MagicMock(return_value=[])
         session = MagicMock()
         session.execute = AsyncMock(return_value=result_mock)
         session.commit = AsyncMock(side_effect=lambda: write_log.append(("commit", None)))

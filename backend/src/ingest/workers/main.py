@@ -22,7 +22,6 @@ from src.infrastructure.messaging.nats_publisher import NatsPublisher
 from src.infrastructure.sportmonks.client import HttpxSportmonksClient
 from src.ingest.application.supervisor import IngestSupervisor
 from src.ingest.domain.settings import IngestionSettings
-from src.ingest.infrastructure.live_pricing_poller import LivePricingPoller
 from src.ingest.infrastructure.news_poller import NewsPoller
 from src.ingest.infrastructure.reference_refresher import ReferenceRefresher
 from src.ingest.infrastructure.sportmonks_id_maps import load_sportmonks_id_maps
@@ -98,11 +97,12 @@ async def run() -> None:
             session_factory=SessionLocal,
             team_id_by_sportmonks=id_maps.team_id_by_sportmonks,
         )
-        pricing_poller = LivePricingPoller(
-            poll_seconds=ingest_settings.pricing_poll_seconds,
-            publisher=publisher,
-            session_factory=SessionLocal,
-        )
+        # NOTE: price ticks are produced by the per-fixture SportmonksInplayPoller
+        # (Model A kernel) — the single source of price truth, aligned with the
+        # valuation spec and the replay/simulator. The legacy events-v0
+        # LivePricingPoller is intentionally NOT wired here: running both wrote
+        # two divergent price curves to valuation.player_price_tick for the same
+        # players. See context/FUNDXI-VALUATION-MODEL.md.
         news_poller = NewsPoller(
             season_id=app_settings.active_season_id,
             poll_seconds=ingest_settings.news_poll_seconds,
@@ -134,7 +134,6 @@ async def run() -> None:
         tasks = [
             asyncio.create_task(supervisor.run(), name="ingest-supervisor"),
             asyncio.create_task(standings_poller.run(), name="ingest-standings"),
-            asyncio.create_task(pricing_poller.run(), name="ingest-pricing"),
             asyncio.create_task(news_poller.run(), name="ingest-news"),
             asyncio.create_task(reference_refresher.run(), name="ingest-reference"),
         ]

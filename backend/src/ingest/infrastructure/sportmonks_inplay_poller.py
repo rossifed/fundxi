@@ -36,6 +36,7 @@ from src.infrastructure.db.repositories.lineup import SqlAlchemyLineupRepository
 from src.infrastructure.db.repositories.match_comment import SqlAlchemyMatchCommentRepository
 from src.infrastructure.db.repositories.match_event import SqlAlchemyMatchEventRepository
 from src.infrastructure.db.repositories.player_match_stat import SqlAlchemyPlayerMatchStatRepository
+from src.infrastructure.db.repositories.portfolio_snapshot_adapters import SqlAlchemyLatestPriceProvider
 from src.infrastructure.db.repositories.raw_sportmonks_event import SqlAlchemyRawSportmonksEventRepository
 from src.infrastructure.db.repositories.team_match_stat import SqlAlchemyTeamMatchStatRepository
 from src.infrastructure.sportmonks.client import SportmonksClient, SportmonksError
@@ -138,7 +139,7 @@ class SportmonksInplayPoller:
         player_stats_count, curr_stats, prev_by_player = await self._project_player_match_stats(
             session=session, lineups_payload=lineups_payload
         )
-        price_ticks_count = await self._price_players(
+        price_notifs = await self._price_players(
             session=session, curr_stats=curr_stats, prev_by_player=prev_by_player
         )
         team_stats_count = await self._project_team_match_stats(
@@ -157,8 +158,11 @@ class SportmonksInplayPoller:
             notifications.append(self._notif("lineup", {"fixture_id": fix_id, "count": lineups_count}))
         if player_stats_count > 0:
             notifications.append(self._notif("player_match_stat", {"fixture_id": fix_id, "count": player_stats_count}))
-        if price_ticks_count > 0:
-            notifications.append(self._notif("player_price_tick", {"fixture_id": fix_id, "count": price_ticks_count}))
+        # Price ticks are notified PER PLAYER (subject keyed by player_id) so a
+        # PlayerSheet subscribed to ``player:<player_id>`` actually receives
+        # them; the global ``prices`` feed fans out too. (A fixture-keyed
+        # subject would only reach ``player:<fixture_id>`` — i.e. nobody.)
+        notifications.extend(price_notifs)
         if team_stats_count > 0:
             notifications.append(self._notif("team_match_stat", {"fixture_id": fix_id, "count": team_stats_count}))
 
@@ -172,7 +176,7 @@ class SportmonksInplayPoller:
             comments=comments_count,
             lineups=lineups_count,
             player_stats=player_stats_count,
-            price_ticks=price_ticks_count,
+            price_ticks=len(price_notifs),
             team_stats=team_stats_count,
         )
 
@@ -297,15 +301,25 @@ class SportmonksInplayPoller:
         session: AsyncSession,
         curr_stats: list[PlayerMatchStat],
         prev_by_player: dict[int, PlayerMatchStat],
-    ) -> int:
-        """Run the canonical kernel for every player priced this poll and
-        append one ``valuation.player_price_tick`` row. The kernel is the
-        SAME pure function the spec defines and the replay uses — live
-        and replay cannot diverge. Pressure modulation is left None for
-        now (trends ingestion is a separate step); the kernel treats
-        None as a no-op."""
+    ) -> list[tuple[str, bytes]]:
+        """Run the canonical kernel for every player priced this poll. The
+        kernel is the SAME pure function the spec defines and the replay
+        uses — live and replay cannot diverge. Pressure modulation is left
+        None for now (trends ingestion is a separate step); the kernel
+        treats None as a no-op.
+
+        A ``valuation.player_price_tick`` row + a per-player notification are
+        produced ONLY when the price actually moved since the player's last
+        tick. Quiet polls (every ~10-15s for ~2h) must not flood the tick
+        table nor flash an unchanged price in the UI.
+
+        Returns the ``fundxi.player_price_tick.<player_id>`` notifications for
+        the players whose price moved."""
+        if not curr_stats:
+            return []
         ts = datetime.now(UTC)
-        written = 0
+        last_prices = await SqlAlchemyLatestPriceProvider(session).get_many([c.player_id for c in curr_stats])
+        notifications: list[tuple[str, bytes]] = []
         for curr in curr_stats:
             base_value = synthesize_valuation(curr.player_id, as_of=ts).base_value
             carried = await self._carried_in_price(session, curr.player_id)
@@ -317,22 +331,40 @@ class SportmonksInplayPoller:
                 is_live=True,
             )
             result = kernel_price(base_value, tournament_delta, snapshot)
-            stmt = (
+            new_price = round(result.price, 2)
+            last = last_prices.get(curr.player_id)
+            if last is not None and round(last, 2) == new_price:
+                # Unchanged since the last tick — no insert, no notification.
+                continue
+            change_since_open = round(result.live_delta * 100.0, 2)
+            await session.execute(
                 pg_insert(PlayerPriceTickORM)
                 .values(
                     player_id=curr.player_id,
                     ts=ts,
                     fixture_id=self.fixture_internal_id,
-                    current_price=result.price,
+                    current_price=new_price,
                     performance_rating=round(curr.rating, 2) if curr.rating is not None else 6.0,
-                    change_since_open=round(result.live_delta * 100.0, 2),
+                    change_since_open=change_since_open,
                     source="engine",
                 )
                 .on_conflict_do_nothing(index_elements=["player_id", "ts"])
             )
-            await session.execute(stmt)
-            written += 1
-        return written
+            notifications.append(
+                (
+                    f"fundxi.player_price_tick.{curr.player_id}",
+                    json.dumps(
+                        {
+                            "kind": "player_price_tick",
+                            "player_id": curr.player_id,
+                            "fixture_id": self.fixture_internal_id,
+                            "current_price": new_price,
+                            "change_since_open": change_since_open,
+                        }
+                    ).encode(),
+                )
+            )
+        return notifications
 
     async def _project_team_match_stats(self, *, session: AsyncSession, stats_payload: list[dict[str, Any]]) -> int:
         if not stats_payload:
