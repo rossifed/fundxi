@@ -67,7 +67,9 @@ def _set_session_cookie(response: Response, user_id: int) -> None:
         max_age=60 * 60 * 24 * 30,
         httponly=True,
         samesite="lax",
-        secure=False,  # local dev; flip to True in prod (HTTPS)
+        # Secure (HTTPS-only) everywhere except local dev, so the session
+        # JWT never travels in cleartext in a real deployment.
+        secure=not get_settings().is_dev,
         path="/",
     )
 

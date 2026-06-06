@@ -3,10 +3,18 @@ from functools import lru_cache
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Sentinel default for the JWT secret. Only acceptable when APP_ENV=dev.
+# get_settings() refuses to boot with this value in any other environment.
+DEV_JWT_SECRET = "dev-only-change-me-in-production"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
+    # Deployment environment. ``dev`` enables local conveniences (default
+    # JWT secret, non-secure cookie); anything else is treated as a real
+    # deployment and tightens those (see get_settings / auth cookie).
+    app_env: str = Field(default="dev")
     database_url: str = Field(default="postgresql+asyncpg://fundxi:fundxi@localhost:5432/fundxi")
     sportmonks_api_token: str = Field(default="")
     sportmonks_base_url: str = Field(default="https://api.sportmonks.com/v3/football")
@@ -16,13 +24,24 @@ class Settings(BaseSettings):
     # Cash (in €M) granted to a brand-new user portfolio. No default — must be
     # set explicitly via INITIAL_CASH env var so we don't ship a magic value.
     initial_cash: float = Field(default=0.0)
-    # JWT signing secret. MUST be set in production via the ``JWT_SECRET``
-    # env var (or fundxi will refuse to issue tokens). The default below
-    # is only for local dev convenience.
-    jwt_secret: str = Field(default="dev-only-change-me-in-production")
+    # JWT signing secret. MUST be set via the ``JWT_SECRET`` env var outside
+    # dev — get_settings() fails fast if the default is left in place.
+    jwt_secret: str = Field(default=DEV_JWT_SECRET)
     log_level: str = Field(default="INFO")
+
+    @property
+    def is_dev(self) -> bool:
+        return self.app_env.lower() == "dev"
 
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    if not settings.is_dev and settings.jwt_secret == DEV_JWT_SECRET:
+        # Fail-fast: a real deployment signing tokens with the public,
+        # source-controlled dev secret lets anyone forge a session for any
+        # user. Refuse to boot instead of silently using it.
+        raise RuntimeError(
+            "JWT_SECRET must be set to a non-default value when APP_ENV is not 'dev'"
+        )
+    return settings

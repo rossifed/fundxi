@@ -20,7 +20,7 @@ from src.infrastructure.db.models.user import UserORM
 from src.infrastructure.db.repositories.league import SqlAlchemyLeagueRepository
 from src.infrastructure.db.repositories.portfolio import SqlAlchemyPortfolioRepository
 from src.infrastructure.db.repositories.user import SqlAlchemyUserRepository
-from src.infrastructure.security.passwords import hash_password, verify_password
+from src.infrastructure.security.passwords import dummy_verify, hash_password, verify_password
 
 
 class EmailAlreadyExistsError(Exception):
@@ -105,6 +105,9 @@ async def login_user(
     row = await session.execute(select(UserORM).where(UserORM.email == email.value))
     user = row.scalar_one_or_none()
     if user is None or user.password_hash is None:
+        # Spend the same bcrypt time as a real verify so the response timing
+        # doesn't reveal whether the email is registered (no enumeration).
+        dummy_verify(password.value)
         raise InvalidCredentialsError()
     if not verify_password(password.value, user.password_hash):
         raise InvalidCredentialsError()
