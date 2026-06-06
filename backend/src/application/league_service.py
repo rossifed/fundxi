@@ -122,7 +122,11 @@ async def list_user_leagues(session: AsyncSession, *, user_id: int) -> list[Leag
                 name=league.name,
                 kind=league.kind.value,
                 is_public=league.is_public,
-                invite_code=league.invite_code,
+                # Expose the private invite code to the league CREATOR only —
+                # not to every member — so codes aren't harvestable by anyone
+                # who joined. Reverse this (drop the guard) if leagues should
+                # grow virally via any member sharing the code.
+                invite_code=league.invite_code if league.created_by == user_id else None,
                 member_count=len(board),
                 my_rank=me.rank if me else 0,
                 my_return_pct=me.return_pct if me else 0.0,
@@ -149,7 +153,8 @@ async def _detail(session: AsyncSession, *, league: League, user_id: int) -> Lea
         name=league.name,
         kind=league.kind.value,
         is_public=league.is_public,
-        invite_code=league.invite_code,
+        # Invite code visible to the creator only (see list_user_leagues).
+        invite_code=league.invite_code if league.created_by == user_id else None,
         member_count=len(board),
         leaderboard=board,
     )
