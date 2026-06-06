@@ -45,8 +45,11 @@ export function compute_portfolio_totals(
   let market_value = 0;
   let total_cost = 0;
   for (const h of holdings) {
-    const price = prices_by_player_id.get(h.player_id);
-    if (price === undefined) continue;
+    // Missing price → mark the holding at its cost basis (flat, P&L 0 for
+    // this line) rather than dropping it. This keeps the totals card, the
+    // per-holding list (get_my_holdings_with_metrics) and the backend
+    // snapshot/history service in agreement — see COHERENCE-INVARIANT.
+    const price = prices_by_player_id.get(h.player_id) ?? h.average_buy_price;
     market_value += price * h.shares;
     total_cost += h.average_buy_price * h.shares;
   }

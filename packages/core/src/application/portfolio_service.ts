@@ -35,7 +35,11 @@ export const portfolio_service = {
       .map(h => {
         const player = players_repository.find_by_id(h.player_id);
         if (!player) return null;
-        const price = valuations_repository.find_by_player_id(h.player_id)?.current_price ?? 0;
+        // Missing price → mark at cost basis (flat), matching
+        // compute_portfolio_totals and the backend snapshot service so the
+        // totals card and this list never disagree (COHERENCE-INVARIANT).
+        const price =
+          valuations_repository.find_by_player_id(h.player_id)?.current_price ?? h.average_buy_price;
         const metrics = compute_holding_metrics(h, price);
         return { ...metrics, player };
       })

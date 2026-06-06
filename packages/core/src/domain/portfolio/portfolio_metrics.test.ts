@@ -48,11 +48,16 @@ describe("compute_portfolio_totals", () => {
     expect(totals.return_pct).toBeCloseTo((14 / 36) * 100, 6);
   });
 
-  it("ignores holdings with no price quote available", () => {
+  it("marks holdings with no price quote at cost basis (flat, P&L 0) — not dropped", () => {
+    // Coherence: a missing price must be handled identically here and in
+    // get_my_holdings_with_metrics + the backend snapshot service — all mark
+    // at cost basis (flat) rather than one dropping and another zeroing it.
     const prices = new Map([[1, 10]]); // player 2 missing
     const totals = compute_portfolio_totals([h(1, 5, 5), h(2, 3, 3)], prices, 0);
-    expect(totals.market_value).toBe(50);
-    expect(totals.total_cost).toBe(25); // only h(1) counted
+    // h1: 5×10 mkt / 5×5 cost. h2 (no price): marked at cost 3 → 3×3 both.
+    expect(totals.market_value).toBe(50 + 9);
+    expect(totals.total_cost).toBe(25 + 9);
+    expect(totals.pnl).toBe(25); // only h1 contributes P&L; h2 is flat
   });
 
   it("empty portfolio: total_value = cash, no division by zero", () => {

@@ -12,7 +12,10 @@ export const match_service = {
   get_resolved_lineups(match: Match): { home: MatchPlayer[]; away: MatchPlayer[] } {
     return {
       home: resolve_lineup(match.home_xi),
-      away: match.away_xi,
+      // Sanitize the away side symmetrically: it arrives via the same
+      // provider/BFF path as home, so if it ever carries number placeholders
+      // they'd render as garbage. Both sides go through resolve_lineup.
+      away: resolve_lineup(match.away_xi),
     };
   },
 };

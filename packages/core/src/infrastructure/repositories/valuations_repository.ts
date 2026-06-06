@@ -82,6 +82,9 @@ export function spark_market_index(length = SPARK_LENGTH): number[] {
   const sums = new Array<number>(length).fill(0);
   let counted = 0;
   for (const v of VALUATIONS) {
+    // Normalizing by base_value — skip non-positive bases, which would
+    // inject Infinity/NaN into every index point and poison the series.
+    if (v.base_value <= 0) continue;
     const series = SPARKLINES_BY_PLAYER_ID.get(v.player_id);
     const points = series && series.length === length ? series : Array(length).fill(v.base_value);
     for (let i = 0; i < length; i++) sums[i] += points[i] / v.base_value;
@@ -108,7 +111,15 @@ const _price_history_cache = new Map<number, Promise<PricePoint[]>>();
 export function fetch_price_history(player_id: number): Promise<PricePoint[]> {
   let p = _price_history_cache.get(player_id);
   if (!p) {
-    p = api_get<PriceHistoryDTO>(`/api/players/${player_id}/price-history`).then(d => d.points);
+    p = api_get<PriceHistoryDTO>(`/api/players/${player_id}/price-history`)
+      .then(d => d.points)
+      .catch((err: unknown) => {
+        // Never cache a rejection: a transient network/500 error would
+        // otherwise be re-thrown forever with no way to retry. Drop it so
+        // the next call re-issues the request.
+        _price_history_cache.delete(player_id);
+        throw err;
+      });
     _price_history_cache.set(player_id, p);
   }
   return p;
