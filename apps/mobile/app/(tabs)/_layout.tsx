@@ -49,7 +49,7 @@ function AuthControl() {
 // Custom header: screen title row + the always-on PortfolioBar underneath,
 // mirroring the web shell (Header + sticky PortfolioBar). We own the top
 // safe-area inset since we replace the native header.
-function TabHeader({ title }: { title: string }) {
+function TabHeader({ title, portfolio_bar = true }: { title: string; portfolio_bar?: boolean }) {
   const insets = useSafeAreaInsets();
   // Transparent so the root ambient gradient (brightest top-right) shows
   // behind the title + portfolio bar — the premium glow the web has.
@@ -59,7 +59,7 @@ function TabHeader({ title }: { title: string }) {
         <Text style={header_styles.title}>{title}</Text>
         <AuthControl />
       </View>
-      <PortfolioBar />
+      {portfolio_bar && <PortfolioBar />}
     </View>
   );
 }
@@ -118,6 +118,12 @@ export default function TabLayout() {
             tabBarIcon: ({ color }) => (
               <Text style={{ color, fontSize: 18 }}>{tab.icon}</Text>
             ),
+            // The PortfolioBar strip is the single, consistent portfolio summary
+            // across every tab — except Portfolio, whose own page hero already
+            // shows the totals, so the strip there would just duplicate them.
+            ...(tab.name === "portfolio"
+              ? { header: () => <TabHeader title={tab.title} portfolio_bar={false} /> }
+              : {}),
           }}
         />
       ))}

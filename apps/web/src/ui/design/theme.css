@@ -47,6 +47,16 @@
   /* Accents (hero title, decorative). */
   --color-accent: #9CA0DD;
   --color-brand-green: #48ff43;
+  /* Brand wordmark blue — fundXI logo ONLY (not UI elements). */
+  --color-brand-blue: #5058f8;
+  /* Translucent brand blue — active-state surfaces (selected tabs, etc.). */
+  --color-brand-blue-soft: rgba(80, 88, 248, 0.16);
+
+  /* Interactive accent blue — selected/primary UI states (active chips,
+     primary buttons, active filter). Clean azure, distinct from the
+     logo-only --color-brand-blue (indigo). --soft is the active-surface fill. */
+  --color-accent-blue: #2F6BFF;
+  --color-accent-blue-soft: rgba(47, 107, 255, 0.18);
 
   /* Surfaces. */
   --color-bg: #020406;

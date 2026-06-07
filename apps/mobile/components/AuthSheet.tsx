@@ -21,6 +21,7 @@ import {
 
 import { ApiError } from "@fundxi/core/infrastructure/api_client";
 
+import { Logo } from "@/components/Logo";
 import { palette, text } from "@/theme/tokens";
 
 type Mode = "login" | "register";
@@ -73,6 +74,7 @@ export function AuthSheet({ visible, initial_mode, on_close, login, register }: 
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.kav}>
           {/* Stop propagation so taps inside the card don't dismiss. */}
           <Pressable style={styles.card} onPress={() => {}}>
+            <Logo size={30} style={styles.logo} />
             <Text style={styles.title}>{mode === "login" ? "Sign in" : "Create account"}</Text>
             <Text style={styles.subtitle}>
               {mode === "login" ? "Welcome back to fundXI." : "Start trading World Cup players."}
@@ -160,6 +162,7 @@ const styles = StyleSheet.create({
     padding: 22,
     gap: 12,
   },
+  logo: { alignSelf: "center", marginBottom: 12 },
   title: { color: "#fff", fontSize: 22, fontWeight: "800" },
   subtitle: { color: text.secondary, fontSize: 13, marginTop: -4, marginBottom: 4 },
   input: {

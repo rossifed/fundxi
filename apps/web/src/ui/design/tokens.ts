@@ -29,6 +29,10 @@ export const color = {
   /* Accents */
   accent: "var(--color-accent)",
   brandGreen: "var(--color-brand-green)",
+  brandBlue: "var(--color-brand-blue)",
+  brandBlueSoft: "var(--color-brand-blue-soft)",
+  accentBlue: "var(--color-accent-blue)",
+  accentBlueSoft: "var(--color-accent-blue-soft)",
   /* Surfaces */
   bg: "var(--color-bg)",
   tooltipBg: "var(--color-tooltip-bg)",

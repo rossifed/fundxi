@@ -5,6 +5,8 @@ import { init_public_repositories } from "@fundxi/core/infrastructure/repositori
 import { get_api_base } from "@fundxi/core/infrastructure/api_client";
 import { themes } from "@fundxi/core/design/palette";
 
+import { Logo } from "@/components/Logo";
+
 const palette = themes.dark;
 
 type State = "loading" | "ready" | "error";
@@ -42,7 +44,7 @@ export function BootstrapGate({ children }: Props) {
     <View style={styles.fill}>
       {state === "loading" && (
         <>
-          <Text style={styles.brand}>fundXI</Text>
+          <Logo size={46} tagline />
           <ActivityIndicator color="#fff" />
           <Text style={styles.muted}>loading market data…</Text>
         </>
@@ -72,12 +74,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 24,
     gap: 14,
-  },
-  brand: {
-    color: "#fff",
-    fontSize: 32,
-    fontWeight: "800",
-    letterSpacing: -0.5,
   },
   muted: {
     color: "rgba(255,255,255,0.6)",

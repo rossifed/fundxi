@@ -7,6 +7,7 @@ import { POSITION_ABBR, POSITION_LABEL } from "@fundxi/core/domain/player/player
 import type { Player } from "@fundxi/core/domain/player/player";
 import type { HoldingMetrics } from "@fundxi/core/domain/portfolio/portfolio_metrics";
 import type { Trade } from "@fundxi/core/domain/portfolio/trade";
+import { chart_category_ramp } from "@fundxi/core/design/palette";
 import { ClosePositionsDialog } from "@/ui/components/ClosePositionsDialog";
 import { PlayerChip } from "@/ui/components/PlayerChip";
 import { PerformanceChart } from "@/ui/components/PerformanceChart";
@@ -88,20 +89,9 @@ const POSITIONS_GRID =
   "34px minmax(0,2.4fr) minmax(0,0.75fr) minmax(0,0.95fr) minmax(0,0.7fr) " +
   "minmax(0,0.95fr) minmax(0,0.95fr) minmax(0,0.95fr) minmax(0,1.15fr)";
 
-// Palette built around the PerformanceChart accent ``var(--color-chart-primary)``. Same
-// hue family, slightly brighter so the fill-opacity on the Pie cells
-// (~0.55) reveals the gradient background through the slices —
-// matches the semi-transparent feel of the perf chart's area fill.
-const CHART_PALETTE = [
-  "#7C92E5",
-  "#5E7AD4",
-  "#4561C2",
-  "#3F5BBE",
-  "#2D4AA5",
-  "#1F3D8B",
-  "var(--color-chart-primary)",
-  "#15326D",
-];
+// Allocation breakdown ramp — shared brand-blue categorical token
+// (packages/core/src/design/palette.ts), aligned with the logo's blue.
+const CHART_PALETTE = chart_category_ramp;
 
 /** Style for a Positions bulk-action bar button. ``ghost`` = the
  * lower-emphasis outline variant (used for the destructive "Close
@@ -1040,7 +1030,7 @@ function WinLossCard({ holdings }: { holdings: HoldingMetrics[] }) {
             <div
               style={{
                 width: `${win_pct}%`,
-                background: "color-mix(in srgb, var(--color-positive) 22%, transparent)",
+                background: "var(--color-positive)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -1066,7 +1056,7 @@ function WinLossCard({ holdings }: { holdings: HoldingMetrics[] }) {
             <div
               style={{
                 width: `${loss_pct}%`,
-                background: "color-mix(in srgb, var(--color-negative) 22%, transparent)",
+                background: "var(--color-negative)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -1140,7 +1130,7 @@ function ExposureView({ total_value }: { total_value: number }) {
         <div
           style={{
             width: long_pct + "%",
-            background: "color-mix(in srgb, var(--color-positive) 22%, transparent)",
+            background: "var(--color-positive)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -1151,7 +1141,7 @@ function ExposureView({ total_value }: { total_value: number }) {
         <div
           style={{
             width: short_pct + "%",
-            background: "color-mix(in srgb, var(--color-negative) 22%, transparent)",
+            background: "var(--color-negative)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",

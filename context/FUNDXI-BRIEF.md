@@ -38,6 +38,18 @@ Convert to a proper Next.js (or Vite React) app with:
 3. **White/Grey** — EVERYTHING else. Text, labels, badges, tags, borders, icons, navigation
 
 **NO other colors anywhere.** No blue, no violet, no yellow, no orange on any UI element.
+
+> **Brand blue `#5058f8` — two sanctioned uses only.** (1) The "XI" of the
+> fundXI logo wordmark (loading gate, auth sheet, Home hero, splash/icon).
+> (2) The **categorical** ramp for portfolio allocation charts (by team / role /
+> age) — tints/shades of the brand blue, exposed as the shared
+> `chart_category_ramp` token. Allocation is neutral categorical data, so blue
+> keeps it distinct from performance; **green/red stay reserved for P&L**
+> (gains/losses, Long/Short, Win/Loss) and must use the SAME `positive` /
+> `negative` tokens as the numbers — no separate chart greens/reds, no opacity
+> variants that drift from the figure colours. Blue is never a button, value,
+> badge or border colour. Always via tokens (`brandBlue` / `chart_category_ramp`
+> / `--color-brand-blue`), never a raw hex in a component. Added 2026-06-06.
 - Position badges (FWD, MID, DEF, GK): all `rgba(255,255,255,.45)` — same grey
 - Rating: white, not gold
 - LIVE badge: `rgba(255,255,255,.5)` — grey, not red
@@ -193,6 +205,6 @@ fundxi-app/
 - This is a PROTOTYPE — all data is mock/hardcoded
 - Mobile-first, max-width 430px
 - No backend, no API calls, no auth
-- The design has been iterated extensively — DO NOT change the color scheme or add new colors
+- The design has been iterated extensively — DO NOT change the color scheme or add new colors (the only sanctioned addition is the brand wordmark blue `#5058f8`, logo-only — see "Colors — STRICT RULES")
 - Keep the same fonts: Inter + JetBrains Mono
 - The ambient cyan glow on the background is important — keep it

@@ -27,6 +27,18 @@ export type Palette = {
   // Accents (hero, decorative).
   accent: string;
   brandGreen: string;
+  // Brand wordmark blue — reserved for the fundXI logo ONLY (not UI
+  // elements). Sampled from the official logo. See context/FUNDXI-BRIEF.md.
+  brandBlue: string;
+  // Translucent brand blue — active-state surfaces (selected tabs, etc.).
+  brandBlueSoft: string;
+  // Interactive accent blue — selected/primary UI states (active chips,
+  // primary buttons, active filter). A clean azure, distinct from the
+  // logo-only `brandBlue` (indigo) and from `accent` (lavender). `Soft` is
+  // the translucent fill for active surfaces. The only blue allowed on
+  // interactive UI; do NOT reuse `brandBlue` for that.
+  accentBlue: string;
+  accentBlueSoft: string;
   // Surfaces.
   bg: string;
   tooltipBg: string;
@@ -49,6 +61,10 @@ const dark: Palette = {
   chartNegative: "#F41258",
   accent: "#9CA0DD",
   brandGreen: "#48ff43",
+  brandBlue: "#5058f8",
+  brandBlueSoft: "rgba(80, 88, 248, 0.16)",
+  accentBlue: "#2F6BFF",
+  accentBlueSoft: "rgba(47, 107, 255, 0.18)",
   bg: "#020406",
   tooltipBg: "#0d0d0f",
   surfaceDeep: "#0d1419",
@@ -70,6 +86,24 @@ const ocean: Palette = {
 };
 
 export const themes: Record<ThemeName, Palette> = { dark, ocean };
+
+// Categorical data-viz ramp for portfolio allocation charts (by team / role /
+// age). Tints → shades of the brand blue (`brandBlue` #5058f8), so the
+// breakdowns read as one brand with the logo. This is NOT a semantic colour:
+// green/red stay reserved for P&L; allocation is neutral categorical data, and
+// blue keeps it visually distinct from performance. Largest segment first =
+// lightest. Shared across apps so the ramp lives in one place, not as inline
+// hex literals in each chart component. See context/FUNDXI-BRIEF.md.
+export const chart_category_ramp: readonly string[] = [
+  "#C2C6FF",
+  "#9AA1FC",
+  "#737CFA",
+  "#5058F8",
+  "#414AD8",
+  "#343BB0",
+  "#282E88",
+  "#1C2063",
+] as const;
 
 // camelCase → kebab-case: `actionBuy` → `action-buy`.
 function to_kebab(s: string): string {

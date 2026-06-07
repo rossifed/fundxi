@@ -401,11 +401,15 @@ const styles = StyleSheet.create({
   lb_rank: { fontFamily: mono, width: 36, fontSize: 12, fontWeight: "700", color: text.tertiary },
   lb_trader: { flex: 1 },
   lb_trader_cell: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0 },
+  // Name takes all remaining room (and wraps if a name is genuinely long);
+  // the YOU badge never shrinks so it can't crush the name. Value/Return are
+  // sized for the real data (INITIAL_CASH=100 → small euro figures), not the
+  // oversized 96/70 that previously starved the name column.
   lb_name: { fontSize: 13, fontWeight: "500", color: "#fff", flexShrink: 1 },
   lb_name_me: { fontWeight: "700" },
-  lb_you: { fontSize: 10, fontWeight: "700", color: palette.positive },
-  lb_value: { fontFamily: mono, width: 96, textAlign: "right", fontSize: 12, color: text.secondary },
-  lb_return: { fontFamily: mono, width: 70, textAlign: "right", fontSize: 13, fontWeight: "700" },
+  lb_you: { fontSize: 10, fontWeight: "700", color: palette.positive, flexShrink: 0 },
+  lb_value: { fontFamily: mono, width: 72, textAlign: "right", fontSize: 12, color: text.secondary },
+  lb_return: { fontFamily: mono, width: 52, textAlign: "right", fontSize: 13, fontWeight: "700" },
 
   form: { padding: 20, gap: 0, maxWidth: 480, width: "100%", alignSelf: "center" },
   form_title: { fontSize: 16, fontWeight: "800", color: "#fff", marginTop: 18, marginBottom: 16 },
