@@ -307,11 +307,13 @@ function BracketView({ fixtures, on_open }: { fixtures: Fixture[]; on_open: (id:
         </View>
       )}
 
-      <View style={{ gap: 10 }}>
+      <View style={{ gap: 12 }}>
         <Divider label="KNOCKOUTS" />
         {ko_rounds.map(round => {
           const present = round.fixtures.filter((f): f is Fixture => f !== null);
           if (present.length === 0) return null;
+          if (round.label === "FINAL") return <FinalCard key="final" fixture={present[0]} on_open={on_open} />;
+          const single = present.length === 1;
           return (
             <View key={round.label} style={styles.bracket_panel}>
               <View style={styles.bracket_chip}>
@@ -319,7 +321,7 @@ function BracketView({ fixtures, on_open }: { fixtures: Fixture[]; on_open: (id:
               </View>
               <View style={styles.ko_grid}>
                 {present.map(fx => (
-                  <View key={fx.id} style={styles.ko_cell}>
+                  <View key={fx.id} style={[styles.ko_cell, single && styles.ko_cell_full]}>
                     <CompactCell fixture={fx} on_open={on_open} />
                   </View>
                 ))}
@@ -337,25 +339,95 @@ function CompactCell({ fixture, on_open }: { fixture: Fixture; on_open: (id: num
   const away = teams_api.get(fixture.away_team_id);
   const is_live = fixture.status === "live";
   const is_today = fixture.date ? fixture.date.slice(0, 10) === today_key() : false;
-  const played = fixture.status === "finished" || is_live;
+  const finished = fixture.status === "finished";
+  const played = finished || is_live;
   const time = format_kickoff_time(fixture.date);
+  const home_win = finished && (fixture.home_score ?? 0) > (fixture.away_score ?? 0);
+  const away_win = finished && (fixture.away_score ?? 0) > (fixture.home_score ?? 0);
 
   return (
     <Pressable style={[styles.cc, is_today && styles.cc_today, is_live && styles.cc_live]} onPress={() => on_open(fixture.id)}>
-      <CellTeamRow flag={home?.flag} code={fixture.home_team_id} score={fixture.home_score} played={played} />
-      <CellTeamRow flag={away?.flag} code={fixture.away_team_id} score={fixture.away_score} played={played} />
-      {!played && <Text style={[styles.cc_time, is_today && styles.cc_time_today]}>{time || "·"}</Text>}
+      <CellTeamRow flag={home?.flag} code={fixture.home_team_id} score={fixture.home_score} played={played} winner={home_win} />
+      <CellTeamRow flag={away?.flag} code={fixture.away_team_id} score={fixture.away_score} played={played} winner={away_win} />
+      <View style={styles.cc_foot}>
+        {is_live ? (
+          <>
+            <View style={styles.cc_live_dot} />
+            <Text style={styles.cc_live_txt}>LIVE</Text>
+          </>
+        ) : finished ? (
+          <Text style={styles.cc_ft}>FT</Text>
+        ) : (
+          <Text style={[styles.cc_foot_time, is_today && styles.cc_foot_time_today]}>{time || "TBD"}</Text>
+        )}
+      </View>
     </Pressable>
   );
 }
 
-function CellTeamRow({ flag, code, score, played }: { flag?: string; code: string; score?: number; played: boolean }) {
+function CellTeamRow({ flag, code, score, played, winner }: { flag?: string; code: string; score?: number; played: boolean; winner: boolean }) {
+  const value = played ? (score ?? 0) : "-";
   return (
     <View style={styles.cc_row}>
       <Text style={styles.cc_flag}>{flag ?? ""}</Text>
-      <Text style={styles.cc_code} numberOfLines={1}>{code}</Text>
-      <Text style={[styles.cc_score, !played && styles.cc_score_off]}>{played ? (score ?? 0) : "-"}</Text>
+      <Text style={[styles.cc_code, winner && styles.cc_code_win]} numberOfLines={1}>{code}</Text>
+      <View style={styles.cc_score_slot}>
+        {winner ? (
+          <View style={styles.cc_win_badge}>
+            <Text style={styles.cc_win_txt}>{value}</Text>
+          </View>
+        ) : (
+          <Text style={[styles.cc_score, !played && styles.cc_score_off]}>{value}</Text>
+        )}
+      </View>
     </View>
+  );
+}
+
+// FinalCard — the WC2026 final, given a dedicated large card per the redesign:
+// big centred score, flags + 3-letter codes on each side, trophy + winner name,
+// and the fixture note (e.g. "after extra time") when present.
+function FinalCard({ fixture, on_open }: { fixture: Fixture; on_open: (id: number) => void }) {
+  const home = teams_api.get(fixture.home_team_id);
+  const away = teams_api.get(fixture.away_team_id);
+  if (!home || !away) return null;
+  const is_live = fixture.status === "live";
+  const finished = fixture.status === "finished";
+  const played = finished || is_live;
+  const home_win = finished && (fixture.home_score ?? 0) > (fixture.away_score ?? 0);
+  const away_win = finished && (fixture.away_score ?? 0) > (fixture.home_score ?? 0);
+  const winner = home_win ? home : away_win ? away : null;
+
+  return (
+    <Pressable style={styles.final_card} onPress={() => on_open(fixture.id)}>
+      <View style={styles.final_head}>
+        <Text style={styles.final_head_txt}>FINAL</Text>
+      </View>
+      <View style={styles.final_body}>
+        <View style={styles.final_side}>
+          <Text style={[styles.final_code, home_win && styles.final_code_win]} numberOfLines={1}>{fixture.home_team_id}</Text>
+          <Text style={styles.final_flag}>{home.flag}</Text>
+        </View>
+        <View style={styles.final_center}>
+          {played ? (
+            <Text style={styles.final_score}>{fixture.home_score ?? 0} - {fixture.away_score ?? 0}</Text>
+          ) : (
+            <Text style={styles.final_vs}>VS</Text>
+          )}
+        </View>
+        <View style={styles.final_side_r}>
+          <Text style={styles.final_flag}>{away.flag}</Text>
+          <Text style={[styles.final_code, away_win && styles.final_code_win]} numberOfLines={1}>{fixture.away_team_id}</Text>
+        </View>
+      </View>
+      {winner ? (
+        <View style={styles.final_winner}>
+          <Text style={styles.final_trophy}>🏆</Text>
+          <Text style={styles.final_winner_txt}>{winner.name}</Text>
+        </View>
+      ) : null}
+      {fixture.note ? <Text style={styles.final_note}>* {fixture.note}</Text> : null}
+    </Pressable>
   );
 }
 
@@ -381,9 +453,9 @@ function GroupsView() {
   return (
     <View style={{ gap: 12 }}>
       {groups.map(g => (
-        <View key={g.group} style={styles.bracket_panel}>
-          <View style={[styles.bracket_chip, { marginBottom: 6 }]}>
-            <Text style={styles.bracket_chip_label}>GROUP {g.group}</Text>
+        <View key={g.group} style={styles.std_card}>
+          <View style={styles.std_group_head}>
+            <Text style={styles.std_group_letter}>Group {g.group}</Text>
           </View>
           <View style={[styles.std_row, styles.std_head]}>
             <Text style={[styles.std_pos, styles.std_h]}>#</Text>
@@ -393,23 +465,27 @@ function GroupsView() {
             <Text style={[styles.std_num, styles.std_h]}>D</Text>
             <Text style={[styles.std_num, styles.std_h]}>L</Text>
             <Text style={[styles.std_gd, styles.std_h]}>GD</Text>
-            <Text style={[styles.std_pts, styles.std_h]}>Pts</Text>
+            <Text style={[styles.std_pts_h, styles.std_h]}>Pts</Text>
           </View>
           {g.rows.map(r => {
             const q = r.position <= 2;
             return (
               <Pressable key={r.team_id} style={[styles.std_row, q && styles.std_row_q]} onPress={() => router.push(`/team/${r.team_id}`)}>
-                <Text style={[styles.std_pos, { color: q ? palette.positive : text.tertiary }]}>{r.position}</Text>
+                <Text style={[styles.std_pos, { color: q ? palette.brandBlue : text.tertiary }]}>{r.position}</Text>
                 <View style={styles.std_team_cell}>
                   {r.flag ? <Image source={{ uri: r.flag }} style={styles.std_flag} resizeMode="contain" /> : <View style={styles.std_flag} />}
-                  <Text style={styles.std_name} numberOfLines={1}>{r.team_name}</Text>
+                  <Text style={[styles.std_name, q && styles.std_name_q]} numberOfLines={1}>{r.team_name}</Text>
                 </View>
                 <Text style={[styles.std_num, styles.std_dim]}>{r.played}</Text>
                 <Text style={[styles.std_num, styles.std_dim]}>{r.won}</Text>
                 <Text style={[styles.std_num, styles.std_dim]}>{r.drawn}</Text>
                 <Text style={[styles.std_num, styles.std_dim]}>{r.lost}</Text>
                 <Text style={styles.std_gd}>{r.goal_difference > 0 ? "+" : ""}{r.goal_difference}</Text>
-                <Text style={styles.std_pts}>{r.points}</Text>
+                <View style={styles.std_pts_col}>
+                  <View style={[styles.pts_badge, q && styles.pts_badge_q]}>
+                    <Text style={[styles.pts_txt, q && styles.pts_txt_q]}>{r.points}</Text>
+                  </View>
+                </View>
               </Pressable>
             );
           })}
@@ -432,88 +508,127 @@ function Divider({ label }: { label: string }) {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   toolbar: { paddingHorizontal: 16, paddingTop: 12, gap: 10 },
-  status_tabs: { flexDirection: "row", gap: 6, paddingRight: 8 },
-  status_tab: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", backgroundColor: "rgba(255,255,255,0.02)" },
-  status_tab_on: { backgroundColor: "rgba(255,255,255,0.08)" },
-  status_tab_label: { fontSize: 12, fontWeight: "500", color: text.tertiary },
-  status_tab_label_on: { color: "#fff", fontWeight: "700" },
-  disabled: { opacity: 0.4 },
-  view_switch: { flexDirection: "row", alignSelf: "flex-start", backgroundColor: "rgba(255,255,255,0.03)", borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", borderRadius: 8, padding: 3, gap: 2 },
-  view_btn: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 6 },
-  view_btn_on: { backgroundColor: "rgba(255,255,255,0.08)" },
-  view_btn_label: { fontSize: 11, fontWeight: "700", color: text.secondary, letterSpacing: 0.3 },
+
+  // Primary nav — status filter pills (rounded, free-floating row).
+  status_tabs: { flexDirection: "row", gap: 8, paddingRight: 8 },
+  status_tab: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: "rgba(255,255,255,0.07)", backgroundColor: "rgba(255,255,255,0.025)" },
+  status_tab_on: { backgroundColor: "rgba(80,88,248,0.22)", borderColor: "rgba(80,88,248,0.60)" },
+  status_tab_label: { fontSize: 12.5, fontWeight: "600", color: text.secondary },
+  status_tab_label_on: { color: "#fff", fontWeight: "800" },
+  disabled: { opacity: 0.35 },
+
+  // Secondary nav — view switch (boxed segmented control, full width).
+  view_switch: { flexDirection: "row", backgroundColor: "rgba(255,255,255,0.03)", borderWidth: 1, borderColor: "rgba(255,255,255,0.07)", borderRadius: 10, padding: 3, gap: 3 },
+  view_btn: { flex: 1, paddingVertical: 8, borderRadius: 7, alignItems: "center" },
+  view_btn_on: { backgroundColor: palette.brandBlue },
+  view_btn_label: { fontSize: 12, fontWeight: "700", color: text.secondary, letterSpacing: 0.4 },
   view_btn_label_on: { color: "#fff" },
 
-  scroll: { padding: 16, paddingTop: 12 },
+  scroll: { padding: 16, paddingTop: 14, paddingBottom: 32 },
   empty: { padding: 40, textAlign: "center", color: text.muted, fontSize: 13 },
 
-  day: { backgroundColor: "rgba(255,255,255,0.025)", borderWidth: 1, borderColor: "rgba(255,255,255,0.07)", borderRadius: 10, overflow: "hidden" },
-  day_today: { backgroundColor: "rgba(72,255,67,0.04)", borderColor: "rgba(72,255,67,0.30)" },
-  day_head: { flexDirection: "row", alignItems: "baseline", gap: 10, paddingHorizontal: 14, paddingVertical: 9, backgroundColor: "rgba(255,255,255,0.03)", borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.05)" },
-  day_head_today: { backgroundColor: "rgba(72,255,67,0.07)", borderBottomColor: "rgba(72,255,67,0.20)" },
+  day: { backgroundColor: "rgba(255,255,255,0.03)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)", borderRadius: 12, overflow: "hidden" },
+  day_today: { borderColor: "rgba(72,255,67,0.30)" },
+  day_head: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: "rgba(255,255,255,0.05)", borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.06)" },
+  day_head_today: { backgroundColor: "rgba(72,255,67,0.08)", borderBottomColor: "rgba(72,255,67,0.22)" },
   day_weekday: { fontSize: 10, fontWeight: "700", letterSpacing: 1, textTransform: "uppercase", color: text.tertiary },
   day_weekday_today: { color: palette.brandGreen },
-  day_date: { fontSize: 16, fontWeight: "800", color: "rgba(255,255,255,0.85)", letterSpacing: -0.2 },
-  today_badge: { backgroundColor: palette.brandGreen, borderRadius: 4, paddingHorizontal: 7, paddingVertical: 2 },
+  day_date: { fontSize: 16, fontWeight: "800", color: "#fff", letterSpacing: -0.2 },
+  today_badge: { backgroundColor: palette.brandGreen, borderRadius: 5, paddingHorizontal: 7, paddingVertical: 2 },
   today_badge_label: { fontSize: 9, fontWeight: "800", letterSpacing: 1, color: "#0d0d0f" },
   day_count: { fontSize: 11, color: text.tertiary, fontWeight: "600" },
-  day_body: { padding: 12, gap: 12 },
+  day_body: { padding: 10, gap: 8 },
 
-  fx_card: { backgroundColor: "rgba(255,255,255,0.025)", borderWidth: 1, borderColor: "rgba(255,255,255,0.05)", borderRadius: 12, padding: 16 },
-  fx_card_live: { backgroundColor: "rgba(255,255,255,0.04)", borderColor: "rgba(255,255,255,0.12)" },
-  fx_top: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14, gap: 8 },
-  fx_top_left: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1 },
-  ft: { backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 5, paddingHorizontal: 9, paddingVertical: 4 },
-  ft_label: { fontSize: 11, fontWeight: "700", color: text.secondary },
-  upcoming: { fontSize: 11, color: text.tertiary, fontWeight: "600" },
+  fx_card: { backgroundColor: "rgba(255,255,255,0.03)", borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12 },
+  fx_card_live: { backgroundColor: "rgba(255,255,255,0.05)", borderColor: "rgba(255,255,255,0.14)" },
+  fx_top: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10, gap: 8 },
+  fx_top_left: { flexDirection: "row", alignItems: "center", gap: 7, flexShrink: 1 },
+  ft: { backgroundColor: "rgba(255,255,255,0.07)", borderRadius: 5, paddingHorizontal: 8, paddingVertical: 3 },
+  ft_label: { fontSize: 10.5, fontWeight: "800", color: text.secondary, letterSpacing: 0.4 },
+  upcoming: { fontSize: 10.5, color: text.tertiary, fontWeight: "700", letterSpacing: 0.3, textTransform: "uppercase" },
   phase: { backgroundColor: "rgba(255,255,255,0.04)", borderRadius: 4, paddingHorizontal: 7, paddingVertical: 3 },
-  phase_label: { fontSize: 10, color: text.tertiary, fontWeight: "600", letterSpacing: 0.4 },
+  phase_label: { fontSize: 9.5, color: text.tertiary, fontWeight: "700", letterSpacing: 0.5 },
   held: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(72,255,67,0.10)", borderWidth: 1, borderColor: "rgba(72,255,67,0.28)", borderRadius: 4, paddingHorizontal: 7, paddingVertical: 2, flexShrink: 1 },
   held_dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: palette.positive },
   held_label: { fontSize: 10, fontWeight: "700", color: palette.positive, flexShrink: 1 },
-  fx_time: { fontFamily: mono, fontSize: 11, color: text.tertiary },
-  fx_teams: { flexDirection: "row", alignItems: "center", gap: 12 },
-  fx_team_right: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 10 },
-  fx_team_left: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
+  fx_time: { fontFamily: mono, fontSize: 11, color: text.tertiary, fontWeight: "600" },
+  fx_teams: { flexDirection: "row", alignItems: "center", gap: 10 },
+  fx_team_right: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 9 },
+  fx_team_left: { flex: 1, flexDirection: "row", alignItems: "center", gap: 9 },
   fx_team_name: { fontSize: 13, fontWeight: "700", color: "#fff", flexShrink: 1 },
-  fx_flag: { fontSize: 26 },
-  fx_score: { fontFamily: mono, fontSize: 24, fontWeight: "900", minWidth: 56, textAlign: "center", color: "#fff", letterSpacing: -1 },
-  fx_vs: { fontFamily: mono, fontSize: 13, color: text.faint, fontWeight: "700", minWidth: 56, textAlign: "center" },
-  fx_venue: { textAlign: "center", fontSize: 11, color: text.tertiary, marginTop: 10 },
+  fx_flag: { fontSize: 23 },
+  fx_score: { fontFamily: mono, fontSize: 23, fontWeight: "900", minWidth: 54, textAlign: "center", color: "#fff", letterSpacing: -1 },
+  fx_vs: { fontFamily: mono, fontSize: 12, color: text.faint, fontWeight: "700", minWidth: 54, textAlign: "center" },
+  fx_venue: { textAlign: "center", fontSize: 10.5, color: text.tertiary, marginTop: 9 },
 
-  divider: { flexDirection: "row", alignItems: "center", gap: 10 },
-  divider_line: { flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.06)" },
-  divider_label: { fontSize: 11, letterSpacing: 1.4, fontWeight: "700", color: text.secondary },
+  divider: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 2 },
+  divider_line: { flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.07)" },
+  divider_label: { fontSize: 11, letterSpacing: 1.4, fontWeight: "800", color: text.secondary },
 
   group_grid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  bracket_panel: { backgroundColor: "rgba(255,255,255,0.025)", borderWidth: 1, borderColor: "rgba(255,255,255,0.07)", borderRadius: 8, padding: 6, flexGrow: 1, flexBasis: "47%", gap: 6 },
-  bracket_chip: { backgroundColor: "rgba(255,255,255,0.07)", borderRadius: 5, paddingVertical: 5, alignItems: "center" },
+  bracket_panel: { backgroundColor: "rgba(255,255,255,0.03)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)", borderRadius: 10, padding: 8, flexGrow: 1, flexBasis: "47%", gap: 8 },
+  bracket_chip: { backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 6, paddingVertical: 6, paddingHorizontal: 8, alignItems: "center" },
   bracket_chip_label: { fontSize: 10, letterSpacing: 1.4, fontWeight: "800", color: "rgba(255,255,255,0.82)" },
-  ko_grid: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  ko_grid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   ko_cell: { flexGrow: 1, flexBasis: "47%" },
+  ko_cell_full: { flexBasis: "100%" },
 
-  cc: { backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 1, borderColor: "rgba(255,255,255,0.11)", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 5, gap: 2 },
-  cc_today: { backgroundColor: "rgba(72,255,67,0.10)", borderColor: "rgba(72,255,67,0.40)", borderLeftWidth: 3, borderLeftColor: palette.brandGreen },
-  cc_live: { backgroundColor: "rgba(255,255,255,0.07)", borderColor: "rgba(255,255,255,0.16)" },
-  cc_row: { flexDirection: "row", alignItems: "center", gap: 6 },
-  cc_flag: { fontSize: 15, width: 20, textAlign: "center" },
-  cc_code: { flex: 1, fontWeight: "700", fontSize: 11, color: "#fff" },
-  cc_score: { fontFamily: mono, fontSize: 12, fontWeight: "800", color: "#fff", minWidth: 16, textAlign: "right" },
+  cc: { backgroundColor: "rgba(255,255,255,0.04)", borderWidth: 1, borderColor: "rgba(255,255,255,0.10)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 7, gap: 4 },
+  cc_today: { borderColor: "rgba(72,255,67,0.40)", borderLeftWidth: 3, borderLeftColor: palette.brandGreen },
+  cc_live: { backgroundColor: "rgba(255,255,255,0.06)", borderColor: "rgba(255,255,255,0.18)" },
+  cc_row: { flexDirection: "row", alignItems: "center", gap: 7 },
+  cc_flag: { fontSize: 16, width: 22, textAlign: "center" },
+  cc_code: { flex: 1, fontWeight: "700", fontSize: 11.5, color: "rgba(255,255,255,0.55)" },
+  cc_code_win: { color: "#fff", fontWeight: "800" },
+  cc_score_slot: { width: 24, alignItems: "flex-end" },
+  cc_score: { fontFamily: mono, fontSize: 13, fontWeight: "800", color: "rgba(255,255,255,0.55)", textAlign: "right" },
   cc_score_off: { color: text.muted },
-  cc_time: { fontFamily: mono, fontSize: 9, textAlign: "center", color: text.tertiary, fontWeight: "700", marginTop: 1 },
-  cc_time_today: { color: palette.brandGreen },
+  cc_win_badge: { backgroundColor: palette.brandBlue, borderRadius: 5, minWidth: 20, paddingHorizontal: 5, paddingVertical: 1, alignItems: "center" },
+  cc_win_txt: { fontFamily: mono, fontSize: 12, fontWeight: "900", color: "#fff" },
+  cc_foot: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, marginTop: 1 },
+  cc_foot_time: { fontFamily: mono, fontSize: 9.5, color: text.tertiary, fontWeight: "700" },
+  cc_foot_time_today: { color: palette.brandGreen },
+  cc_ft: { fontSize: 9, fontWeight: "800", letterSpacing: 0.6, color: text.tertiary },
+  cc_live_dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: palette.brandGreen },
+  cc_live_txt: { fontSize: 9, fontWeight: "800", letterSpacing: 0.6, color: palette.brandGreen },
 
-  std_row: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 6, paddingVertical: 5, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.04)" },
-  std_head: { borderTopWidth: 0, paddingBottom: 5 },
-  std_row_q: { borderLeftWidth: 2, borderLeftColor: palette.positive },
-  std_h: { fontSize: 9, fontWeight: "700", letterSpacing: 0.4, textTransform: "uppercase", color: text.tertiary },
-  std_pos: { fontFamily: mono, width: 20, fontWeight: "700", fontSize: 12 },
+  final_card: { backgroundColor: "rgba(80,88,248,0.08)", borderWidth: 1, borderColor: "rgba(80,88,248,0.45)", borderRadius: 12, overflow: "hidden" },
+  final_head: { backgroundColor: palette.brandBlue, paddingVertical: 6, alignItems: "center" },
+  final_head_txt: { fontSize: 10, letterSpacing: 1.6, fontWeight: "800", color: "#fff" },
+  final_body: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12, gap: 10 },
+  final_side: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 10 },
+  final_side_r: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
+  final_code: { fontSize: 15, fontWeight: "700", color: "rgba(255,255,255,0.7)", flexShrink: 1 },
+  final_code_win: { color: "#fff", fontWeight: "800" },
+  final_flag: { fontSize: 30 },
+  final_center: { paddingHorizontal: 4 },
+  final_score: { fontFamily: mono, fontSize: 30, fontWeight: "900", color: "#fff", letterSpacing: -1 },
+  final_vs: { fontFamily: mono, fontSize: 16, color: text.faint, fontWeight: "700" },
+  final_winner: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingBottom: 14 },
+  final_trophy: { fontSize: 15 },
+  final_winner_txt: { fontSize: 13, fontWeight: "800", letterSpacing: 0.8, textTransform: "uppercase", color: "#fff" },
+  final_note: { textAlign: "center", fontSize: 10, color: text.tertiary, fontStyle: "italic", paddingBottom: 12 },
+
+  std_card: { backgroundColor: "rgba(255,255,255,0.03)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)", borderRadius: 12, overflow: "hidden" },
+  std_group_head: { paddingLeft: 15, paddingRight: 12, paddingVertical: 10, backgroundColor: "rgba(255,255,255,0.05)", borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.06)" },
+  std_group_letter: { fontSize: 12.5, fontWeight: "800", letterSpacing: 1.2, textTransform: "uppercase", color: "#fff" },
+  std_row: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 12, paddingVertical: 9, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.05)" },
+  std_head: { borderTopWidth: 0, paddingVertical: 7, backgroundColor: "rgba(255,255,255,0.015)" },
+  std_row_q: { backgroundColor: "rgba(80,88,248,0.10)" },
+  std_h: { fontSize: 9, fontWeight: "800", letterSpacing: 0.4, textTransform: "uppercase", color: text.tertiary },
+  std_pos: { fontFamily: mono, width: 22, textAlign: "center", fontWeight: "800", fontSize: 12 },
   std_team: { flex: 1 },
-  std_team_cell: { flex: 1, flexDirection: "row", alignItems: "center", gap: 6, minWidth: 0 },
-  std_flag: { width: 16, height: 16 },
-  std_name: { fontSize: 12, fontWeight: "600", color: "#fff", flexShrink: 1 },
-  std_num: { fontFamily: mono, width: 20, textAlign: "center", fontSize: 12, color: text.secondary },
-  std_dim: { color: text.secondary },
-  std_gd: { fontFamily: mono, width: 34, textAlign: "right", fontSize: 12, color: "rgba(255,255,255,0.7)" },
-  std_pts: { fontFamily: mono, width: 30, textAlign: "right", fontSize: 12, fontWeight: "800", color: "#fff" },
+  std_team_cell: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0 },
+  std_flag: { width: 18, height: 18, borderRadius: 3 },
+  std_name: { fontSize: 12.5, fontWeight: "600", color: "rgba(255,255,255,0.85)", flexShrink: 1 },
+  std_name_q: { fontWeight: "700", color: "#fff" },
+  std_num: { fontFamily: mono, width: 22, textAlign: "center", fontSize: 12, color: text.secondary },
+  std_dim: { color: text.tertiary },
+  std_gd: { fontFamily: mono, width: 34, textAlign: "right", fontSize: 12, color: "rgba(255,255,255,0.7)", fontWeight: "600" },
+  std_pts_h: { fontFamily: mono, width: 40, textAlign: "right" },
+  std_pts_col: { width: 40, alignItems: "flex-end" },
+  pts_badge: { minWidth: 26, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, backgroundColor: "rgba(80,88,248,0.18)", alignItems: "center" },
+  pts_badge_q: { backgroundColor: palette.brandBlue },
+  pts_txt: { fontFamily: mono, fontSize: 13, fontWeight: "900", color: "rgba(255,255,255,0.8)" },
+  pts_txt_q: { color: "#fff" },
 });
