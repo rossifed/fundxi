@@ -1,11 +1,12 @@
-// Portfolio — RN port of apps/web/src/ui/pages/portfolio/PortfolioPage.tsx.
+// Portfolio — RN port of apps/web/src/ui/pages/portfolio/PortfolioPage.tsx,
+// laid out from the "Trading Dashboard" mockup (context/Pictures review).
 //
-// The web layout is a 2-column desktop dashboard (perf + tables left,
-// analytics rail right). On mobile everything stacks in a single column
-// (CLAUDE.md): KPI grid → value chart → Positions/Trades → Exposure →
-// Win/Loss → By team / position / age breakdowns. Same data, same live sync.
-// The multi-select bulk-close bar is omitted (it drives trading, which is
-// gated until mobile auth lands); positions still open the player sheet.
+// Mobile single-column flow: two hero stat cards (Total value | P&L) → value
+// chart with a period selector → secondary KPI grid (3×2, iconised) →
+// Positions/Trades → Analytics (Exposure / Win-Loss / Allocation). Same data,
+// same live sync as the web 2-column desktop board. The multi-select
+// bulk-close bar is omitted (it drives trading, gated until mobile auth lands);
+// positions still open the player sheet.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -17,8 +18,11 @@ import { valuations_api } from "@fundxi/core/api/valuations_api";
 import { compute_period_return } from "@fundxi/core/domain/market/return";
 import { POSITION_ABBR, POSITION_LABEL, type Player } from "@fundxi/core/domain/player/player";
 import type { HoldingDetail } from "@fundxi/core/application/portfolio_service";
+import type { HistoryRange } from "@fundxi/core/infrastructure/repositories/portfolio_history_repository";
+import { chart_category_ramp } from "@fundxi/core/design/palette";
 
 import { Donut } from "@/components/Donut";
+import { KpiIcon, type KpiIconName } from "@/components/KpiIcon";
 import { PerformanceChart, type PerfPoint } from "@/components/PerformanceChart";
 import { PlayerChip } from "@/components/PlayerChip";
 import { TickValue } from "@/components/TickValue";
@@ -47,8 +51,25 @@ const ALLOC_TABS: { k: AllocTab; label: string }[] = [
   { k: "age", label: "Age" },
 ];
 
-// Chart palette in the perf-chart hue family (last entry = the theme accent).
-const CHART_PALETTE = ["#7C92E5", "#5E7AD4", "#4561C2", "#3F5BBE", "#2D4AA5", "#1F3D8B", palette.chartPrimary, "#15326D"];
+// Chart period selector — UI labels mapped to the only ranges the backend
+// history endpoint serves (24h | 7d | 30d | all). No 3M/YTD: the BFF doesn't
+// expose them, and inventing client-side buckets would break the
+// data-sourcing rule (CLAUDE.md). Matches the mockup's 1D/1W/1M/All exactly.
+const PERIODS: { k: HistoryRange; label: string }[] = [
+  { k: "24h", label: "1D" },
+  { k: "7d", label: "1W" },
+  { k: "30d", label: "1M" },
+  { k: "all", label: "All" },
+];
+
+// Allocation breakdown ramp — shared brand-blue categorical token (see
+// packages/core/src/design/palette.ts), aligned with the logo's blue.
+const CHART_PALETTE = chart_category_ramp;
+
+// Positions / Trade-history list — fixed viewport with its own scroll, so the
+// page height stays stable whichever tab is active (Positions ~4 rows vs Trade
+// history ~14 rows would otherwise make the whole screen jump). ~4 rows tall.
+const LIST_HEIGHT = 440;
 
 function fmt_short_date(iso?: string): string {
   if (!iso) return "—";
@@ -58,9 +79,14 @@ function fmt_short_date(iso?: string): string {
 
 export default function PortfolioScreen() {
   const sheet_ref = useRef<PlayerSheetHandle>(null);
+  const scroll_ref = useRef<ScrollView>(null);
+  // Y offset of the Analytics block inside the scroll content — captured via
+  // onLayout so a tab tap can bring the (otherwise off-screen) chart into view.
+  const analytics_y = useRef(0);
   const [positions_tab, set_positions_tab] = useState<PositionsTab>("positions");
+  const [period, set_period] = useState<HistoryRange>("all");
   // Analytics is a single tabbed block (one chart at a time) under the main
-  // KPI → chart → positions/trades flow — compact, no deep scroll.
+  // hero → chart → positions/trades flow — compact, no deep scroll.
   const [analytics_tab, set_analytics_tab] = useState<AnalyticsTab>("exposure");
   const [alloc_tab, set_alloc_tab] = useState<AllocTab>("team");
   const [data_version, set_data_version] = useState(0);
@@ -90,12 +116,18 @@ export default function PortfolioScreen() {
     () => (holdings.length > 0 ? (holdings.filter(h => h.pnl > 0).length / holdings.length) * 100 : null),
     [holdings],
   );
+  // Best open position by P&L — the "top position" KPI. Unrealized (we have no
+  // realized-P&L-per-closed-trade figure), so it's labelled accordingly.
+  const top_position_pnl = useMemo(
+    () => (holdings.length > 0 ? Math.max(...holdings.map(h => h.pnl)) : null),
+    [holdings],
+  );
 
   const [perf, set_perf] = useState<PerfPoint[]>([]);
   useEffect(() => {
     let cancelled = false;
     void portfolio_api
-      .fetch_history("all")
+      .fetch_history(period)
       .then(dto => {
         if (cancelled) return;
         set_perf(
@@ -116,7 +148,7 @@ export default function PortfolioScreen() {
     return () => {
       cancelled = true;
     };
-  }, [data_version]);
+  }, [data_version, period]);
   const period_return = useMemo(() => compute_period_return(perf.map(p => p.v)), [perf]);
 
   const opened_by_player = useMemo(() => {
@@ -173,40 +205,77 @@ export default function PortfolioScreen() {
   const with_color = <T extends { v: number }>(items: T[]) =>
     items.map((it, i) => ({ ...it, color: CHART_PALETTE[i] ?? CHART_PALETTE[CHART_PALETTE.length - 1] }));
 
+  const pnl_color = color_for_sign(totals.pnl);
+
   return (
     <View style={styles.screen}>
       <ScrollView
+        ref={scroll_ref}
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
       >
-        {/* KPI grid — two tidy rows of 4 equal cells (the web shows the same
-            7 metrics in one desktop row; on mobile they wrap, evenly). */}
-        <View style={styles.kpi_grid}>
-          <View style={styles.kpi_row}>
-            <Kpi label="Total Value" value={fmt_eur_m(total_value)} />
-            <Kpi label="Cash" value={fmt_eur_m(totals.cash)} />
-            <Kpi label="Invested" value={fmt_eur_m(totals.total_cost)} />
-            <Kpi label="Positions" value={String(holdings.length)} />
+        {/* Hero — two headline stat cards (the dashboard's primary read):
+            Total value and P&L, each with its delta since open. */}
+        <View style={styles.hero_row}>
+          <View style={styles.hero_card}>
+            <Text style={styles.hero_label}>Total value</Text>
+            <Text style={styles.hero_value} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+              {fmt_eur_m(total_value)}
+            </Text>
+            <Text style={[styles.hero_delta, { color: pnl_color }]} numberOfLines={1}>
+              {fmt_eur_m_signed(totals.pnl)} ({fmt_signed_pct(totals.return_pct, 1)})
+            </Text>
+            <Text style={styles.hero_note}>Since open</Text>
           </View>
-          <View style={styles.kpi_row}>
-            <Kpi label="P&L" value={fmt_eur_m_signed(totals.pnl)} color={color_for_sign(totals.pnl)} />
-            <Kpi label="Return" value={fmt_signed_pct(totals.return_pct, 1)} color={color_for_sign(totals.return_pct)} />
-            <Kpi label="Trades" value={String(trades.length)} />
-            <Kpi label="Win rate" value={win_rate == null ? "—" : `${win_rate.toFixed(0)}%`} />
+          <View style={styles.hero_card}>
+            <Text style={styles.hero_label}>P&L</Text>
+            <Text style={[styles.hero_value, { color: pnl_color }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+              {fmt_eur_m_signed(totals.pnl)}
+            </Text>
+            <Text style={[styles.hero_delta, { color: pnl_color }]} numberOfLines={1}>
+              {fmt_signed_pct(totals.return_pct, 1)}
+            </Text>
+            <Text style={styles.hero_note}>Since open</Text>
           </View>
         </View>
 
-        {/* Portfolio value chart */}
+        {/* Portfolio value chart with a period selector (1D/1W/1M/All). */}
         <View style={styles.card}>
           <View style={styles.value_head}>
-            <View style={{ flex: 1 }}>
+            <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.value_title}>Portfolio value</Text>
-              <Text style={styles.value_sub}>Total value (cash + positions) since open</Text>
+              <Text style={[styles.value_pct, { color: color_for_sign(period_return) }]}>{fmt_signed_pct(period_return, 1)}</Text>
             </View>
-            <Text style={[styles.value_pct, { color: color_for_sign(period_return) }]}>{fmt_signed_pct(period_return, 1)}</Text>
+            <View style={styles.period_row}>
+              {PERIODS.map(p => {
+                const on = period === p.k;
+                return (
+                  <Pressable key={p.k} onPress={() => set_period(p.k)} style={[styles.period_btn, on && styles.period_btn_on]}>
+                    <Text style={[styles.period_label, on && styles.period_label_on]}>{p.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
           {perf.length > 0 ? <PerformanceChart data={perf} height={200} format_value={p => fmt_eur_m(p.v)} /> : <Text style={styles.chart_empty}>No history yet</Text>}
+        </View>
+
+        {/* Secondary KPI grid — 3×2 iconised cells. Lower visual weight than the
+            hero; supporting figures the user scans after the headline. */}
+        <View style={styles.kpi_grid}>
+          <KpiCard icon="cash" label="Cash" value={fmt_eur_m(totals.cash)} />
+          <KpiCard icon="invested" label="Invested" value={fmt_eur_m(totals.total_cost)} />
+          <KpiCard icon="positions" label="Positions" value={String(holdings.length)} />
+          <KpiCard icon="trades" label="Trades" value={String(trades.length)} />
+          <KpiCard icon="winrate" label="Win rate" value={win_rate == null ? "—" : `${win_rate.toFixed(0)}%`} />
+          <KpiCard
+            icon="top"
+            label="Top position"
+            value={top_position_pnl == null ? "—" : fmt_eur_m_signed(top_position_pnl)}
+            value_color={top_position_pnl == null ? undefined : color_for_sign(top_position_pnl)}
+            icon_color={top_position_pnl == null ? undefined : color_for_sign(top_position_pnl)}
+          />
         </View>
 
         {/* Positions / Trades — standalone tab header + per-row cards (clear
@@ -221,36 +290,58 @@ export default function PortfolioScreen() {
               return (
                 <Pressable key={t.k} onPress={() => set_positions_tab(t.k)} style={[styles.tabbtn, on && styles.tabbtn_on]}>
                   <Text style={[styles.tabbtn_label, on && styles.tabbtn_label_on]}>
-                    {t.label} <Text style={styles.tabbtn_count}>{t.count}</Text>
+                    {t.label} <Text style={[styles.tabbtn_count, on && styles.tabbtn_count_on]}>{t.count}</Text>
                   </Text>
                 </Pressable>
               );
             })}
           </View>
 
-          {positions_tab === "positions" ? (
-            holdings.length === 0 ? (
-              <Text style={styles.list_empty}>No open positions.</Text>
-            ) : (
-              sorted_holdings.map(h => (
-                <PositionRow key={h.player_id} h={h} opened={fmt_short_date(opened_by_player.get(h.player_id))} on_open={() => sheet_ref.current?.open(h.player)} />
-              ))
-            )
-          ) : trades.length === 0 ? (
-            <Text style={styles.list_empty}>No trades yet.</Text>
-          ) : (
-            sorted_trades.map(t => <TradeRow key={t.id} trade={t} />)
-          )}
+          {/* Fixed-height viewport + inner scroll → the page never jumps when
+              switching between the short Positions list and the long Trades one. */}
+          <View style={styles.list_box}>
+            <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={false} contentContainerStyle={styles.list_scroll}>
+              {positions_tab === "positions" ? (
+                holdings.length === 0 ? (
+                  <Text style={styles.list_empty}>No open positions.</Text>
+                ) : (
+                  sorted_holdings.map(h => (
+                    <PositionRow key={h.player_id} h={h} opened={fmt_short_date(opened_by_player.get(h.player_id))} on_open={() => sheet_ref.current?.open(h.player)} />
+                  ))
+                )
+              ) : trades.length === 0 ? (
+                <Text style={styles.list_empty}>No trades yet.</Text>
+              ) : (
+                sorted_trades.map(t => <TradeRow key={t.id} trade={t} />)
+              )}
+            </ScrollView>
+          </View>
         </View>
 
         {/* Analytics — one chart at a time via tabs (no long stack/scroll) */}
-        <Text style={styles.analytics_label}>Analytics</Text>
-        {/* Two wide tabs — full labels, nothing truncated or off-screen. */}
+        <Text
+          style={styles.analytics_label}
+          onLayout={e => {
+            analytics_y.current = e.nativeEvent.layout.y;
+          }}
+        >
+          Analytics
+        </Text>
+        {/* Three wide tabs — full labels, nothing truncated or off-screen.
+            Tapping one scrolls the section to the top so the chart that appears
+            below is in view immediately (it otherwise renders off-screen). */}
         <View style={styles.atab_row}>
           {ANALYTICS_TABS.map(t => {
             const on = analytics_tab === t.k;
             return (
-              <Pressable key={t.k} onPress={() => set_analytics_tab(t.k)} style={[styles.atab, on && styles.atab_on]}>
+              <Pressable
+                key={t.k}
+                onPress={() => {
+                  set_analytics_tab(t.k);
+                  scroll_ref.current?.scrollTo({ y: Math.max(0, analytics_y.current - 8), animated: true });
+                }}
+                style={[styles.atab, on && styles.atab_on]}
+              >
                 <Text style={[styles.atab_label, on && styles.atab_label_on]} numberOfLines={1}>{t.label}</Text>
               </Pressable>
             );
@@ -386,12 +477,12 @@ function ExposureCard({ total_value }: { total_value: number }) {
     <Section title="Position Long / Short">
       <View style={styles.bar}>
         {long_pct > 0 && (
-          <View style={[styles.bar_seg, { flex: long_pct, backgroundColor: "rgba(0,128,93,0.4)" }]}>
+          <View style={[styles.bar_seg, { flex: long_pct, backgroundColor: palette.positive }]}>
             <Text style={styles.bar_label}>{long_pct.toFixed(0)}%</Text>
           </View>
         )}
         {short_pct > 0 && (
-          <View style={[styles.bar_seg, { flex: short_pct, backgroundColor: "rgba(228,21,65,0.4)" }]}>
+          <View style={[styles.bar_seg, { flex: short_pct, backgroundColor: palette.negative }]}>
             <Text style={styles.bar_label}>{short_pct.toFixed(0)}%</Text>
           </View>
         )}
@@ -414,7 +505,7 @@ function WinLossCard({ holdings }: { holdings: HoldingDetail[] }) {
     <Section title="Trades Wins / Losses">
       <View style={styles.bar}>
         {winners > 0 && (
-          <View style={[styles.bar_seg, { flex: winners / total, backgroundColor: "rgba(0,128,93,0.4)" }]}>
+          <View style={[styles.bar_seg, { flex: winners / total, backgroundColor: palette.positive }]}>
             <Text style={styles.bar_label}>{((winners / total) * 100).toFixed(0)}%</Text>
           </View>
         )}
@@ -424,7 +515,7 @@ function WinLossCard({ holdings }: { holdings: HoldingDetail[] }) {
           </View>
         )}
         {losers > 0 && (
-          <View style={[styles.bar_seg, { flex: losers / total, backgroundColor: "rgba(228,21,65,0.4)" }]}>
+          <View style={[styles.bar_seg, { flex: losers / total, backgroundColor: palette.negative }]}>
             <Text style={styles.bar_label}>{((losers / total) * 100).toFixed(0)}%</Text>
           </View>
         )}
@@ -496,11 +587,28 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Kpi({ label, value, color }: { label: string; value: string; color?: string }) {
+function KpiCard({
+  icon,
+  label,
+  value,
+  value_color,
+  icon_color,
+}: {
+  icon: KpiIconName;
+  label: string;
+  value: string;
+  value_color?: string;
+  icon_color?: string;
+}) {
   return (
     <View style={styles.kpi}>
-      <Text style={styles.kpi_label} numberOfLines={2}>{label}</Text>
-      <Text style={[styles.kpi_value, color ? { color } : null]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{value}</Text>
+      <View style={styles.kpi_head}>
+        <Text style={styles.kpi_label} numberOfLines={1}>{label}</Text>
+        <KpiIcon name={icon} color={icon_color ?? palette.brandBlue} size={16} />
+      </View>
+      <Text style={[styles.kpi_value, value_color ? { color: value_color } : null]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+        {value}
+      </Text>
     </View>
   );
 }
@@ -531,33 +639,70 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
   },
-  atab_on: { backgroundColor: "rgba(255,255,255,0.12)", borderColor: "rgba(255,255,255,0.22)" },
+  atab_on: { backgroundColor: palette.brandBlueSoft, borderColor: palette.brandBlue },
   atab_label: { color: text.secondary, fontSize: 12, fontWeight: "700" },
   atab_label_on: { color: "#fff" },
-  kpi_grid: { gap: 8 },
-  kpi_row: { flexDirection: "row", gap: 8 },
-  // minWidth:0 is essential — without it each cell claims its content's
-  // min-width (a long value widens the cell), breaking column equality.
-  kpi: { flex: 1, minWidth: 0, backgroundColor: "rgba(255,255,255,0.025)", borderWidth: 1, borderColor: "rgba(255,255,255,0.05)", borderRadius: 10, paddingHorizontal: 9, paddingVertical: 8 },
-  kpi_ghost: { backgroundColor: "transparent", borderColor: "transparent" },
-  // Reserve two lines so labels like "Total Value" never truncate and every
-  // cell's value sits on the same baseline across the row.
-  kpi_label: { fontSize: 9, lineHeight: 12, minHeight: 24, color: text.tertiary, letterSpacing: 0.3, textTransform: "uppercase", fontWeight: "600" },
-  kpi_value: { fontFamily: mono, fontSize: 15, fontWeight: "800", color: "#fff", marginTop: 2 },
 
-  card: { backgroundColor: "rgba(255,255,255,0.02)", borderWidth: 1, borderColor: "rgba(255,255,255,0.04)", borderRadius: 12, overflow: "hidden" },
-  value_head: { flexDirection: "row", alignItems: "center", padding: 16, paddingBottom: 8 },
+  // Hero — two equal headline cards. Slightly higher surface opacity + faint
+  // brand-blue rim so they read as the premium primary block.
+  hero_row: { flexDirection: "row", gap: 12 },
+  hero_card: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: palette.brandBlueSoft,
+    borderRadius: 16,
+    padding: 16,
+    gap: 2,
+  },
+  hero_label: { fontSize: 10, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase", color: text.secondary },
+  hero_value: { fontFamily: mono, fontSize: 26, lineHeight: 32, fontWeight: "800", color: "#fff", marginTop: 4 },
+  hero_delta: { fontFamily: mono, fontSize: 12, fontWeight: "700", marginTop: 2 },
+  hero_note: { fontSize: 10, fontWeight: "500", color: text.tertiary, marginTop: 1 },
+
+  card: { backgroundColor: "rgba(255,255,255,0.03)", borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", borderRadius: 12, overflow: "hidden" },
+
+  value_head: { flexDirection: "row", alignItems: "flex-start", padding: 16, paddingBottom: 8, gap: 10 },
   value_title: { fontSize: 14, fontWeight: "800", color: "#fff" },
-  value_sub: { fontSize: 11, color: text.tertiary, marginTop: 2 },
-  value_pct: { fontFamily: mono, fontSize: 18, fontWeight: "800" },
+  value_pct: { fontFamily: mono, fontSize: 18, fontWeight: "800", marginTop: 2 },
+  // Period selector — compact pill group; active pill takes the brand blue.
+  period_row: { flexDirection: "row", gap: 4, flexShrink: 0 },
+  period_btn: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 7, backgroundColor: "rgba(255,255,255,0.03)" },
+  period_btn_on: { backgroundColor: palette.brandBlueSoft },
+  period_label: { fontFamily: mono, fontSize: 11, fontWeight: "700", color: text.tertiary },
+  period_label_on: { color: "#fff" },
   chart_empty: { color: text.tertiary, fontSize: 12, textAlign: "center", paddingVertical: 40 },
+
+  // Secondary KPI grid — 3 per row, wraps to a second row of 3.
+  kpi_grid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  // width: "31.5%" + gap 8 yields exactly 3 columns; minWidth:0 keeps long
+  // values from widening a cell and breaking the column equality.
+  kpi: {
+    width: "31.5%",
+    flexGrow: 1,
+    minWidth: 0,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    gap: 6,
+  },
+  kpi_head: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 6 },
+  kpi_label: { fontSize: 9, lineHeight: 12, color: text.tertiary, letterSpacing: 0.3, textTransform: "uppercase", fontWeight: "600", flexShrink: 1 },
+  kpi_value: { fontFamily: mono, fontSize: 15, fontWeight: "800", color: "#fff" },
 
   tabbar: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.08)", marginBottom: 10 },
   tabbtn: { paddingHorizontal: 18, paddingVertical: 14, borderBottomWidth: 2, borderBottomColor: "transparent" },
-  tabbtn_on: { borderBottomColor: "#fff" },
+  tabbtn_on: { borderBottomColor: palette.brandBlue },
   tabbtn_label: { fontSize: 13, fontWeight: "500", color: text.tertiary },
   tabbtn_label_on: { color: "#fff", fontWeight: "800" },
   tabbtn_count: { fontSize: 11, color: text.muted, fontWeight: "600" },
+  tabbtn_count_on: { color: palette.brandBlue },
+  list_box: { height: LIST_HEIGHT },
+  list_scroll: { paddingBottom: 4 },
   list_empty: { padding: 24, textAlign: "center", color: text.muted, fontSize: 13 },
 
   row: {
