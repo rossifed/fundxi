@@ -134,6 +134,8 @@ export default function PortfolioScreen() {
           dto.points.map(p => ({
             v: p.value,
             pnl: p.pnl_vs_open,
+            // Epoch ms drives the chart's time x-axis (short HH:MM / DD MMM ticks).
+            ts: new Date(p.ts).getTime(),
             // Date label for the scrub tooltip (web parity: shows the date).
             label: new Date(p.ts).toLocaleString(undefined, {
               day: "2-digit",
@@ -258,7 +260,18 @@ export default function PortfolioScreen() {
               })}
             </View>
           </View>
-          {perf.length > 0 ? <PerformanceChart data={perf} height={200} format_value={p => fmt_eur_m(p.v)} /> : <Text style={styles.chart_empty}>No history yet</Text>}
+          {perf.length > 0 ? (
+            <PerformanceChart
+              data={perf}
+              height={176}
+              format_value={p => fmt_eur_m(p.v)}
+              format_axis={v => `${Math.round(v)}M`}
+              show_axes
+              show_last_value
+            />
+          ) : (
+            <Text style={styles.chart_empty}>No history yet</Text>
+          )}
         </View>
 
         {/* Secondary KPI grid — 3×2 iconised cells. Lower visual weight than the

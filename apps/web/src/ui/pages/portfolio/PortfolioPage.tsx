@@ -198,7 +198,7 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
   // (hypertable ``valuation.portfolio_value_snapshot``). Web + mobile +
   // any future surface read from the same DTO. We re-fetch on every
   // price-tick wave so the chart stays in sync with the KPIs above.
-  const [performance_data, set_performance_data] = useState<{ v: number; label?: string; pnl?: number }[]>([]);
+  const [performance_data, set_performance_data] = useState<{ v: number; label?: string; pnl?: number; ts?: number }[]>([]);
   useEffect(() => {
     let cancelled = false;
     void portfolio_api.fetch_history("all").then(dto => {
@@ -207,7 +207,7 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
         dto.points.map(p => {
           const dt = new Date(p.ts);
           const label = `${dt.toLocaleDateString(undefined, { day: "2-digit", month: "short" })} · ${dt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
-          return { v: p.value, label, pnl: p.pnl_vs_open };
+          return { v: p.value, label, pnl: p.pnl_vs_open, ts: dt.getTime() };
         }),
       );
     });
@@ -370,7 +370,7 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
                 {fmt_signed_pct(period_return, 1)}
               </span>
             </div>
-            <PerformanceChart data={performance_data} height={280} />
+            <PerformanceChart data={performance_data} height={280} format_axis={v => `${Math.round(v)}M`} show_axes show_last_value />
           </div>
 
           {/* Positions / Trade history — flex-grows to fill remaining

@@ -20,8 +20,11 @@
  */
 
 import { useId } from "react";
-import { Area, AreaChart, ResponsiveContainer, Tooltip } from "recharts";
+import { Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { color_for_sign, fmt_eur_m_signed, fmt_signed_pct } from "@/ui/helpers/format";
+import { color, colors } from "@/ui/design/tokens";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface PerfPoint {
   v: number;
@@ -33,6 +36,8 @@ export interface PerfPoint {
    * tooltip displays it; otherwise the chart falls back to a delta
    * computed against the first visible point of the window. */
   pnl?: number;
+  /** Epoch ms — drives the time x-axis when `show_axes` is set. */
+  ts?: number;
 }
 
 interface PerformanceChartProps {
@@ -40,6 +45,30 @@ interface PerformanceChartProps {
   /** Kept for backwards compat — Recharts handles sizing via ResponsiveContainer. */
   width?: number;
   height?: number;
+  /** Render the right y-axis (value gridlines) + bottom x-axis (time labels). */
+  show_axes?: boolean;
+  /** Draw a dashed line at the latest value with a value pill at the end. */
+  show_last_value?: boolean;
+  /** Y-axis tick label. The chart stays unit-agnostic — the caller owns the
+   *  unit (defaults to a plain rounded number). */
+  format_axis?: (value: number) => string;
+}
+
+// Last-value pill rendered at the right end of the reference line. Recharts
+// injects `viewBox` (the line's bounding box) so we anchor to its right edge.
+function LastValuePill({ viewBox, text, fill }: { viewBox?: { x: number; y: number; width: number }; text: string; fill: string }) {
+  if (!viewBox) return null;
+  const right = viewBox.x + viewBox.width;
+  const w = 50;
+  const h = 18;
+  return (
+    <g>
+      <rect x={right - w} y={viewBox.y - h / 2} width={w} height={h} rx={5} fill={fill} />
+      <text x={right - w / 2} y={viewBox.y + 4} textAnchor="middle" fontSize={11} fontWeight={800} fill="#fff" className="mono">
+        {text}
+      </text>
+    </g>
+  );
 }
 
 interface PerfTooltipPayload {
@@ -99,13 +128,19 @@ function PerfTooltip(props: PerfTooltipReceived) {
   );
 }
 
-export function PerformanceChart({ data, height = 220 }: PerformanceChartProps) {
+export function PerformanceChart({
+  data,
+  height = 220,
+  show_axes = false,
+  show_last_value = false,
+  format_axis = v => String(Math.round(v)),
+}: PerformanceChartProps) {
   if (!data.length) return null;
 
   const first = data[0].v;
   const last = data[data.length - 1].v;
   const is_up = last >= first;
-  const color = is_up ? "var(--color-chart-primary)" : "var(--color-chart-negative)";
+  const stroke = is_up ? color.chartPrimary : color.chartNegative;
   const gradient_id = useId().replace(/:/g, "");
 
   // Carry the baseline (first point) on every datum so the custom
@@ -115,19 +150,64 @@ export function PerformanceChart({ data, height = 220 }: PerformanceChartProps) 
     i,
     v: d.v,
     label: d.label,
+    ts: d.ts,
     baseline: first,
     pnl_vs_open: d.pnl,
   }));
 
+  // Time axis: short labels (HH:MM for intraday windows, DD MMM otherwise) at a
+  // few evenly spaced points. Falls back to blank when no real timestamp.
+  const span_ms = (data[data.length - 1].ts ?? 0) - (data[0].ts ?? 0);
+  const fmt_x = (index: number): string => {
+    const p = points[index];
+    if (!p || p.ts == null) return "";
+    const d = new Date(p.ts);
+    return span_ms > 0 && span_ms <= 1.5 * DAY_MS
+      ? d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+      : d.toLocaleDateString(undefined, { day: "2-digit", month: "short" });
+  };
+  const x_ticks = show_axes
+    ? Array.from(new Set(Array.from({ length: 4 }, (_, k) => Math.round((k / 3) * (points.length - 1)))))
+    : undefined;
+
+  const tick = { fontSize: 9, fill: colors.text.tertiary, fontFamily: '"JetBrains Mono", monospace' } as const;
+  const margin = show_axes ? { top: 8, right: 8, bottom: 4, left: 0 } : { top: 8, right: 12, bottom: 0, left: 0 };
+
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <AreaChart data={points} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+      <AreaChart data={points} margin={margin}>
         <defs>
           <linearGradient id={gradient_id} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity={0.45} />
-            <stop offset="100%" stopColor={color} stopOpacity={0} />
+            <stop offset="0%" stopColor={stroke} stopOpacity={0.45} />
+            <stop offset="100%" stopColor={stroke} stopOpacity={0} />
           </linearGradient>
         </defs>
+        {show_axes && <CartesianGrid stroke={colors.border} strokeDasharray="2 4" vertical horizontal />}
+        {show_axes && (
+          <XAxis
+            dataKey="i"
+            type="number"
+            domain={[0, points.length - 1]}
+            ticks={x_ticks}
+            tickFormatter={fmt_x}
+            tick={tick}
+            tickLine={false}
+            axisLine={false}
+            height={16}
+          />
+        )}
+        {show_axes && (
+          <YAxis
+            orientation="right"
+            domain={["dataMin", "dataMax"]}
+            tickCount={5}
+            tickFormatter={format_axis}
+            tick={tick}
+            tickLine={false}
+            axisLine={false}
+            width={40}
+          />
+        )}
         <Tooltip
           cursor={{ stroke: "rgba(255,255,255,.15)", strokeDasharray: "3 3" }}
           content={PerfTooltip as never}
@@ -135,13 +215,23 @@ export function PerformanceChart({ data, height = 220 }: PerformanceChartProps) 
         <Area
           type="monotone"
           dataKey="v"
-          stroke={color}
+          stroke={stroke}
           strokeWidth={2}
           fill={`url(#${gradient_id})`}
           dot={false}
-          activeDot={{ r: 4, fill: color, stroke: "#0d0d0f", strokeWidth: 2 }}
+          activeDot={{ r: 4, fill: stroke, stroke: "#0d0d0f", strokeWidth: 2 }}
           isAnimationActive={false}
         />
+        {show_last_value && (
+          <ReferenceLine
+            y={last}
+            stroke={stroke}
+            strokeDasharray="3 3"
+            strokeOpacity={0.7}
+            ifOverflow="extendDomain"
+            label={<LastValuePill text={`€${last.toFixed(1)}M`} fill={stroke} />}
+          />
+        )}
       </AreaChart>
     </ResponsiveContainer>
   );

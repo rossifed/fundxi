@@ -119,11 +119,8 @@ export default function TabLayout() {
               <Text style={{ color, fontSize: 18 }}>{tab.icon}</Text>
             ),
             // The PortfolioBar strip is the single, consistent portfolio summary
-            // across every tab — except Portfolio, whose own page hero already
-            // shows the totals, so the strip there would just duplicate them.
-            ...(tab.name === "portfolio"
-              ? { header: () => <TabHeader title={tab.title} portfolio_bar={false} /> }
-              : {}),
+            // across every tab, Portfolio included — it's the always-on glanceable
+            // header band (mirrors the mockup) above the page's own hero cards.
           }}
         />
       ))}
