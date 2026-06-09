@@ -1,0 +1,17 @@
+# Keep the build context lean and reproducible.
+**/node_modules
+**/.venv
+**/dist
+**/__pycache__
+**/*.pyc
+.git
+.github
+**/.expo
+apps/mobile/android
+apps/mobile/ios
+**/.env
+**/.env.*
+!**/.env.example
+tsconfig.tsbuildinfo
+**/.DS_Store
+SESSION.md
