@@ -174,6 +174,7 @@ function MatchBody({
 }) {
   const [tab, set_tab] = useState<Tab>("compos");
   const [compos_view, set_compos_view] = useState<ComposView>("xi");
+  const router = useRouter();
   const home = teams_api.get(match.home_team_id);
   const away = teams_api.get(match.away_team_id);
   const is_live = match.status === "live";
@@ -184,8 +185,9 @@ function MatchBody({
   const counts = useMemo(() => count_events(match.events), [match.events]);
   const home_xi = useMemo(() => group_by_position(only_players(match.home_xi)), [match.home_xi]);
   const away_xi = useMemo(() => group_by_position(only_players(match.away_xi)), [match.away_xi]);
-  const home_bench = useMemo(() => [...(match.home_bench ?? [])].sort((a, b) => (a.jersey_number || 99) - (b.jersey_number || 99)), [match.home_bench]);
-  const away_bench = useMemo(() => [...(match.away_bench ?? [])].sort((a, b) => (a.jersey_number || 99) - (b.jersey_number || 99)), [match.away_bench]);
+  // Bench grouped by position too, like the starting XI (GK / DF / MF / FW).
+  const home_bench = useMemo(() => group_by_position(match.home_bench ?? []), [match.home_bench]);
+  const away_bench = useMemo(() => group_by_position(match.away_bench ?? []), [match.away_bench]);
   const home_color = match.home_kit_color ?? home?.color;
   const away_color = match.away_kit_color ?? away?.color;
 
@@ -212,14 +214,18 @@ function MatchBody({
         </View>
         <View style={styles.score_row}>
           <View style={styles.score_team}>
-            <Text style={styles.score_flag}>{home?.flag}</Text>
-            <Text style={styles.score_name} numberOfLines={1}>{home?.name ?? match.home_team_id}</Text>
+            <Pressable style={styles.score_team_tap} onPress={() => router.push(`/team/${match.home_team_id}`)} hitSlop={4}>
+              <Text style={styles.score_flag}>{home?.flag}</Text>
+              <Text style={styles.score_name} numberOfLines={1}>{home?.name ?? match.home_team_id}</Text>
+            </Pressable>
             <Scorers goals={goals.filter(g => g.team_id === match.home_team_id)} align="center" />
           </View>
           <Text style={styles.score}>{match.home_score} : {match.away_score}</Text>
           <View style={styles.score_team}>
-            <Text style={styles.score_flag}>{away?.flag}</Text>
-            <Text style={styles.score_name} numberOfLines={1}>{away?.name ?? match.away_team_id}</Text>
+            <Pressable style={styles.score_team_tap} onPress={() => router.push(`/team/${match.away_team_id}`)} hitSlop={4}>
+              <Text style={styles.score_flag}>{away?.flag}</Text>
+              <Text style={styles.score_name} numberOfLines={1}>{away?.name ?? match.away_team_id}</Text>
+            </Pressable>
             <Scorers goals={goals.filter(g => g.team_id === match.away_team_id)} align="center" />
           </View>
         </View>
@@ -240,27 +246,9 @@ function MatchBody({
               <ColumnGlow color={home_color} side="left" />
               <ColumnGlow color={away_color} side="right" />
               {compos_view === "xi" ? (
-                POSITION_GROUPS.map(g => {
-                  const h = home_xi[g.key];
-                  const a = away_xi[g.key];
-                  if (h.length === 0 && a.length === 0) return null;
-                  return (
-                    <View key={g.key}>
-                      <Divider label={g.label} />
-                      <View style={styles.two_col}>
-                        <View style={styles.col}>{h.map(p => <RosterCard key={p.id} p={p} counts={counts.get(p.id)} on_open={on_open} />)}</View>
-                        <View style={styles.col}>{a.map(p => <RosterCard key={p.id} p={p} counts={counts.get(p.id)} on_open={on_open} />)}</View>
-                      </View>
-                    </View>
-                  );
-                })
-              ) : home_bench.length === 0 && away_bench.length === 0 ? (
-                <Text style={styles.loading_inline}>No substitutes listed.</Text>
+                <GroupedRoster home={home_xi} away={away_xi} counts={counts} on_open={on_open} empty="Line-up not available." />
               ) : (
-                <View style={styles.two_col}>
-                  <View style={styles.col}>{home_bench.map(p => <RosterCard key={p.id} p={p} counts={counts.get(p.id)} on_open={on_open} />)}</View>
-                  <View style={styles.col}>{away_bench.map(p => <RosterCard key={p.id} p={p} counts={counts.get(p.id)} on_open={on_open} />)}</View>
-                </View>
+                <GroupedRoster home={home_bench} away={away_bench} counts={counts} on_open={on_open} empty="No substitutes listed." />
               )}
             </View>
           </View>
@@ -278,6 +266,44 @@ function MatchBody({
         </View>
       )}
     </ScrollView>
+  );
+}
+
+// Two columns (home | away) of roster cards split into position sections
+// (GK / DF / MF / FW). Shared by the starting XI and the bench so both read the
+// same way. `empty` is shown when neither side has any player.
+function GroupedRoster({
+  home,
+  away,
+  counts,
+  on_open,
+  empty,
+}: {
+  home: Record<Position, MatchPlayer[]>;
+  away: Record<Position, MatchPlayer[]>;
+  counts: Map<number, EventCounts>;
+  on_open: (player: Player) => void;
+  empty: string;
+}) {
+  const has_any = POSITION_GROUPS.some(g => home[g.key].length > 0 || away[g.key].length > 0);
+  if (!has_any) return <Text style={styles.loading_inline}>{empty}</Text>;
+  return (
+    <>
+      {POSITION_GROUPS.map(g => {
+        const h = home[g.key];
+        const a = away[g.key];
+        if (h.length === 0 && a.length === 0) return null;
+        return (
+          <View key={g.key}>
+            <Divider label={g.label} />
+            <View style={styles.two_col}>
+              <View style={styles.col}>{h.map(p => <RosterCard key={p.id} p={p} counts={counts.get(p.id)} on_open={on_open} />)}</View>
+              <View style={styles.col}>{a.map(p => <RosterCard key={p.id} p={p} counts={counts.get(p.id)} on_open={on_open} />)}</View>
+            </View>
+          </View>
+        );
+      })}
+    </>
   );
 }
 
@@ -327,6 +353,9 @@ function RosterCard({
   const live_price = valuations_api.get_for_player(p.id)?.current_price ?? p.value;
   const match_change = p.change_last_match ?? 0;
   const photo = ref_player?.image_path;
+  // Detailed provider position (e.g. "Centre-Back") — finer than the GK/DF/MF/FW
+  // section header. Shown only when the provider gives it; never invented.
+  const position = ref_player?.detailed_position;
   // Tap opens the player sheet — only for players in our tradable universe
   // (others have no reference Player, so there is nothing to show).
   return (
@@ -355,6 +384,7 @@ function RosterCard({
             </Text>
           )}
         </View>
+        {position ? <Text style={styles.rc_pos} numberOfLines={1}>{position}</Text> : null}
         <View style={styles.rc_stat_row}>
           <TickValue value={live_price}>
             <Text style={styles.rc_price}>€{live_price}M</Text>
@@ -558,6 +588,7 @@ const styles = StyleSheet.create({
   ft: { fontSize: 11, color: text.tertiary, fontWeight: "600" },
   score_row: { flexDirection: "row", alignItems: "flex-start", justifyContent: "center", gap: 10, paddingHorizontal: 12, paddingTop: 14, paddingBottom: 18 },
   score_team: { flex: 1, alignItems: "center" },
+  score_team_tap: { alignItems: "center" },
   score_flag: { fontSize: 44, lineHeight: 50 },
   score_name: { fontSize: 16, fontWeight: "800", color: "#fff", marginTop: 6, textAlign: "center" },
   score: { fontFamily: mono, fontSize: 38, fontWeight: "900", color: "#fff", letterSpacing: -1.5, paddingTop: 6 },
@@ -609,6 +640,7 @@ const styles = StyleSheet.create({
   rc_meta: { flex: 1, minWidth: 0 },
   rc_name_row: { flexDirection: "row", alignItems: "center", gap: 4 },
   rc_name: { fontSize: 12, fontWeight: "600", color: "#fff", flexShrink: 1 },
+  rc_pos: { fontSize: 9, fontWeight: "600", color: text.tertiary, letterSpacing: 0.2, marginTop: 1 },
   rc_badges: { fontSize: 10 },
   rc_stat_row: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: 1 },
   rc_price: { fontFamily: mono, fontSize: 11.5, fontWeight: "700", color: "rgba(255,255,255,0.78)" },
