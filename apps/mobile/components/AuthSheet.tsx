@@ -20,15 +20,16 @@ import {
 } from "react-native";
 
 import { ApiError } from "@fundxi/core/infrastructure/api_client";
+import { auth_api } from "@fundxi/core/api/auth_api";
 
 import { Logo } from "@/components/Logo";
 import { palette, text } from "@/theme/tokens";
 
-type Mode = "login" | "register";
+type Mode = "login" | "register" | "forgot";
 
 interface AuthSheetProps {
   visible: boolean;
-  initial_mode: Mode;
+  initial_mode: "login" | "register";
   on_close: () => void;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
@@ -40,33 +41,62 @@ export function AuthSheet({ visible, initial_mode, on_close, login, register }: 
   const [password, set_password] = useState("");
   const [busy, set_busy] = useState(false);
   const [error, set_error] = useState<string | null>(null);
+  const [sent, set_sent] = useState(false); // forgot: request submitted
 
   // Re-sync the mode when reopened in a specific mode (e.g. trade -> register).
   const [last_initial, set_last_initial] = useState<Mode>(initial_mode);
   if (visible && last_initial !== initial_mode) {
     set_last_initial(initial_mode);
     set_mode(initial_mode);
+    set_sent(false);
   }
 
-  const can_submit = email.length > 0 && password.length >= 8 && !busy;
+  const go_mode = (next: Mode) => {
+    set_mode(next);
+    set_error(null);
+    set_sent(false);
+  };
+
+  const can_submit =
+    mode === "forgot" ? email.length > 0 && !busy : email.length > 0 && password.length >= 8 && !busy;
 
   const submit = async () => {
     if (!can_submit) return;
     set_busy(true);
     set_error(null);
     try {
-      if (mode === "login") await login(email.trim(), password);
-      else await register(email.trim(), password);
-      // Reset on success, then let the caller close.
-      set_email("");
-      set_password("");
-      on_close();
+      if (mode === "login") {
+        await login(email.trim(), password);
+        set_email("");
+        set_password("");
+        on_close();
+      } else if (mode === "register") {
+        await register(email.trim(), password);
+        set_email("");
+        set_password("");
+        on_close();
+      } else {
+        // Always succeeds from the UI's side — the backend never reveals
+        // whether the email exists (no enumeration).
+        await auth_api.request_password_reset(email.trim());
+        set_sent(true);
+      }
     } catch (err) {
       set_error(friendly_error_message(err, mode));
     } finally {
       set_busy(false);
     }
   };
+
+  const title = mode === "login" ? "Sign in" : mode === "register" ? "Create account" : "Reset password";
+  const subtitle =
+    mode === "login"
+      ? "Welcome back to fundXI."
+      : mode === "register"
+        ? "Start trading World Cup players."
+        : "Enter your email and we'll send you a link to choose a new password.";
+  const submit_label =
+    mode === "login" ? "Sign in" : mode === "register" ? "Create account" : "Send reset link";
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={on_close}>
@@ -75,61 +105,84 @@ export function AuthSheet({ visible, initial_mode, on_close, login, register }: 
           {/* Stop propagation so taps inside the card don't dismiss. */}
           <Pressable style={styles.card} onPress={() => {}}>
             <Logo size={30} style={styles.logo} />
-            <Text style={styles.title}>{mode === "login" ? "Sign in" : "Create account"}</Text>
-            <Text style={styles.subtitle}>
-              {mode === "login" ? "Welcome back to fundXI." : "Start trading World Cup players."}
-            </Text>
+            <Text style={styles.title}>{title}</Text>
+            <Text style={styles.subtitle}>{subtitle}</Text>
 
-            <TextInput
-              style={styles.input}
-              value={email}
-              onChangeText={set_email}
-              placeholder="Email"
-              placeholderTextColor={text.muted}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="email"
-              inputMode="email"
-            />
-            <TextInput
-              style={styles.input}
-              value={password}
-              onChangeText={set_password}
-              placeholder="Password (min 8 characters)"
-              placeholderTextColor={text.muted}
-              secureTextEntry
-              autoCapitalize="none"
-              autoComplete={mode === "login" ? "current-password" : "new-password"}
-              onSubmitEditing={submit}
-              returnKeyType="go"
-            />
+            {mode === "forgot" && sent ? (
+              <>
+                <Text style={styles.success}>
+                  If an account exists for that email, a reset link is on its way. The link expires in
+                  1 hour.
+                </Text>
+                <Pressable style={styles.toggle} onPress={() => go_mode("login")}>
+                  <Text style={styles.toggle_label}>Back to sign in</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <TextInput
+                  style={styles.input}
+                  value={email}
+                  onChangeText={set_email}
+                  placeholder="Email"
+                  placeholderTextColor={text.muted}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="email"
+                  inputMode="email"
+                />
+                {mode !== "forgot" && (
+                  <TextInput
+                    style={styles.input}
+                    value={password}
+                    onChangeText={set_password}
+                    placeholder="Password (min 8 characters)"
+                    placeholderTextColor={text.muted}
+                    secureTextEntry
+                    autoCapitalize="none"
+                    autoComplete={mode === "login" ? "current-password" : "new-password"}
+                    onSubmitEditing={submit}
+                    returnKeyType="go"
+                  />
+                )}
 
-            {error && <Text style={styles.error}>{error}</Text>}
+                {mode === "login" && (
+                  <Pressable style={styles.forgot} onPress={() => go_mode("forgot")} hitSlop={6}>
+                    <Text style={styles.forgot_label}>Forgot password?</Text>
+                  </Pressable>
+                )}
 
-            <Pressable
-              style={[styles.submit, !can_submit && styles.submit_disabled]}
-              onPress={submit}
-              disabled={!can_submit}
-            >
-              {busy ? (
-                <ActivityIndicator color="#04140a" />
-              ) : (
-                <Text style={styles.submit_label}>{mode === "login" ? "Sign in" : "Create account"}</Text>
-              )}
-            </Pressable>
+                {error && <Text style={styles.error}>{error}</Text>}
 
-            <Pressable
-              style={styles.toggle}
-              onPress={() => {
-                set_mode(m => (m === "login" ? "register" : "login"));
-                set_error(null);
-              }}
-            >
-              <Text style={styles.toggle_label}>
-                {mode === "login" ? "No account? Create one" : "Already have an account? Sign in"}
-              </Text>
-            </Pressable>
+                <Pressable
+                  style={[styles.submit, !can_submit && styles.submit_disabled]}
+                  onPress={submit}
+                  disabled={!can_submit}
+                >
+                  {busy ? (
+                    <ActivityIndicator color="#04140a" />
+                  ) : (
+                    <Text style={styles.submit_label}>{submit_label}</Text>
+                  )}
+                </Pressable>
+
+                <Pressable
+                  style={styles.toggle}
+                  onPress={() =>
+                    go_mode(mode === "forgot" ? "login" : mode === "login" ? "register" : "login")
+                  }
+                >
+                  <Text style={styles.toggle_label}>
+                    {mode === "forgot"
+                      ? "Remembered it? Sign in"
+                      : mode === "login"
+                        ? "No account? Create one"
+                        : "Already have an account? Sign in"}
+                  </Text>
+                </Pressable>
+              </>
+            )}
           </Pressable>
         </KeyboardAvoidingView>
       </Pressable>
@@ -176,6 +229,9 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
   error: { color: palette.negative, fontSize: 13, fontWeight: "600" },
+  success: { color: palette.positive, fontSize: 13, fontWeight: "600", lineHeight: 18 },
+  forgot: { alignSelf: "flex-start", marginTop: -2 },
+  forgot_label: { color: palette.accent, fontSize: 13, fontWeight: "700" },
   submit: {
     backgroundColor: palette.actionBuy,
     borderRadius: 10,

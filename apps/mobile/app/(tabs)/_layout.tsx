@@ -2,8 +2,8 @@
 // Labels + Unicode glyph icons are kept identical so users recognise the same
 // app when switching desktop ↔ mobile (see fundxi/CLAUDE.md "UI direction").
 
-import { Tabs } from "expo-router";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Tabs, useRouter } from "expo-router";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { themes } from "@fundxi/core/design/palette";
@@ -14,22 +14,16 @@ import { PortfolioBar } from "@/components/PortfolioBar";
 const palette = themes.dark;
 
 // Right-side auth control: "Sign in" when anonymous, the user's initial
-// (tap to sign out) when authenticated — the RN parity for the web header
-// auth buttons / avatar.
+// (tap to open the Profile screen) when authenticated — the RN parity for the
+// web header avatar / sidebar Profile entry. Sign-out lives on the Profile
+// page, matching the web ProfilePage.
 function AuthControl() {
-  const { status, user, prompt, logout } = useAuth();
+  const { status, user, prompt } = useAuth();
+  const router = useRouter();
   if (status === "authenticated" && user) {
     const initial = (user.name || user.email).trim().charAt(0).toUpperCase();
     return (
-      <Pressable
-        onPress={() =>
-          Alert.alert("Account", user.email, [
-            { text: "Cancel", style: "cancel" },
-            { text: "Sign out", style: "destructive", onPress: () => void logout() },
-          ])
-        }
-        hitSlop={8}
-      >
+      <Pressable onPress={() => router.push("/profile")} hitSlop={8}>
         <View style={header_styles.avatar}>
           <Text style={header_styles.avatar_text}>{initial}</Text>
         </View>

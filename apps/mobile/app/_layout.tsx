@@ -69,6 +69,8 @@ export default function RootLayout() {
             <AuthProvider>
               <Stack screenOptions={{ contentStyle: { backgroundColor: 'transparent' } }}>
                 <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                <Stack.Screen name="profile" options={{ headerShown: false }} />
+                <Stack.Screen name="reset-password" options={{ headerShown: false }} />
               </Stack>
               <OfflineBanner />
             </AuthProvider>
