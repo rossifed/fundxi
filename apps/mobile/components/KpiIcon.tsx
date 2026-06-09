@@ -5,9 +5,18 @@
 // is passed in so the caller controls the theme tint (brand blue, or sign
 // colour for the performance one).
 
-import Svg, { Circle, Path, Polyline, Rect } from "react-native-svg";
+import Svg, { Circle, Ellipse, Path, Polyline, Rect } from "react-native-svg";
 
-export type KpiIconName = "cash" | "invested" | "positions" | "trades" | "winrate" | "top";
+export type KpiIconName =
+  | "cash"
+  | "invested"
+  | "positions"
+  | "trades"
+  | "winrate"
+  | "top"
+  | "coins"
+  | "boot"
+  | "diamond";
 
 export function KpiIcon({ name, color, size = 18 }: { name: KpiIconName; color: string; size?: number }) {
   const sw = 1.6;
@@ -47,6 +56,25 @@ export function KpiIcon({ name, color, size = 18 }: { name: KpiIconName; color: 
         </>
       )}
       {name === "top" && <Polyline points="4,16 9,11 13,14 20,6" {...common} />}
+      {name === "coins" && (
+        <>
+          <Ellipse cx={12} cy={7} rx={7} ry={3} {...common} />
+          <Path d="M5 7 v5 a7 3 0 0 0 14 0 v-5" {...common} />
+          <Path d="M5 11.5 a7 3 0 0 0 14 0" {...common} />
+        </>
+      )}
+      {name === "boot" && (
+        <>
+          <Path d="M5 5 L5 13 C5 14 5.7 14.5 7 14.5 L17 14.5 C19 14.5 20 13.5 20 12 C20 10.5 18.5 10 16 10 L11 10 L10.5 5 Z" {...common} />
+          <Path d="M5 16.5 L19 16.5" {...common} />
+        </>
+      )}
+      {name === "diamond" && (
+        <>
+          <Path d="M5.5 9 L9 4 L15 4 L18.5 9 L12 20 Z" {...common} />
+          <Path d="M5.5 9 L18.5 9 M9 4 L12 9 L15 4" {...common} />
+        </>
+      )}
     </Svg>
   );
 }

@@ -11,6 +11,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
@@ -22,12 +23,13 @@ import { valuations_api } from "@fundxi/core/api/valuations_api";
 import type { Fixture } from "@fundxi/core/domain/match/fixture";
 import { type Player, type Position } from "@fundxi/core/domain/player/player";
 
+import { KpiIcon, type KpiIconName } from "@/components/KpiIcon";
 import { PlayerChip } from "@/components/PlayerChip";
 import { PlayerSheet, type PlayerSheetHandle } from "@/components/PlayerSheet";
 import { TickValue } from "@/components/TickValue";
 import { useLiveRefetch, useMatchesLiveVersion, usePricesLiveVersion, useStandingsLiveVersion } from "@/components/live";
 import { color_for_sign, fmt_eur_m, fmt_signed_pct } from "@/lib/format";
-import { mono, palette, position_color, text } from "@/theme/tokens";
+import { mono, palette, text } from "@/theme/tokens";
 
 const POSITION_GROUPS: { key: Position; label: string }[] = [
   { key: "GK", label: "Goalkeepers" },
@@ -44,11 +46,6 @@ function fmt_match_date(iso?: string): string {
 
 function fmt_squad_value(value_m: number): string {
   return value_m >= 1000 ? `€${(value_m / 1000).toFixed(2)}B` : `€${Math.round(value_m)}M`;
-}
-
-function last_word(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  return parts[parts.length - 1] ?? name;
 }
 
 function ordinal(n: number): string {
@@ -138,6 +135,23 @@ export default function TeamScreen() {
     [team_id, fixtures_version],
   );
 
+  // Top scorer (most goals, must be > 0) and most valuable player — surfaced as
+  // a badge on their own squad row rather than as separate summary cells.
+  // Value uses the squad snapshot price (same basis as the old summary cell).
+  const { top_scorer_id, top_value_id } = useMemo(() => {
+    if (!squad || squad.length === 0) return { top_scorer_id: null as number | null, top_value_id: null as number | null };
+    let ts: SquadPlayer | null = null;
+    let tv: SquadPlayer | null = null;
+    for (const p of squad) {
+      if ((p.stats?.goals ?? 0) > (ts?.stats?.goals ?? 0)) ts = p;
+      if (p.valuation.current_price > (tv?.valuation.current_price ?? -Infinity)) tv = p;
+    }
+    return {
+      top_scorer_id: ts && (ts.stats?.goals ?? 0) > 0 ? ts.id : null,
+      top_value_id: tv ? tv.id : null,
+    };
+  }, [squad]);
+
   const open_fixture = async (fx: Fixture) => {
     router.push(`/match/${fx.id}`);
   };
@@ -169,7 +183,8 @@ export default function TeamScreen() {
                 POSITION_GROUPS.map(grp => {
                   const players = squad.filter(p => p.position === grp.key);
                   if (players.length === 0) return null;
-                  const accent = position_color[grp.key];
+                  // Uniform brand-blue accent per the mockup (not per-position).
+                  const accent = palette.brandBlue;
                   return (
                     <View key={grp.key} style={styles.group_panel}>
                       <View style={[styles.group_head, { backgroundColor: `${accent}16`, borderBottomColor: `${accent}33` }]}>
@@ -179,7 +194,14 @@ export default function TeamScreen() {
                       </View>
                       <View style={{ padding: 8, gap: 6 }}>
                         {players.map(p => (
-                          <SquadRow key={p.id} p={p} team_color={team.color} on_open={() => sheet_ref.current?.open(to_player(p, team_id))} />
+                          <SquadRow
+                            key={p.id}
+                            p={p}
+                            team_color={team.color}
+                            is_top_scorer={p.id === top_scorer_id}
+                            is_top_value={p.id === top_value_id}
+                            on_open={() => sheet_ref.current?.open(to_player(p, team_id))}
+                          />
                         ))}
                       </View>
                     </View>
@@ -215,7 +237,14 @@ function TeamHeader({ team_id, standing, group }: { team_id: string; standing: S
   if (group) sub.push(`Group ${group}`);
   if (standing) sub.push(`${ordinal(standing.position)} in group`);
   return (
-    <View style={styles.header}>
+    <LinearGradient
+      // Brand-blue glow (brightest top-right) over a dark surface — the premium
+      // header treatment from the mockup, uniform across teams.
+      colors={[`${palette.brandBlue}33`, `${palette.brandBlue}14`, "rgba(255,255,255,0.02)"]}
+      start={{ x: 1, y: 0 }}
+      end={{ x: 0, y: 1 }}
+      style={styles.header}
+    >
       {team.flag_url ? (
         <Image source={{ uri: team.flag_url }} style={styles.header_flag_img} resizeMode="contain" />
       ) : (
@@ -229,12 +258,12 @@ function TeamHeader({ team_id, standing, group }: { team_id: string; standing: S
             {team.coach_image_path && <Image source={{ uri: team.coach_image_path }} style={styles.coach_img} />}
             <Text style={styles.coach_text}>
               <Text style={styles.coach_kicker}>COACH </Text>
-              {team.coach_name}
+              <Text style={styles.coach_name}>{team.coach_name}</Text>
             </Text>
           </View>
         )}
       </View>
-    </View>
+    </LinearGradient>
   );
 }
 
@@ -244,17 +273,17 @@ function RecordStrip({ standing }: { standing: StandingRow }) {
     { label: "Won", value: standing.won },
     { label: "Drawn", value: standing.drawn },
     { label: "Lost", value: standing.lost },
-    { label: "GF", value: standing.goals_for },
-    { label: "GA", value: standing.goals_against },
-    { label: "GD", value: `${standing.goal_difference > 0 ? "+" : ""}${standing.goal_difference}`, color: color_for_sign(standing.goal_difference) },
+    { label: "For", value: standing.goals_for },
+    { label: "Against", value: standing.goals_against },
+    { label: "Diff", value: `${standing.goal_difference > 0 ? "+" : ""}${standing.goal_difference}`, color: color_for_sign(standing.goal_difference) },
     { label: "Points", value: standing.points, emphasis: true },
   ];
   return (
     <View style={styles.record}>
       {cells.map(c => (
         <View key={c.label} style={styles.record_cell}>
-          <Text style={styles.record_label}>{c.label}</Text>
-          <Text style={[styles.record_value, c.emphasis && { fontSize: 18 }, c.color ? { color: c.color } : null]}>{c.value}</Text>
+          <Text style={styles.record_label} numberOfLines={1}>{c.label}</Text>
+          <Text style={[styles.record_value, c.emphasis && { fontSize: 16 }, c.color ? { color: c.color } : null]}>{c.value}</Text>
         </View>
       ))}
     </View>
@@ -265,46 +294,91 @@ function SquadSummary({ squad }: { squad: SquadPlayer[] }) {
   const total_value = squad.reduce((s, p) => s + p.valuation.current_price, 0);
   const ages = squad.map(p => p.age).filter((a): a is number => a != null);
   const avg_age = ages.length > 0 ? ages.reduce((s, a) => s + a, 0) / ages.length : null;
-  let top_scorer: SquadPlayer | null = null;
-  for (const p of squad) if ((p.stats?.goals ?? 0) > (top_scorer?.stats?.goals ?? 0)) top_scorer = p;
-  const top_goals = top_scorer?.stats?.goals ?? 0;
-  let top_value: SquadPlayer | null = null;
-  for (const p of squad) if (p.valuation.current_price > (top_value?.valuation.current_price ?? -Infinity)) top_value = p;
-  const cells = [
-    { label: "Squad value", main: fmt_squad_value(total_value) },
-    { label: "Avg age", main: avg_age != null ? avg_age.toFixed(1) : "—" },
-    { label: "Top scorer", main: top_goals > 0 && top_scorer ? last_word(top_scorer.name) : "—", sub: top_goals > 0 ? `${top_goals} ${top_goals === 1 ? "goal" : "goals"}` : undefined },
-    { label: "Top value", main: top_value ? last_word(top_value.name) : "—", sub: top_value ? fmt_eur_m(top_value.valuation.current_price) : undefined },
+  // Top scorer / top value are no longer cells here — they're badged on the
+  // player's own squad row, so this strip stays focused on team-level totals.
+  const cells: { label: string; main: string; icon: KpiIconName }[] = [
+    { label: "Squad value", main: fmt_squad_value(total_value), icon: "coins" },
+    { label: "Avg age", main: avg_age != null ? avg_age.toFixed(1) : "—", icon: "positions" },
   ];
   return (
     <View style={styles.summary}>
       {cells.map(c => (
         <View key={c.label} style={styles.summary_cell}>
-          <Text style={styles.summary_label}>{c.label}</Text>
+          <KpiIcon name={c.icon} color={palette.brandBlue} size={17} />
+          <Text style={styles.summary_label} numberOfLines={1}>{c.label}</Text>
           <Text style={styles.summary_main} numberOfLines={1}>{c.main}</Text>
-          {c.sub && <Text style={styles.summary_sub}>{c.sub}</Text>}
         </View>
       ))}
     </View>
   );
 }
 
-function SquadRow({ p, team_color, on_open }: { p: SquadPlayer; team_color: string; on_open: () => void }) {
+function SquadRow({
+  p,
+  team_color,
+  is_top_scorer,
+  is_top_value,
+  on_open,
+}: {
+  p: SquadPlayer;
+  team_color: string;
+  is_top_scorer?: boolean;
+  is_top_value?: boolean;
+  on_open: () => void;
+}) {
   const live = valuations_api.get_for_player(p.id);
   const price = live?.current_price ?? p.valuation.current_price;
   const change = live?.change_since_inception ?? p.valuation.change_since_inception;
+
+  // Identity meta line — jersey always, detailed position + age only when the
+  // provider supplies them (no fallback, no invented label).
+  const meta_parts = [`#${p.jersey_number}`];
+  if (p.detailed_position) meta_parts.push(p.detailed_position);
+  if (p.age != null) meta_parts.push(`${p.age}y`);
+
+  // Football counting stats — always the same three chips for a stable layout.
+  // A missing (null) counter renders as 0: for season counters null means "none
+  // recorded" (assumed display choice; switch to "–" if it ever means "unknown").
+  const stats = [
+    { label: "Apps", value: p.stats?.appearances ?? 0 },
+    { label: "Goals", value: p.stats?.goals ?? 0 },
+    { label: "Assists", value: p.stats?.assists ?? 0 },
+  ];
+
   return (
     <Pressable style={styles.row} onPress={on_open}>
       <View style={styles.row_avatar_wrap}>
         {p.image_path ? (
           <Image source={{ uri: p.image_path }} style={styles.row_avatar} resizeMode="cover" />
         ) : (
-          <PlayerChip jersey_number={p.jersey_number} team_color={team_color} size={34} />
+          <PlayerChip jersey_number={p.jersey_number} team_color={team_color} size={40} />
         )}
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={styles.row_name} numberOfLines={1}>{p.name}</Text>
-        <Text style={styles.row_jersey}>#{p.jersey_number}</Text>
+        <View style={styles.row_name_line}>
+          <Text style={styles.row_name} numberOfLines={1}>{p.name}</Text>
+          {is_top_scorer && (
+            <View style={styles.row_badge}>
+              <KpiIcon name="boot" color={palette.brandBlue} size={13} />
+              <Text style={styles.row_badge_label}>Top scorer</Text>
+            </View>
+          )}
+          {is_top_value && (
+            <View style={styles.row_badge}>
+              <KpiIcon name="diamond" color={palette.brandBlue} size={13} />
+              <Text style={styles.row_badge_label}>Top value</Text>
+            </View>
+          )}
+        </View>
+        <Text style={styles.row_meta} numberOfLines={1}>{meta_parts.join(" · ")}</Text>
+        <View style={styles.stat_row}>
+          {stats.map(s => (
+            <View key={s.label} style={styles.stat_chip}>
+              <Text style={styles.stat_chip_value}>{s.value}</Text>
+              <Text style={styles.stat_chip_label}>{s.label}</Text>
+            </View>
+          ))}
+        </View>
       </View>
       <View style={{ alignItems: "flex-end" }}>
         <TickValue value={price}>
@@ -352,38 +426,52 @@ const styles = StyleSheet.create({
   muted: { color: text.muted, fontSize: 13, textAlign: "center", paddingVertical: 24 },
   section_label: { fontSize: 11, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase", color: text.secondary },
 
-  header: { flexDirection: "row", alignItems: "center", gap: 16, padding: 18, borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", borderRadius: 14, backgroundColor: "rgba(255,255,255,0.02)" },
-  header_flag: { fontSize: 46, lineHeight: 52 },
-  header_flag_img: { width: 52, height: 52 },
+  // Header — brand-blue gradient card (background comes from LinearGradient).
+  header: { flexDirection: "row", alignItems: "center", gap: 16, padding: 18, borderWidth: 1, borderColor: `${palette.brandBlue}33`, borderRadius: 16, overflow: "hidden" },
+  header_flag: { fontSize: 58, lineHeight: 64 },
+  header_flag_img: { width: 64, height: 64 },
   header_name: { fontSize: 22, fontWeight: "800", color: "#fff", letterSpacing: -0.4 },
   header_sub: { fontSize: 12, color: text.secondary, fontWeight: "600", marginTop: 2 },
   coach_row: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: 8 },
   coach_img: { width: 22, height: 22, borderRadius: 11, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
   coach_text: { fontSize: 12, fontWeight: "600", color: text.secondary },
   coach_kicker: { fontSize: 9, fontWeight: "800", letterSpacing: 0.8, color: text.tertiary },
+  coach_name: { fontSize: 12, fontWeight: "700", color: "#fff" },
 
-  record: { flexDirection: "row", flexWrap: "wrap", borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", borderRadius: 12, overflow: "hidden", backgroundColor: "rgba(255,255,255,0.06)", gap: 1 },
-  record_cell: { flexGrow: 1, flexBasis: "23%", backgroundColor: "rgba(13,13,15,0.6)", paddingVertical: 12, paddingHorizontal: 8, alignItems: "center" },
+  // Record + summary — individually rounded cards separated by a gap (mockup).
+  record: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  record_cell: { flexGrow: 1, flexBasis: "22%", minWidth: 0, backgroundColor: "rgba(255,255,255,0.03)", borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", borderRadius: 12, paddingVertical: 8, paddingHorizontal: 8, alignItems: "center" },
   record_label: { fontSize: 9, fontWeight: "700", letterSpacing: 0.5, textTransform: "uppercase", color: text.tertiary },
-  record_value: { fontFamily: mono, fontSize: 16, fontWeight: "800", color: "#fff", marginTop: 3 },
+  record_value: { fontFamily: mono, fontSize: 15, fontWeight: "800", color: "#fff", marginTop: 2 },
 
-  summary: { flexDirection: "row", borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", borderRadius: 12, overflow: "hidden", backgroundColor: "rgba(255,255,255,0.06)", gap: 1 },
-  summary_cell: { flex: 1, backgroundColor: "rgba(13,13,15,0.6)", paddingVertical: 11, paddingHorizontal: 6, alignItems: "center", minWidth: 0 },
+  summary: { flexDirection: "row", gap: 8 },
+  summary_cell: { flex: 1, minWidth: 0, backgroundColor: "rgba(255,255,255,0.03)", borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", borderRadius: 12, paddingVertical: 12, paddingHorizontal: 6, alignItems: "center", gap: 3 },
   summary_label: { fontSize: 9, fontWeight: "700", letterSpacing: 0.5, textTransform: "uppercase", color: text.tertiary, textAlign: "center" },
-  summary_main: { fontFamily: mono, fontSize: 15, fontWeight: "800", color: "#fff", marginTop: 3 },
-  summary_sub: { fontSize: 9.5, fontWeight: "600", color: text.tertiary, marginTop: 1 },
+  summary_main: { fontFamily: mono, fontSize: 15, fontWeight: "800", color: "#fff" },
+  summary_sub: { fontSize: 9.5, fontWeight: "600", color: text.tertiary },
 
   group_panel: { backgroundColor: "rgba(255,255,255,0.02)", borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", borderRadius: 12, overflow: "hidden" },
   group_head: { flexDirection: "row", alignItems: "center", gap: 9, paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1 },
   group_dot: { width: 9, height: 9, borderRadius: 5 },
   group_label: { fontSize: 13, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase", color: "#fff", flex: 1 },
-  group_count: { fontSize: 11, fontWeight: "800", color: text.secondary, backgroundColor: "rgba(0,0,0,0.25)", borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2, overflow: "hidden" },
+  group_count: { fontSize: 11, fontWeight: "800", color: "#fff", backgroundColor: `${palette.brandBlue}33`, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2, overflow: "hidden" },
 
   row: { flexDirection: "row", alignItems: "center", gap: 10, padding: 8, backgroundColor: "rgba(255,255,255,0.025)", borderWidth: 1, borderColor: "rgba(255,255,255,0.05)", borderRadius: 10 },
-  row_avatar_wrap: { width: 34, height: 34 },
-  row_avatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: "rgba(255,255,255,0.06)" },
-  row_name: { fontSize: 13, fontWeight: "700", color: "#fff" },
-  row_jersey: { fontFamily: mono, fontSize: 11, fontWeight: "700", color: text.tertiary, marginTop: 1 },
+  row_avatar_wrap: { width: 40, height: 40 },
+  row_avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.06)" },
+  row_name_line: { flexDirection: "row", alignItems: "center", gap: 5 },
+  row_name: { fontSize: 13, fontWeight: "700", color: "#fff", flexShrink: 1 },
+  // Badge marking the squad's top scorer (boot) / most valuable player (diamond)
+  // — icon + label so the meaning is explicit.
+  row_badge: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: `${palette.brandBlue}26`, borderWidth: 1, borderColor: `${palette.brandBlue}40`, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2 },
+  row_badge_label: { fontSize: 9, fontWeight: "800", letterSpacing: 0.2, color: "#fff" },
+  // Identity meta (#jersey · position · age) above the football stat chips.
+  row_meta: { fontSize: 11, fontWeight: "600", color: text.tertiary, marginTop: 2 },
+  // Stat chips — full word + bold number, so "Goals"/"Assists" are unambiguous.
+  stat_row: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginTop: 5 },
+  stat_chip: { flexDirection: "row", alignItems: "baseline", gap: 4, backgroundColor: "rgba(255,255,255,0.04)", borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
+  stat_chip_value: { fontFamily: mono, fontSize: 12, fontWeight: "800", color: "#fff" },
+  stat_chip_label: { fontSize: 8.5, fontWeight: "700", letterSpacing: 0.3, textTransform: "uppercase", color: text.tertiary },
   row_price: { fontFamily: mono, fontSize: 13, fontWeight: "800", color: "#fff" },
   row_change: { fontFamily: mono, fontSize: 11, fontWeight: "700", marginTop: 1 },
 
