@@ -75,16 +75,22 @@ const TAB_SORTS: Record<Tab, SortOpt[]> = {
   ],
   statistics: [
     { key: "value", label: "Value" },
+    { key: "rating_avg", label: "Rating" },
     { key: "appearances", label: "Apps" },
+    { key: "minutes_played", label: "Minutes" },
     { key: "goals", label: "Goals" },
     { key: "assists", label: "Assists" },
-    { key: "rating_avg", label: "Rating" },
+    { key: "key_passes", label: "Key passes" },
+    { key: "shots", label: "Shots" },
+    { key: "passes", label: "Passes" },
+    { key: "passes_accuracy", label: "Pass %" },
     { key: "name", label: "Name" },
   ],
   personal: [
     { key: "value", label: "Value" },
     { key: "age", label: "Age" },
     { key: "height", label: "Height" },
+    { key: "weight", label: "Weight" },
     { key: "name", label: "Name" },
   ],
 };
@@ -221,6 +227,16 @@ export default function ScreenerScreen() {
     }
   };
 
+  const change_tab = (t: Tab) => {
+    set_tab(t);
+    // Keep the active sort valid for the new lens; fall back to Value otherwise
+    // (e.g. sorting by "minutes" then switching to the personal tab).
+    if (!TAB_SORTS[t].some(o => o.key === sort_key)) {
+      set_sort_key("value");
+      set_sort_dir("desc");
+    }
+  };
+
   // Removable chips for every active filter — flags only for country chips.
   const active_chips: { key: string; label: string; flag?: string; flag_url?: string; clear: () => void }[] = [
     ...Array.from(position_filters).map(p => ({
@@ -287,7 +303,7 @@ export default function ScreenerScreen() {
         {(["valuation", "statistics", "personal"] as Tab[]).map(t => {
           const on = tab === t;
           return (
-            <Pressable key={t} onPress={() => set_tab(t)} style={[styles.tab, on && styles.tab_on]}>
+            <Pressable key={t} onPress={() => change_tab(t)} style={[styles.tab, on && styles.tab_on]}>
               <Text style={[styles.tab_label, on && styles.tab_label_on]}>{t}</Text>
             </Pressable>
           );
@@ -426,6 +442,12 @@ function FilterIcon({ color, size = 15 }: { color: string; size?: number }) {
 // Player row — compact horizontal card
 // ---------------------------------------------------------------------------
 
+// Team-kit colour as a subtle translucent backdrop. team_color is per-row
+// provider data (allowed inline per CLAUDE.md); non-hex / empty → neutral.
+function team_tint(hex: string): string {
+  return /^#[0-9a-fA-F]{6}$/.test(hex) ? `${hex}26` : palette.bg;
+}
+
 function ScreenerRow({
   entry: e,
   tab,
@@ -442,95 +464,147 @@ function ScreenerRow({
   on_toggle_watch: () => void;
 }) {
   const team = teams_api.get(e.team_id);
-  const perf = e.since_start_pct;
-  const perf_color = color_for_sign(perf);
   const meta = [team?.name, e.club].filter(Boolean).join(" · ");
+  const team_color = team?.color ?? "";
   const spark = spark_for_player(e.id);
-  const show_spark = tab === "valuation" && spark.length > 1;
-  const stat_line = tab === "valuation" ? null : secondary_stat_line(e, tab);
-  const team_color = team?.color ?? "#666";
+  const cells = stat_cells(e, tab);
   const has_photo = e.image_path != null && e.image_path !== "";
 
   return (
     <Pressable style={({ pressed }) => [styles.row, pressed && styles.row_pressed]} onPress={on_open} accessibilityRole="button">
-      <Pressable onPress={on_toggle_watch} hitSlop={8} style={styles.star_hit}>
+      {/* Tiny watch star pinned to the card's top-left corner — absolute, so it
+          never offsets the avatar or the info. */}
+      <Pressable onPress={on_toggle_watch} hitSlop={12} style={styles.star_btn}>
         <Text style={[styles.star, watched && styles.star_on]}>{watched ? "★" : "☆"}</Text>
       </Pressable>
 
-      {/* Mini squad-card thumbnail — bottom-anchored portrait on a team-kit
-          tint, with the jersey number on a legible chip (corner over the
-          photo, or centred when there is no photo). team_color is per-row
-          provider data (allowed inline per CLAUDE.md). */}
-      <View style={[styles.hero, { backgroundColor: tint(team_color, has_photo ? "22" : "33") }]}>
-        {has_photo ? (
-          <>
-            <Image source={{ uri: e.image_path! }} style={styles.hero_photo} resizeMode="contain" />
-            <View style={styles.hero_num_chip}>
-              <Text style={styles.hero_num_chip_txt}>{e.jersey_number}</Text>
-            </View>
-          </>
-        ) : (
-          <Text style={styles.hero_num_big} numberOfLines={1}>{e.jersey_number}</Text>
-        )}
-      </View>
-
-      <View style={styles.identity}>
-        <View style={styles.name_row}>
-          <Text style={styles.name} numberOfLines={1}>{e.name}</Text>
-          {held && (
-            <View style={styles.held}>
-              <Text style={styles.held_label}>HELD</Text>
-            </View>
-          )}
-        </View>
-        <View style={styles.meta_row}>
-          {team?.flag_url ? (
-            <Image source={{ uri: team.flag_url }} style={styles.meta_flag_img} resizeMode="contain" />
+      <View style={styles.row_top}>
+        {/* Rounded-square avatar with a subtle team-kit colour tint behind the
+            portrait (Sportmonks-derived team.color); black bg when the team has
+            no kit colour. Jersey-number fallback when there is no photo. */}
+        <View style={[styles.avatar, { backgroundColor: team_tint(team_color) }]}>
+          {has_photo ? (
+            <Image source={{ uri: e.image_path! }} style={styles.avatar_img} resizeMode="contain" />
           ) : (
-            <Text style={styles.meta_flag}>{team?.flag}</Text>
+            <Text style={styles.avatar_num} numberOfLines={1}>{e.jersey_number}</Text>
           )}
-          <Text style={styles.meta_text} numberOfLines={1}>{meta}</Text>
-          <PositionBadge position={e.position as Position} abbr />
         </View>
-        {stat_line ? <Text style={styles.stat_line} numberOfLines={1}>{stat_line}</Text> : null}
+
+        <View style={styles.identity}>
+          <View style={styles.name_row}>
+            <Text style={styles.num_prefix}>{e.jersey_number}</Text>
+            <Text style={styles.name} numberOfLines={1}>{e.name}</Text>
+            {held && (
+              <View style={styles.held}>
+                <Text style={styles.held_label}>HELD</Text>
+              </View>
+            )}
+          </View>
+          <View style={styles.meta_row}>
+            {team?.flag_url ? (
+              <Image source={{ uri: team.flag_url }} style={styles.meta_flag_img} resizeMode="contain" />
+            ) : (
+              <Text style={styles.meta_flag}>{team?.flag}</Text>
+            )}
+            <Text style={styles.meta_text} numberOfLines={1}>{meta}</Text>
+            <PositionBadge position={e.position as Position} abbr />
+          </View>
+        </View>
+
+        {/* Price only — the tournament-to-date return now lives in the
+            valuation strip, not here. */}
+        <View style={styles.price_col}>
+          <TickValue value={e.current_price}>
+            <Text style={styles.price}>€{e.current_price.toFixed(1)}M</Text>
+          </TickValue>
+        </View>
       </View>
 
-      <View style={styles.price_col}>
-        {show_spark && (
-          <Spark data={spark} width={70} height={26} color={perf == null ? undefined : perf_color} />
+      {/* Per-tab stat strip. On valuation the Trend chart is the LAST cell, to
+          the right of the return figures. */}
+      <View style={styles.stat_strip}>
+        {cells.map(c => (
+          <View key={c.label} style={[styles.stat_cell, tab === "personal" && styles.stat_cell_centered]}>
+            <Text style={styles.stat_cell_label} numberOfLines={1}>{c.label}</Text>
+            {c.cards ? (
+              c.cards.y == null && c.cards.r == null ? (
+                <Text style={styles.stat_cell_value}>—</Text>
+              ) : (
+                <Text style={styles.stat_cell_value} numberOfLines={1}>
+                  <Text style={{ color: palette.cardYellow }}>{c.cards.y ?? 0}</Text>
+                  <Text style={{ color: text.muted }}> · </Text>
+                  <Text style={{ color: palette.negative }}>{c.cards.r ?? 0}</Text>
+                </Text>
+              )
+            ) : (
+              <Text style={[styles.stat_cell_value, c.color ? { color: c.color } : null]} numberOfLines={1}>
+                {c.value}
+              </Text>
+            )}
+          </View>
+        ))}
+        {tab === "valuation" && (
+          <View style={styles.stat_cell}>
+            <Text style={styles.stat_cell_label} numberOfLines={1}>Trend</Text>
+            {spark.length > 1 ? (
+              <Spark data={spark} width={60} height={16} />
+            ) : (
+              <Text style={styles.stat_cell_value}>—</Text>
+            )}
+          </View>
         )}
-        <TickValue value={e.current_price}>
-          <Text style={styles.price}>€{e.current_price.toFixed(1)}M</Text>
-        </TickValue>
-        <Text style={[styles.price_pct, { color: perf_color }]}>{fmt_signed_pct(perf, 1)}</Text>
       </View>
     </Pressable>
   );
 }
 
-// Team kit colour → translucent tint. team_color is per-row provider data
-// (allowed inline per CLAUDE.md); guard non-hex values to a neutral overlay.
-function tint(hex: string, alpha: string): string {
-  return /^#[0-9a-fA-F]{6}$/.test(hex) ? `${hex}${alpha}` : "rgba(255,255,255,0.06)";
+interface StatCellData {
+  label: string;
+  value: string;
+  color?: string;
+  // When set, the cell renders yellow/red card counts as two colour-coded
+  // numbers (the colour disambiguates which is which) instead of `value`.
+  cards?: { y: number | null; r: number | null };
 }
 
-// Single compact stat line for the Statistics / Personal tabs (replaces the
-// boxed ALL-TIME/LAST/AVG strip). Returns null when there is nothing real to
-// show, so we never render a row of zeros or an empty line.
-function secondary_stat_line(e: ScreenerEntry, tab: Tab): string | null {
-  const parts: string[] = [];
-  if (tab === "statistics") {
-    if (e.appearances != null) parts.push(`${e.appearances} apps`);
-    if (e.goals != null) parts.push(`${e.goals} G`);
-    if (e.assists != null) parts.push(`${e.assists} A`);
-    // Match stats are empty until live ingest runs (no fabricated zeros) — show
-    // a compact honest placeholder so the tab doesn't read as broken.
-    return parts.length > 0 ? parts.join("  ·  ") : "No match stats yet";
+// Per-tab stat strip cells — the "lens" content that makes each tab a distinct
+// view (parity with the web per-tab columns), laid out as evenly-spaced
+// label/value cells so nothing truncates. Cells are FIXED per tab (always
+// rendered, "—" when null) so columns stay aligned across rows. We pick
+// high-coverage fields for the strip; sparse stats (goals/assists/shots/cards)
+// live in the sort menu + PlayerSheet instead of showing "—" on most rows.
+function stat_cells(e: ScreenerEntry, tab: Tab): StatCellData[] {
+  const num = (v: number | null) => (v == null ? "—" : `${v}`);
+  if (tab === "valuation") {
+    // The valuation lens lives entirely in the strip: tournament-to-date return
+    // + the two match horizons. (The Trend spark is appended last in the JSX.)
+    return [
+      { label: "All-time", value: e.since_start_pct == null ? "—" : fmt_signed_pct(e.since_start_pct, 1), color: color_for_sign(e.since_start_pct) },
+      { label: "Last match", value: e.last_match_pct == null ? "—" : fmt_signed_pct(e.last_match_pct, 1), color: color_for_sign(e.last_match_pct) },
+      { label: "Avg / match", value: e.avg_match_pct == null ? "—" : fmt_signed_pct(e.avg_match_pct, 1), color: color_for_sign(e.avg_match_pct) },
+    ];
   }
-  if (e.age != null) parts.push(`${e.age}y`);
-  if (e.height != null) parts.push(`${e.height}cm`);
-  if (e.foot) parts.push(`${e.foot} foot`);
-  return parts.length > 0 ? parts.join("  ·  ") : null;
+  if (tab === "statistics") {
+    // Tournament-to-date aggregates. Rating/Apps give context; goals/assists/
+    // cards are the offensive + discipline discriminators (sparse → "—" for
+    // many, which is honest). Min / Pass% stay available via the sort menu.
+    return [
+      { label: "Rating", value: e.rating_avg == null ? "—" : e.rating_avg.toFixed(1) },
+      { label: "Apps", value: num(e.appearances) },
+      { label: "Min", value: num(e.minutes_played) },
+      { label: "Goals", value: num(e.goals) },
+      { label: "Assists", value: num(e.assists) },
+      { label: "Cards", value: "", cards: { y: e.yellow_cards, r: e.red_cards } },
+    ];
+  }
+  // Pure numbers; the label carries the meaning (cm/kg implied) so values stay
+  // short and the cells never wrap or collide.
+  return [
+    { label: "Age", value: num(e.age) },
+    { label: "Foot", value: e.foot ? e.foot[0].toUpperCase() + e.foot.slice(1) : "—" },
+    { label: "Height", value: e.height == null ? "—" : `${e.height} cm` },
+    { label: "Weight", value: e.weight == null ? "—" : `${e.weight} kg` },
+  ];
 }
 
 // ---------------------------------------------------------------------------
@@ -1271,50 +1345,39 @@ const styles = StyleSheet.create({
   },
   footer_apply_label: { fontSize: 14, fontWeight: "800", color: "#fff" },
 
-  // --- Player row (compact) ---
+  // --- Player card ---
   row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
+    position: "relative",
     backgroundColor: "rgba(255,255,255,0.045)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.09)",
     borderRadius: 12,
-    paddingVertical: 9,
-    paddingHorizontal: 11,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     marginBottom: 7,
   },
   row_pressed: { backgroundColor: "rgba(255,255,255,0.08)" },
-  star_hit: { paddingRight: 1 },
-  star: { fontSize: 16, color: text.faint, lineHeight: 18 },
+  row_top: { flexDirection: "row", alignItems: "center", gap: 11 },
+  star_btn: { position: "absolute", top: 4, left: 5, zIndex: 2, padding: 2 },
+  star: { fontSize: 13, color: text.faint, lineHeight: 15 },
   star_on: { color: palette.accentBlue },
-  hero: {
-    width: 52,
-    height: 56,
-    borderRadius: 11,
+  avatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 9,
     overflow: "hidden",
+    backgroundColor: "rgba(255,255,255,0.05)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
     alignItems: "center",
     justifyContent: "center",
   },
-  hero_photo: { position: "absolute", left: 0, right: 0, bottom: 0, width: "100%", height: "88%" },
-  hero_num_chip: {
-    position: "absolute",
-    top: 3,
-    left: 3,
-    minWidth: 16,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 5,
-    backgroundColor: "rgba(6,7,12,0.82)",
-    alignItems: "center",
-  },
-  hero_num_chip_txt: { fontFamily: mono, fontSize: 9, fontWeight: "800", color: "#fff" },
-  hero_num_big: { fontFamily: mono, fontSize: 22, fontWeight: "900", color: "#fff" },
+  avatar_img: { width: "100%", height: "100%" },
+  avatar_num: { fontFamily: mono, fontSize: 15, fontWeight: "800", color: "rgba(255,255,255,0.7)" },
   identity: { flex: 1, minWidth: 0, gap: 2 },
   name_row: { flexDirection: "row", alignItems: "center", gap: 6 },
-  name: { fontSize: 14, fontWeight: "700", color: "#fff", flexShrink: 1 },
+  num_prefix: { fontFamily: mono, fontSize: 12, fontWeight: "700", color: "rgba(255,255,255,0.7)" },
+  name: { fontSize: 15, fontWeight: "700", color: "#fff", flexShrink: 1 },
   held: {
     backgroundColor: "rgba(72,255,67,0.14)",
     borderWidth: 1,
@@ -1328,9 +1391,29 @@ const styles = StyleSheet.create({
   meta_flag: { fontSize: 12 },
   meta_flag_img: { width: 15, height: 15, borderRadius: 2 },
   meta_text: { fontSize: 12, color: text.secondary, flexShrink: 1 },
-  stat_line: { fontSize: 11, color: text.tertiary, fontFamily: mono, marginTop: 1 },
   price_col: { alignItems: "flex-end", gap: 2 },
-  price: { fontFamily: mono, fontSize: 14, fontWeight: "800", color: "#fff" },
+
+  // --- Per-tab stat strip (label/value cells grouped as a mini panel) ---
+  stat_strip: {
+    flexDirection: "row",
+    marginTop: 9,
+    paddingTop: 9,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.07)",
+  },
+  stat_cell: { flex: 1, gap: 3 },
+  // Personal tab only: centre each column so the short "Age" value isn't left
+  // with a big trailing gap — even spacing across Age/Foot/Height/Weight.
+  stat_cell_centered: { alignItems: "center" },
+  stat_cell_label: {
+    fontSize: 9,
+    fontWeight: "600",
+    color: text.muted,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  stat_cell_value: { fontFamily: mono, fontSize: 12.5, fontWeight: "600", color: "rgba(255,255,255,0.82)" },
+  price: { fontFamily: mono, fontSize: 15, fontWeight: "800", color: "#fff" },
   price_pct: { fontFamily: mono, fontSize: 11, fontWeight: "700" },
 
   empty: { padding: 40, textAlign: "center", color: text.muted, fontSize: 13 },

@@ -12,8 +12,10 @@ import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import BottomSheet, {
   BottomSheetBackdrop,
+  BottomSheetFooter,
   BottomSheetScrollView,
   type BottomSheetBackdropProps,
+  type BottomSheetFooterProps,
 } from "@gorhom/bottom-sheet";
 
 import { players_api } from "@fundxi/core/api/players_api";
@@ -21,7 +23,8 @@ import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import { teams_api } from "@fundxi/core/api/teams_api";
 import { valuations_api } from "@fundxi/core/api/valuations_api";
 import { POSITION_LABEL, type Player } from "@fundxi/core/domain/player/player";
-import { compute_period_return, compute_return_pct } from "@fundxi/core/domain/market/return";
+import { compute_return_pct } from "@fundxi/core/domain/market/return";
+import type { PlayerValuation } from "@fundxi/core/domain/market/player_valuation";
 import { compute_portfolio_share } from "@fundxi/core/domain/portfolio/portfolio_metrics";
 import type { PlayerTournamentStat } from "@fundxi/core/infrastructure/repositories/player_stats_repository";
 import type { PlayerMatchEntry } from "@fundxi/core/infrastructure/repositories/player_matches_repository";
@@ -44,8 +47,13 @@ export interface PlayerSheetHandle {
 export const PlayerSheet = forwardRef<PlayerSheetHandle, object>(function PlayerSheet(_props, ref) {
   const router = useRouter();
   const sheet_ref = useRef<BottomSheet>(null);
-  const snap_points = useMemo(() => ["92%"], []);
+  const snap_points = useMemo(() => ["88%"], []);
   const [player, set_player] = useState<Player | null>(null);
+  const { status: auth_status, prompt: auth_prompt } = useAuth();
+  const [trade_kind, set_trade_kind] = useState<"buy" | "sell" | null>(null);
+  // Bumped after a successful order so the position card / ribbon re-read the
+  // updated holding (portfolio caches are refreshed inside trades_api.execute).
+  const [trade_version, set_trade_version] = useState(0);
 
   useImperativeHandle(ref, () => ({
     open(p: Player) {
@@ -60,34 +68,80 @@ export const PlayerSheet = forwardRef<PlayerSheetHandle, object>(function Player
     router.push(`/team/${team_id}`);
   };
 
+  const current_price = (player ? valuations_api.get_for_player(player.id)?.current_price : 0) ?? 0;
+
+  const gate_trade = (k: "buy" | "sell") => {
+    if (auth_status === "authenticated") {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      set_trade_kind(k);
+    } else {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      auth_prompt("register");
+    }
+  };
+
   const render_backdrop = (props: BottomSheetBackdropProps) => (
     <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.6} />
   );
 
+  // Sticky trade bar pinned to the bottom of the sheet — Buy/Sell stay visible
+  // without scrolling, whatever the content length.
+  const render_footer = (props: BottomSheetFooterProps) => (
+    <BottomSheetFooter {...props} bottomInset={0}>
+      <View style={styles.footer}>
+        <Pressable style={[styles.trade_btn, { backgroundColor: palette.actionBuy }]} onPress={() => gate_trade("buy")}>
+          <Text style={styles.trade_label}>Buy</Text>
+        </Pressable>
+        <Pressable style={[styles.trade_btn, { backgroundColor: palette.actionSell }]} onPress={() => gate_trade("sell")}>
+          <Text style={styles.trade_label}>Sell</Text>
+        </Pressable>
+      </View>
+    </BottomSheetFooter>
+  );
+
   return (
-    <BottomSheet
-      ref={sheet_ref}
-      index={-1}
-      snapPoints={snap_points}
-      enablePanDownToClose
-      onClose={() => set_player(null)}
-      backdropComponent={render_backdrop}
-      backgroundStyle={styles.bg}
-      handleIndicatorStyle={styles.handle}
-    >
-      <BottomSheetScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {player && <PlayerDetail player={player} on_open_team={open_team} />}
-      </BottomSheetScrollView>
-    </BottomSheet>
+    <>
+      <BottomSheet
+        ref={sheet_ref}
+        index={-1}
+        snapPoints={snap_points}
+        enablePanDownToClose
+        onClose={() => set_player(null)}
+        backdropComponent={render_backdrop}
+        footerComponent={player ? render_footer : undefined}
+        backgroundStyle={styles.bg}
+        handleIndicatorStyle={styles.handle}
+      >
+        <BottomSheetScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          {player && <PlayerDetail player={player} on_open_team={open_team} trade_version={trade_version} />}
+        </BottomSheetScrollView>
+      </BottomSheet>
+      {player && (
+        <TradeSheet
+          visible={trade_kind !== null}
+          player={player}
+          current_price={current_price}
+          initial_kind={trade_kind ?? "buy"}
+          on_close={() => set_trade_kind(null)}
+          on_done={() => set_trade_version(v => v + 1)}
+        />
+      )}
+    </>
   );
 });
 
-function PlayerDetail({ player, on_open_team }: { player: Player; on_open_team: (team_id: string) => void }) {
-  const { status: auth_status, prompt: auth_prompt } = useAuth();
+function PlayerDetail({
+  player,
+  on_open_team,
+  trade_version,
+}: {
+  player: Player;
+  on_open_team: (team_id: string) => void;
+  trade_version: number;
+}) {
   const team = teams_api.get(player.team_id);
   const valuation = valuations_api.get_for_player(player.id);
   const current_price = valuation?.current_price ?? 0;
-  const performance_rating = valuation?.performance_rating ?? 0;
 
   const [price_history, set_price_history] = useState<PricePoint[] | null>(null);
   const [stats, set_stats] = useState<PlayerTournamentStat | null | undefined>(undefined);
@@ -118,46 +172,32 @@ function PlayerDetail({ player, on_open_team }: { player: Player; on_open_team: 
       .catch(() => {});
   });
 
-  const [trade_kind, set_trade_kind] = useState<"buy" | "sell" | null>(null);
-  // Bumped after a successful order so YourPosition / the ribbon re-read the
-  // updated holding (portfolio caches are refreshed inside trades_api.execute).
-  const [, set_trade_version] = useState(0);
-
-  // Anonymous → open the sign-in sheet (register mode); authenticated → open
-  // the order-entry sheet for that side.
-  const gate_trade = (k: "buy" | "sell") => {
-    if (auth_status === "authenticated") {
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      set_trade_kind(k);
-    } else {
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      auth_prompt("register");
-    }
-  };
-
   return (
     <View style={styles.detail}>
       <Header player={player} team_color={team?.color ?? "#888"} team_name={team?.name ?? "?"} team_flag={team?.flag} team_flag_url={team?.flag_url} on_open_team={() => on_open_team(player.team_id)} />
 
-      <ValuationRibbon
-        player_id={player.id}
-        current_price={current_price}
-        performance_rating={performance_rating}
-        price_history={price_history}
-        stats={stats}
-      />
+      <ValuationRibbon player_id={player.id} valuation={valuation} stats={stats} refresh={trade_version} />
+
+      {stats != null && (
+        <SectionCard title="Statistics">
+          <View style={styles.kpi_grid}>
+            <SmallKpi compact label="Apps" value={String(stats.appearances ?? 0)} />
+            <SmallKpi compact label="Min" value={String(stats.minutes_played ?? 0)} />
+            <SmallKpi compact label="Goals" value={String(stats.goals ?? 0)} color={(stats.goals ?? 0) > 0 ? palette.positive : undefined} />
+            <SmallKpi compact label="Assists" value={String(stats.assists ?? 0)} color={(stats.assists ?? 0) > 0 ? palette.positive : undefined} />
+            <SmallKpi compact label="Shots" value={`${stats.shots_on_target ?? 0}/${stats.shots_total ?? 0}`} />
+            <SmallKpi compact label="Yellow" value={String(stats.yellow_cards ?? 0)} color={(stats.yellow_cards ?? 0) > 0 ? palette.cardYellow : undefined} />
+            <SmallKpi compact label="Red" value={String(stats.red_cards ?? 0)} color={(stats.red_cards ?? 0) > 0 ? palette.negative : undefined} />
+            <SmallKpi compact label="Key P" value={String(stats.key_passes ?? 0)} />
+            <SmallKpi compact label="Passes" value={String(stats.passes_total ?? 0)} />
+            <SmallKpi compact label="Pass %" value={stats.passes_accuracy != null ? `${stats.passes_accuracy.toFixed(0)}%` : "—"} />
+          </View>
+        </SectionCard>
+      )}
 
       <PriceChart price_history={price_history} />
 
-      <SectionCard title="Personal">
-        <View style={styles.kpi_grid}>
-          <SmallKpi label="Position" value={player.detailed_position ?? POSITION_LABEL[player.position]} />
-          <SmallKpi label="Age" value={String(player.age ?? "—")} />
-          <SmallKpi label="Foot" value={player.foot ?? "—"} />
-          <SmallKpi label="Height" value={player.height ?? "—"} />
-          <SmallKpi label="Weight" value={player.weight ?? "—"} />
-        </View>
-      </SectionCard>
+      <YourPosition player={player} current_price={current_price} refresh={trade_version} />
 
       {player.tags && player.tags.length > 0 && (
         <SectionCard title="Skills">
@@ -171,44 +211,7 @@ function PlayerDetail({ player, on_open_team }: { player: Player; on_open_team: 
         </SectionCard>
       )}
 
-      {stats != null && (
-        <SectionCard title="Statistics">
-          <View style={styles.kpi_grid}>
-            <SmallKpi label="Apps" value={String(stats.appearances ?? 0)} />
-            <SmallKpi label="Min" value={String(stats.minutes_played ?? 0)} />
-            <SmallKpi label="Goals" value={String(stats.goals ?? 0)} color={(stats.goals ?? 0) > 0 ? palette.positive : undefined} />
-            <SmallKpi label="Assists" value={String(stats.assists ?? 0)} color={(stats.assists ?? 0) > 0 ? palette.positive : undefined} />
-            <SmallKpi label="Shots" value={`${stats.shots_on_target ?? 0}/${stats.shots_total ?? 0}`} />
-            <SmallKpi label="Yellow" value={String(stats.yellow_cards ?? 0)} color={(stats.yellow_cards ?? 0) > 0 ? palette.cardYellow : undefined} />
-            <SmallKpi label="Red" value={String(stats.red_cards ?? 0)} color={(stats.red_cards ?? 0) > 0 ? palette.negative : undefined} />
-            <SmallKpi label="Key P" value={String(stats.key_passes ?? 0)} />
-            <SmallKpi label="Passes" value={String(stats.passes_total ?? 0)} />
-            <SmallKpi label="Pass %" value={stats.passes_accuracy != null ? `${stats.passes_accuracy.toFixed(0)}%` : "—"} />
-          </View>
-        </SectionCard>
-      )}
-
       <MatchLog player_id={player.id} />
-
-      <YourPosition player={player} current_price={current_price} />
-
-      <View style={styles.trade_row}>
-        <Pressable style={[styles.trade_btn, { backgroundColor: palette.actionBuy }]} onPress={() => gate_trade("buy")}>
-          <Text style={styles.trade_label}>Buy</Text>
-        </Pressable>
-        <Pressable style={[styles.trade_btn, { backgroundColor: palette.actionSell }]} onPress={() => gate_trade("sell")}>
-          <Text style={styles.trade_label}>Sell</Text>
-        </Pressable>
-      </View>
-
-      <TradeSheet
-        visible={trade_kind !== null}
-        player={player}
-        current_price={current_price}
-        initial_kind={trade_kind ?? "buy"}
-        on_close={() => set_trade_kind(null)}
-        on_done={() => set_trade_version(v => v + 1)}
-      />
     </View>
   );
 }
@@ -233,7 +236,7 @@ function Header({
       {player.image_path ? (
         <Image source={{ uri: player.image_path }} style={styles.photo} resizeMode="contain" />
       ) : (
-        <PlayerChip jersey_number={player.jersey_number} team_color={team_color} size={64} />
+        <PlayerChip jersey_number={player.jersey_number} team_color={team_color} size={72} />
       )}
       <View style={styles.identity}>
         <View style={styles.name_row}>
@@ -250,6 +253,17 @@ function Header({
           )}
           <Text style={styles.team_name}>{team_name}</Text>
         </Pressable>
+        <Text style={styles.header_bio} numberOfLines={1}>
+          {[
+            player.detailed_position ?? POSITION_LABEL[player.position],
+            player.age != null ? `${player.age}y` : null,
+            player.height,
+            player.weight,
+            player.foot ? `${player.foot[0].toUpperCase()}${player.foot.slice(1)}` : null,
+          ]
+            .filter(Boolean)
+            .join("  ·  ")}
+        </Text>
       </View>
     </View>
   );
@@ -257,33 +271,30 @@ function Header({
 
 function ValuationRibbon({
   player_id,
-  current_price,
-  performance_rating,
-  price_history,
+  valuation,
   stats,
+  refresh,
 }: {
   player_id: number;
-  current_price: number;
-  performance_rating: number;
-  price_history: PricePoint[] | null;
+  valuation: PlayerValuation | undefined;
   stats: PlayerTournamentStat | null | undefined;
+  refresh: number;
 }) {
-  const holding = portfolio_api.get_holding(player_id);
+  const current_price = valuation?.current_price ?? 0;
+  const holding = useMemo(() => portfolio_api.get_holding(player_id), [player_id, refresh]);
   const shares = holding?.shares ?? 0;
   const pnl = shares !== 0 ? shares * (current_price - (holding?.average_buy_price ?? 0)) : null;
 
-  const ph = price_history ?? [];
-  const since_start = ph.length > 1 ? compute_period_return(ph.map(p => p.price)) : null;
-  let last_match: number | null = null;
-  if (ph.length > 1) {
-    const last_fx = [...ph].reverse().find(p => p.fixture_id !== null)?.fixture_id;
-    if (last_fx != null) {
-      const ticks = ph.filter(p => p.fixture_id === last_fx);
-      if (ticks.length > 1) last_match = compute_period_return(ticks.map(t => t.price));
-    }
-  }
+  // Returns come straight from the server valuation — NEVER recomputed in JS —
+  // so this sheet and the screener row always reconcile (COHERENCE-INVARIANT).
+  // Avg/Match mirrors the screener's own formula (since-start ÷ appearances).
+  const since_start = valuation?.change_since_inception ?? null;
+  const last_match = valuation?.change_last_match ?? null;
   const apps = stats?.appearances ?? null;
   const avg_match = since_start !== null && apps && apps > 0 ? since_start / apps : null;
+  // Rating here = SEASON average (player_tournament_stat), a distinct metric
+  // from the latest-match rating (valuation.performance_rating).
+  const rating = stats?.rating_avg ?? null;
   const pc = (v: number | null) => (v === null ? undefined : color_for_sign(v));
 
   return (
@@ -293,11 +304,11 @@ function ValuationRibbon({
           label="Value"
           value={
             <TickValue value={current_price}>
-              <Text style={styles.kpi_value}>€{current_price}M</Text>
+              <Text style={styles.kpi_value}>€{current_price.toFixed(1)}M</Text>
             </TickValue>
           }
         />
-        <SmallKpi label="Rating" value={String(performance_rating)} color="rgba(255,255,255,0.85)" />
+        <SmallKpi label="Rating" value={rating == null ? "—" : rating.toFixed(1)} color="rgba(255,255,255,0.85)" />
         <SmallKpi label="P&L" value={pnl !== null ? fmt_eur_m_signed(pnl) : "—"} color={pnl !== null ? color_for_sign(pnl) : undefined} />
         <SmallKpi label="Since Start" value={fmt_signed_pct(since_start, 1)} color={pc(since_start)} />
         <SmallKpi label="Last Match" value={fmt_signed_pct(last_match, 1)} color={pc(last_match)} />
@@ -308,13 +319,27 @@ function ValuationRibbon({
 }
 
 function PriceChart({ price_history }: { price_history: PricePoint[] | null }) {
-  if (price_history === null) {
-    return <Text style={styles.chart_loading}>loading price history…</Text>;
-  }
-  if (price_history.length < 2) {
-    return <Text style={styles.chart_empty}>No matches played yet</Text>;
-  }
-  return <PerformanceChart data={price_history.map(p => ({ v: p.price }))} height={180} format_value={p => fmt_eur_m(p.v)} />;
+  return (
+    <SectionCard title="Price · since tournament start">
+      {price_history === null ? (
+        <Text style={styles.chart_loading}>loading price history…</Text>
+      ) : price_history.length < 2 ? (
+        <Text style={styles.chart_empty}>No matches played yet</Text>
+      ) : (
+        <PerformanceChart
+          data={price_history.map(p => ({
+            v: p.price,
+            ts: Date.parse(p.ts),
+            label: new Date(p.ts).toLocaleDateString(undefined, { day: "2-digit", month: "short" }),
+          }))}
+          height={200}
+          show_axes
+          show_last_value
+          format_value={p => fmt_eur_m(p.v)}
+        />
+      )}
+    </SectionCard>
+  );
 }
 
 function MatchLog({ player_id }: { player_id: number }) {
@@ -453,8 +478,8 @@ function NewsRow({ n }: { n: PlayerNewsEntry }) {
   );
 }
 
-function YourPosition({ player, current_price }: { player: Player; current_price: number }) {
-  const holding = portfolio_api.get_holding(player.id);
+function YourPosition({ player, current_price, refresh }: { player: Player; current_price: number; refresh: number }) {
+  const holding = useMemo(() => portfolio_api.get_holding(player.id), [player.id, refresh]);
   const totals = portfolio_api.get_totals();
   const has_position = !!holding && holding.shares !== 0;
 
@@ -519,9 +544,19 @@ function SectionCard({ title, children }: { title: string; children: React.React
   );
 }
 
-function SmallKpi({ label, value, color }: { label: string; value: React.ReactNode; color?: string }) {
+function SmallKpi({
+  label,
+  value,
+  color,
+  compact,
+}: {
+  label: string;
+  value: React.ReactNode;
+  color?: string;
+  compact?: boolean;
+}) {
   return (
-    <View style={styles.kpi}>
+    <View style={[styles.kpi, compact && styles.kpi_compact]}>
       <Text style={styles.kpi_label}>{label}</Text>
       {typeof value === "string" ? (
         <Text style={[styles.kpi_value, color ? { color } : null]}>{value}</Text>
@@ -535,11 +570,21 @@ function SmallKpi({ label, value, color }: { label: string; value: React.ReactNo
 const styles = StyleSheet.create({
   bg: { backgroundColor: palette.surfaceDeep },
   handle: { backgroundColor: "rgba(255,255,255,0.2)" },
-  content: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 40 },
+  content: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 96 },
+  footer: {
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 26,
+    backgroundColor: palette.surfaceDeep,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.08)",
+  },
   detail: { gap: 16 },
 
   header: { flexDirection: "row", alignItems: "center", gap: 14, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.06)" },
-  photo: { width: 64, height: 64, borderRadius: 10, backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
+  photo: { width: 72, height: 72, borderRadius: 11, backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
   identity: { flex: 1, minWidth: 0 },
   name_row: { flexDirection: "row", alignItems: "baseline", gap: 10 },
   jersey: { fontFamily: mono, fontSize: 20, fontWeight: "800", color: "rgba(255,255,255,0.55)", letterSpacing: -0.5 },
@@ -548,6 +593,7 @@ const styles = StyleSheet.create({
   team_flag: { fontSize: 18 },
   team_flag_img: { width: 20, height: 20 },
   team_name: { fontSize: 13, fontWeight: "700", color: "rgba(255,255,255,0.65)" },
+  header_bio: { fontSize: 11.5, color: text.tertiary, marginTop: 5 },
 
   section: { gap: 6 },
   section_title: { fontSize: 11, fontWeight: "700", color: "rgba(255,255,255,0.55)", letterSpacing: 0.5, textTransform: "uppercase" },
@@ -563,11 +609,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 6,
   },
+  // Tighter column so 5 fit per row (10 stats → 2 rows instead of 4).
+  kpi_compact: { minWidth: 52, flexBasis: "18%", paddingHorizontal: 7 },
   kpi_label: { fontSize: 9, color: text.tertiary, textTransform: "uppercase", letterSpacing: 0.4, fontWeight: "600" },
   kpi_value: { fontFamily: mono, fontSize: 13, fontWeight: "800", color: "#fff", marginTop: 1 },
 
   chart_loading: { color: text.tertiary, fontSize: 12, paddingVertical: 24, textAlign: "center" },
   chart_empty: { color: text.tertiary, fontSize: 13, fontWeight: "600", paddingVertical: 36, textAlign: "center" },
+  bio_strip: { fontSize: 12.5, color: text.secondary, lineHeight: 18, marginTop: -6 },
+  chart_head: { flexDirection: "row", alignItems: "baseline", gap: 10, marginBottom: 6 },
+  chart_value: { fontFamily: mono, fontSize: 22, fontWeight: "800", color: "#fff", letterSpacing: -0.5 },
+  chart_delta: { fontFamily: mono, fontSize: 13, fontWeight: "700" },
 
   tags: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   tag: { backgroundColor: "rgba(255,255,255,0.06)", borderWidth: 1, borderColor: "rgba(255,255,255,0.1)", borderRadius: 5, paddingHorizontal: 10, paddingVertical: 5 },
