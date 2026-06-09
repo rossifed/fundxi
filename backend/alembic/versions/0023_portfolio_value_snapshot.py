@@ -13,15 +13,15 @@ burst of N ticks in the same minute collapses to a single row
 
 Designed for read-heavy access pattern: the chart fetches a range
 on (portfolio_id, ts) which is the primary key + the hypertable
-partitioning key. Write rate scales with active-user × dirty-minute,
+partitioning key. Write rate scales with active-user x dirty-minute,
 not with tick rate — see CLAUDE.md / portfolio-history design memo.
 
 Columns:
   - ``cash``           — portfolio cash at bucket close.
-  - ``holdings_value`` — Σ shares × price across positions.
+  - ``holdings_value`` — sum of shares x price across positions.
   - ``value``          — cash + holdings_value (denormalised so chart
                           queries don't recompute on every read).
-  - ``pnl_vs_open``    — value − initial portfolio value, signed €M.
+  - ``pnl_vs_open``    — value minus initial portfolio value, signed EUR M.
                           Open value is recorded on the first
                           snapshot when the portfolio is bootstrapped.
 """
@@ -57,12 +57,21 @@ def upgrade() -> None:
         ["portfolio_id", sa.text("ts DESC")],
         schema="valuation",
     )
-    # Hypertable on ts. PK already covers (portfolio_id, ts), so
-    # creating chunks on ts keeps the primary lookup (portfolio_id, ts
-    # range) cheap and bounds chunk size as the data grows.
+    # Hypertable on ts — only if TimescaleDB is installed. On plain Postgres
+    # (Railway managed PG) this is skipped: the table stays regular and the
+    # (portfolio_id, ts) PK keeps range lookups cheap. No Timescale-only SQL
+    # depends on it, so behaviour is identical.
     op.execute(
-        "SELECT create_hypertable('valuation.portfolio_value_snapshot', 'ts', "
-        "chunk_time_interval => INTERVAL '7 days', if_not_exists => TRUE, migrate_data => TRUE)"
+        """
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'timescaledb') THEN
+                PERFORM create_hypertable('valuation.portfolio_value_snapshot', 'ts',
+                    chunk_time_interval => INTERVAL '7 days', if_not_exists => TRUE, migrate_data => TRUE);
+            END IF;
+        END
+        $$;
+        """
     )
 
 

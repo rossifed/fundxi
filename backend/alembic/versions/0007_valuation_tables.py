@@ -37,11 +37,21 @@ def upgrade() -> None:
         "ix_valuation_player_price_tick_player_id", "player_price_tick", ["player_id"], schema="valuation"
     )
     op.create_index("ix_valuation_player_price_tick_ts", "player_price_tick", ["ts"], schema="valuation")
-    # Activate the TimescaleDB hypertable on `ts`. The PK already covers
-    # (player_id, ts) so the hypertable migration just adds time-based chunks.
+    # Activate the TimescaleDB hypertable on `ts` — only if TimescaleDB is
+    # installed. On plain Postgres (e.g. Railway managed PG) this is skipped
+    # and the table stays a regular table; queries are identical since the PK
+    # already covers (player_id, ts) and nothing uses Timescale-only SQL.
     op.execute(
-        "SELECT create_hypertable('valuation.player_price_tick', 'ts', "
-        "if_not_exists => TRUE, migrate_data => TRUE)"
+        """
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'timescaledb') THEN
+                PERFORM create_hypertable('valuation.player_price_tick', 'ts',
+                    if_not_exists => TRUE, migrate_data => TRUE);
+            END IF;
+        END
+        $$;
+        """
     )
 
     op.create_table(
