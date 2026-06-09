@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
 import { comments_api } from "@fundxi/core/api/comments_api";
@@ -26,6 +27,15 @@ import { TickValue } from "@/components/TickValue";
 import { useFixtureLiveVersion, useLiveRefetch, usePricesLiveVersion } from "@/components/live";
 import { color_for_sign, fmt_signed_pct } from "@/lib/format";
 import { mono, palette, text } from "@/theme/tokens";
+
+type Tab = "compos" | "stats" | "events";
+const TABS: { key: Tab; label: string }[] = [
+  { key: "compos", label: "Compos" },
+  { key: "stats", label: "Stats" },
+  { key: "events", label: "Events" },
+];
+
+type ComposView = "xi" | "bench";
 
 const GOAL_GLYPHS = new Set(["⚽", "🎯"]);
 const POSITION_GROUPS: { key: Position; label: string }[] = [
@@ -125,16 +135,23 @@ export default function MatchScreen() {
   return (
     <View style={styles.screen}>
       <Stack.Screen options={{ headerShown: false }} />
-      <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 12 }]} showsVerticalScrollIndicator={false}>
-        <Pressable style={styles.back} onPress={() => router.back()} hitSlop={8}>
-          <Text style={styles.back_label}>← Back</Text>
-        </Pressable>
-        {match === null ? (
+      {match === null ? (
+        <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 12 }]} showsVerticalScrollIndicator={false}>
+          <Pressable style={styles.back} onPress={() => router.back()} hitSlop={8}>
+            <Text style={styles.back_label}>← Back</Text>
+          </Pressable>
           <Text style={styles.loading}>Loading match…</Text>
-        ) : (
-          <MatchBody match={match} comments={comments} stats={stats} on_open={p => sheet_ref.current?.open(p)} />
-        )}
-      </ScrollView>
+        </ScrollView>
+      ) : (
+        <MatchBody
+          match={match}
+          comments={comments}
+          stats={stats}
+          on_open={p => sheet_ref.current?.open(p)}
+          top_pad={insets.top + 12}
+          on_back={() => router.back()}
+        />
+      )}
       <PlayerSheet ref={sheet_ref} />
     </View>
   );
@@ -145,12 +162,18 @@ function MatchBody({
   comments,
   stats,
   on_open,
+  top_pad,
+  on_back,
 }: {
   match: Match;
   comments: MatchComment[] | null;
   stats: TeamMatchStats | null;
   on_open: (player: Player) => void;
+  top_pad: number;
+  on_back: () => void;
 }) {
+  const [tab, set_tab] = useState<Tab>("compos");
+  const [compos_view, set_compos_view] = useState<ComposView>("xi");
   const home = teams_api.get(match.home_team_id);
   const away = teams_api.get(match.away_team_id);
   const is_live = match.status === "live";
@@ -167,8 +190,14 @@ function MatchBody({
   const away_color = match.away_kit_color ?? away?.color;
 
   return (
-    <View style={{ gap: 16 }}>
-      {/* Score header */}
+    <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: top_pad }]} showsVerticalScrollIndicator={false}>
+      <Pressable style={styles.back} onPress={on_back} hitSlop={8}>
+        <Text style={styles.back_label}>← Back</Text>
+      </Pressable>
+
+      {/* Score header — carries both team identities (flag + name, left/right).
+          The line-up columns map onto it (left = home, right = away), so the
+          per-column team labels in Compos are redundant and dropped. */}
       <View style={styles.card}>
         <View style={styles.score_top}>
           <Text style={styles.group}>Group {match.group}</Text>
@@ -196,64 +225,90 @@ function MatchBody({
         </View>
       </View>
 
-      {/* Match stats */}
-      <StatsPanel stats={stats} home_id={match.home_team_id} away_id={match.away_team_id} home_color={home_color} away_color={away_color} />
+      {/* Tabs — Compos / Stats / Events */}
+      <TabBar tab={tab} on_change={set_tab} />
 
-      {/* Lineups */}
-      <View style={styles.card}>
-        <View style={styles.lineup_head}>
-          <Text style={[styles.lineup_team, home_color ? { borderLeftColor: home_color, borderLeftWidth: 3, paddingLeft: 8 } : null]} numberOfLines={1}>
-            {home?.flag} {home?.name ?? match.home_team_id}
-          </Text>
-          <Text style={[styles.lineup_team, away_color ? { borderLeftColor: away_color, borderLeftWidth: 3, paddingLeft: 8 } : null]} numberOfLines={1}>
-            {away?.flag} {away?.name ?? match.away_team_id}
-          </Text>
-        </View>
-        <View style={styles.lineup_body}>
-          {POSITION_GROUPS.map(g => {
-            const h = home_xi[g.key];
-            const a = away_xi[g.key];
-            if (h.length === 0 && a.length === 0) return null;
-            return (
-              <View key={g.key}>
-                <Divider label={g.label} />
+      {tab === "compos" && (
+        <View style={{ gap: 12 }}>
+          {/* Starting XI vs Bench — the bench is part of the composition, kept
+              in this tab behind a toggle rather than promoted to a top-level tab. */}
+          <Segmented view={compos_view} on_change={set_compos_view} />
+          <View style={styles.card}>
+            <View style={styles.lineup_body}>
+              {/* Column glow — a luminous team-color line on each column's outer
+                  edge (home left / away right), fading at top and bottom. */}
+              <ColumnGlow color={home_color} side="left" />
+              <ColumnGlow color={away_color} side="right" />
+              {compos_view === "xi" ? (
+                POSITION_GROUPS.map(g => {
+                  const h = home_xi[g.key];
+                  const a = away_xi[g.key];
+                  if (h.length === 0 && a.length === 0) return null;
+                  return (
+                    <View key={g.key}>
+                      <Divider label={g.label} />
+                      <View style={styles.two_col}>
+                        <View style={styles.col}>{h.map(p => <RosterCard key={p.id} p={p} counts={counts.get(p.id)} on_open={on_open} />)}</View>
+                        <View style={styles.col}>{a.map(p => <RosterCard key={p.id} p={p} counts={counts.get(p.id)} on_open={on_open} />)}</View>
+                      </View>
+                    </View>
+                  );
+                })
+              ) : home_bench.length === 0 && away_bench.length === 0 ? (
+                <Text style={styles.loading_inline}>No substitutes listed.</Text>
+              ) : (
                 <View style={styles.two_col}>
-                  <View style={styles.col}>{h.map(p => <RosterCard key={p.id} p={p} color={home_color} counts={counts.get(p.id)} on_open={on_open} />)}</View>
-                  <View style={styles.col}>{a.map(p => <RosterCard key={p.id} p={p} color={away_color} counts={counts.get(p.id)} on_open={on_open} />)}</View>
+                  <View style={styles.col}>{home_bench.map(p => <RosterCard key={p.id} p={p} counts={counts.get(p.id)} on_open={on_open} />)}</View>
+                  <View style={styles.col}>{away_bench.map(p => <RosterCard key={p.id} p={p} counts={counts.get(p.id)} on_open={on_open} />)}</View>
                 </View>
-              </View>
-            );
-          })}
-          {(home_bench.length > 0 || away_bench.length > 0) && (
-            <>
-              <Divider label="Substitutes" />
-              <View style={styles.two_col}>
-                <View style={styles.col}>{home_bench.map(p => <RosterCard key={p.id} p={p} color={home_color} counts={counts.get(p.id)} on_open={on_open} sub />)}</View>
-                <View style={styles.col}>{away_bench.map(p => <RosterCard key={p.id} p={p} color={away_color} counts={counts.get(p.id)} on_open={on_open} sub />)}</View>
-              </View>
-            </>
-          )}
+              )}
+            </View>
+          </View>
         </View>
-      </View>
+      )}
 
-      {/* Commentary */}
-      <View style={styles.card}>
-        <Text style={styles.section_title}>Commentary</Text>
-        <Commentary comments={comments} />
-      </View>
-    </View>
+      {tab === "stats" && (
+        <StatsPanel stats={stats} home_id={match.home_team_id} away_id={match.away_team_id} home_color={home_color} away_color={away_color} />
+      )}
+
+      {tab === "events" && (
+        <View style={styles.card}>
+          <Text style={styles.section_title}>Match events</Text>
+          <Commentary comments={comments} />
+        </View>
+      )}
+    </ScrollView>
   );
+}
+
+// Surname only (last whitespace token) — saves width in the narrow team column so
+// the scorer line fits without truncating.
+function surname(full: string): string {
+  const parts = full.trim().split(/\s+/);
+  return parts.length > 1 ? parts[parts.length - 1] : full;
 }
 
 function Scorers({ goals, align }: { goals: MatchEvent[]; align: "center" }) {
   if (goals.length === 0) return null;
+  // Group goals by scorer so a player's minutes sit on the SAME line as the name
+  // ("Surname 12', 45'"), collapsing a hat-trick into one line. The minute is its
+  // own non-shrinking element, so it is NEVER truncated — only the surname could
+  // ellipsis as an absolute last resort (rare once it's just the surname).
+  const by_player: { name: string; mins: string[] }[] = [];
+  for (const g of goals) {
+    const name = g.player_name ?? "?";
+    const min = `${g.minute}'${g.type === "🎯" ? " (p)" : ""}`;
+    const row = by_player.find(p => p.name === name);
+    if (row) row.mins.push(min);
+    else by_player.push({ name, mins: [min] });
+  }
   return (
     <View style={{ marginTop: 8, alignItems: align }}>
-      {goals.map((g, i) => (
-        <Text key={`${g.minute}-${i}`} style={styles.scorer}>
-          ⚽ {g.player_name ?? "?"}
-          {g.type === "🎯" ? " (p)" : ""} <Text style={styles.scorer_min}>{g.minute}'</Text>
-        </Text>
+      {by_player.map((p, i) => (
+        <View key={`${p.name}-${i}`} style={styles.scorer_row}>
+          <Text style={styles.scorer} numberOfLines={1}>⚽ {surname(p.name)}</Text>
+          <Text style={styles.scorer_min} numberOfLines={1}>{p.mins.join(", ")}</Text>
+        </View>
       ))}
     </View>
   );
@@ -261,16 +316,12 @@ function Scorers({ goals, align }: { goals: MatchEvent[]; align: "center" }) {
 
 function RosterCard({
   p,
-  color,
   counts,
   on_open,
-  sub,
 }: {
   p: MatchPlayer;
-  color?: string;
   counts?: EventCounts;
   on_open: (player: Player) => void;
-  sub?: boolean;
 }) {
   const ref_player = players_api.get(p.id);
   const live_price = valuations_api.get_for_player(p.id)?.current_price ?? p.value;
@@ -282,14 +333,16 @@ function RosterCard({
     <Pressable
       onPress={ref_player ? () => on_open(ref_player) : undefined}
       disabled={!ref_player}
-      style={[styles.rc, color ? { borderLeftColor: color, borderLeftWidth: 3 } : null, sub && styles.rc_sub]}
+      style={styles.rc}
     >
+      {/* Neutral dark portrait (team identity is on the column glow, not the
+          card) with the jersey number as a small badge — always visible, and it
+          never pushes the name. */}
       <View style={styles.rc_avatar_wrap}>
-        {photo ? (
-          <Image source={{ uri: photo }} style={styles.rc_avatar} resizeMode="cover" />
-        ) : (
-          <View style={styles.rc_avatar}><Text style={styles.rc_jersey_fallback}>{p.jersey_number}</Text></View>
-        )}
+        <View style={styles.rc_avatar}>
+          {photo ? <Image source={{ uri: photo }} style={styles.rc_avatar_img} resizeMode="cover" /> : null}
+        </View>
+        <Text style={styles.rc_num} numberOfLines={1}>{p.jersey_number}</Text>
       </View>
       <View style={styles.rc_meta}>
         <View style={styles.rc_name_row}>
@@ -310,6 +363,64 @@ function RosterCard({
         </View>
       </View>
     </Pressable>
+  );
+}
+
+function is_light(hex: string): boolean {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return 0.299 * r + 0.587 * g + 0.114 * b > 200; // near-white → would read as a hard border
+}
+// Aura tint: the provider team hex when it is distinct enough, otherwise a side
+// default (blue home / warm-red away — the reference's home/away convention) so a
+// white kit never paints a hard white line. Provider hex inline (allowed).
+function glow_color(hex: string | undefined, side: "left" | "right"): string {
+  if (hex && /^#[0-9a-fA-F]{6}$/.test(hex) && !is_light(hex)) return hex;
+  return side === "left" ? palette.accentBlue : palette.negative;
+}
+
+// Team-color glow bracketing a column (home left / away right). A light vertical
+// spine carries the team colour and glows softly (box-shadow); at the top and
+// bottom it turns inward through a rounded corner into a short arm that dissolves
+// to transparency (expo-linear-gradient) — the line wraps the line-up and fades
+// out. Kept light/low-opacity so it reads as a glow, not a hard border.
+const SPINE_STOPS: readonly [number, number, number, number] = [0, 0.02, 0.98, 1];
+function ColumnGlow({ color, side }: { color?: string; side: "left" | "right" }) {
+  const c = glow_color(color, side);
+  const left = side === "left";
+  const arm_colors: readonly [string, string] = left ? [`${c}a6`, `${c}00`] : [`${c}00`, `${c}a6`];
+  const arm_edge = left ? styles.arm_l : styles.arm_r;
+  return (
+    <>
+      {/* vertical spine + soft glow */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={[`${c}00`, `${c}a6`, `${c}a6`, `${c}00`]}
+        locations={SPINE_STOPS}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={[styles.glow_spine, left ? styles.glow_edge_l : styles.glow_edge_r, { boxShadow: `0px 0px 12px 1px ${c}40` }]}
+      />
+      {/* rounded corners that wrap the top and bottom */}
+      <View pointerEvents="none" style={[left ? styles.corner_tl : styles.corner_tr, { borderColor: `${c}8c` }]} />
+      <View pointerEvents="none" style={[left ? styles.corner_bl : styles.corner_br, { borderColor: `${c}8c` }]} />
+      {/* arms turn inward and dissolve in a gradient (top a touch longer) */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={arm_colors}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={[styles.glow_arm, arm_edge, { top: 2, width: "22%" }]}
+      />
+      <LinearGradient
+        pointerEvents="none"
+        colors={arm_colors}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={[styles.glow_arm, arm_edge, { bottom: 2, width: "18%" }]}
+      />
+    </>
   );
 }
 
@@ -387,6 +498,37 @@ function Commentary({ comments }: { comments: MatchComment[] | null }) {
   );
 }
 
+function Segmented({ view, on_change }: { view: ComposView; on_change: (v: ComposView) => void }) {
+  return (
+    <View style={styles.seg}>
+      {(["xi", "bench"] as const).map(v => {
+        const active = v === view;
+        return (
+          <Pressable key={v} onPress={() => on_change(v)} style={[styles.seg_btn, active && styles.seg_btn_on]} hitSlop={4}>
+            <Text style={[styles.seg_label, active && styles.seg_label_on]}>{v === "xi" ? "Starting XI" : "Bench"}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function TabBar({ tab, on_change }: { tab: Tab; on_change: (t: Tab) => void }) {
+  return (
+    <View style={styles.tabbar}>
+      {TABS.map(t => {
+        const active = t.key === tab;
+        return (
+          <Pressable key={t.key} onPress={() => on_change(t.key)} style={styles.tab} hitSlop={6}>
+            <Text style={[styles.tab_label, active && styles.tab_label_active]}>{t.label}</Text>
+            {active ? <View style={styles.tab_underline} /> : null}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 function Divider({ label }: { label: string }) {
   return (
     <View style={styles.divider}>
@@ -414,36 +556,62 @@ const styles = StyleSheet.create({
   live_dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.6)" },
   live_label: { fontFamily: mono, fontSize: 11, fontWeight: "700", color: "rgba(255,255,255,0.6)" },
   ft: { fontSize: 11, color: text.tertiary, fontWeight: "600" },
-  score_row: { flexDirection: "row", alignItems: "flex-start", justifyContent: "center", gap: 16, paddingHorizontal: 18, paddingTop: 14, paddingBottom: 18 },
+  score_row: { flexDirection: "row", alignItems: "flex-start", justifyContent: "center", gap: 10, paddingHorizontal: 12, paddingTop: 14, paddingBottom: 18 },
   score_team: { flex: 1, alignItems: "center" },
   score_flag: { fontSize: 44, lineHeight: 50 },
   score_name: { fontSize: 16, fontWeight: "800", color: "#fff", marginTop: 6, textAlign: "center" },
   score: { fontFamily: mono, fontSize: 38, fontWeight: "900", color: "#fff", letterSpacing: -1.5, paddingTop: 6 },
-  scorer: { fontSize: 11, color: "#fff", fontWeight: "600", marginTop: 2, textAlign: "center" },
-  scorer_min: { fontFamily: mono, color: text.secondary, fontWeight: "700" },
+  // No width constraint → the surname is never clipped by the minute; the row
+  // sizes to its content (one line each, both flexShrink:0) and stays centered.
+  scorer_row: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
+  scorer: { fontSize: 10.5, color: "#fff", fontWeight: "600", flexShrink: 0 },
+  scorer_min: { fontFamily: mono, fontSize: 10.5, color: text.secondary, fontWeight: "700", flexShrink: 0 },
 
   stat_head: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   stat_v: { fontFamily: mono, fontSize: 12, fontWeight: "700", color: "#fff", minWidth: 32 },
   stat_label: { fontSize: 10, fontWeight: "700", color: text.secondary, letterSpacing: 0.5, textTransform: "uppercase" },
   stat_bar: { flexDirection: "row", height: 3, borderRadius: 2, overflow: "hidden", backgroundColor: "rgba(255,255,255,0.05)" },
 
-  lineup_head: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.05)" },
-  lineup_team: { flex: 1, padding: 12, fontSize: 13, fontWeight: "800", color: "#fff" },
-  lineup_body: { paddingHorizontal: 10, paddingBottom: 12 },
+  seg: { flexDirection: "row", alignSelf: "flex-start", backgroundColor: "rgba(255,255,255,0.03)", borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", borderRadius: 9, padding: 3, gap: 2 },
+  seg_btn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: "transparent" },
+  seg_btn_on: { backgroundColor: palette.accentBlueSoft, borderColor: palette.accentBlue },
+  seg_label: { fontSize: 11, fontWeight: "700", color: text.tertiary, letterSpacing: 0.3 },
+  seg_label_on: { color: "#fff" },
+  tabbar: { flexDirection: "row", gap: 26, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.07)" },
+  tab: { paddingVertical: 10, alignItems: "center" },
+  tab_label: { fontSize: 12, fontWeight: "800", letterSpacing: 0.8, textTransform: "uppercase", color: text.tertiary },
+  tab_label_active: { color: "#fff" },
+  tab_underline: { position: "absolute", bottom: -1, left: 0, right: 0, height: 2, borderRadius: 2, backgroundColor: "#fff" },
+  lineup_body: { position: "relative", paddingHorizontal: 10, paddingTop: 8, paddingBottom: 10 },
   two_col: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
-  col: { flex: 1, gap: 6 },
+  col: { flex: 1, gap: 4 },
+  // Light team-color spine (glows via box-shadow) that wraps the top/bottom with
+  // rounded corners and arms dissolving inward.
+  glow_spine: { position: "absolute", top: 2, bottom: 2, width: 2, borderRadius: 2 },
+  glow_edge_l: { left: 1 },
+  glow_edge_r: { right: 1 },
+  corner_tl: { position: "absolute", top: 2, left: 1, width: 11, height: 11, borderLeftWidth: 2, borderTopWidth: 2, borderTopLeftRadius: 11 },
+  corner_bl: { position: "absolute", bottom: 2, left: 1, width: 11, height: 11, borderLeftWidth: 2, borderBottomWidth: 2, borderBottomLeftRadius: 11 },
+  corner_tr: { position: "absolute", top: 2, right: 1, width: 11, height: 11, borderRightWidth: 2, borderTopWidth: 2, borderTopRightRadius: 11 },
+  corner_br: { position: "absolute", bottom: 2, right: 1, width: 11, height: 11, borderRightWidth: 2, borderBottomWidth: 2, borderBottomRightRadius: 11 },
+  glow_arm: { position: "absolute", height: 2, borderRadius: 2 },
+  arm_l: { left: 12 },
+  arm_r: { right: 12 },
 
-  rc: { flexDirection: "row", alignItems: "center", gap: 8, padding: 8, backgroundColor: "rgba(255,255,255,0.035)", borderWidth: 1, borderColor: "rgba(255,255,255,0.05)", borderRadius: 10 },
-  rc_sub: { backgroundColor: "rgba(255,255,255,0.012)", opacity: 0.62 },
-  rc_avatar_wrap: { width: 32, height: 32 },
-  rc_avatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.06)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)", alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  rc_jersey_fallback: { fontFamily: mono, fontSize: 11, fontWeight: "800", color: text.secondary },
+  // Compact, near-borderless player card — low contrast so rows read as part of
+  // the column, not floating chips.
+  rc: { flexDirection: "row", alignItems: "center", gap: 7, paddingVertical: 6, paddingHorizontal: 7, backgroundColor: "rgba(255,255,255,0.028)", borderWidth: 1, borderColor: "rgba(255,255,255,0.035)", borderRadius: 11 },
+  rc_avatar_wrap: { width: 30, height: 30 },
+  rc_avatar: { width: 30, height: 30, borderRadius: 8, backgroundColor: "rgba(255,255,255,0.06)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)", alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  rc_avatar_img: { width: "100%", height: "100%" },
+  // Jersey number — small, dim, secondary (kept visible, not dominant).
+  rc_num: { position: "absolute", bottom: -3, right: -3, fontFamily: mono, fontSize: 8, fontWeight: "700", color: "rgba(255,255,255,0.7)", backgroundColor: `${palette.bg}e6`, borderRadius: 6, paddingHorizontal: 3, paddingVertical: 0.5, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)", overflow: "hidden" },
   rc_meta: { flex: 1, minWidth: 0 },
   rc_name_row: { flexDirection: "row", alignItems: "center", gap: 4 },
-  rc_name: { fontSize: 12, fontWeight: "700", color: "#fff", flexShrink: 1 },
+  rc_name: { fontSize: 12, fontWeight: "600", color: "#fff", flexShrink: 1 },
   rc_badges: { fontSize: 10 },
-  rc_stat_row: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2 },
-  rc_price: { fontFamily: mono, fontSize: 12, fontWeight: "800", color: "#fff" },
+  rc_stat_row: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: 1 },
+  rc_price: { fontFamily: mono, fontSize: 11.5, fontWeight: "700", color: "rgba(255,255,255,0.78)" },
   rc_delta: { fontFamily: mono, fontSize: 10, fontWeight: "700" },
 
   cm: { flexDirection: "row", gap: 10, padding: 10, borderRadius: 8, marginBottom: 4, borderWidth: 1, borderColor: "rgba(255,255,255,0.03)" },
@@ -454,7 +622,7 @@ const styles = StyleSheet.create({
   cm_text: { flex: 1, fontSize: 12, color: "rgba(255,255,255,0.85)", lineHeight: 17 },
   cm_text_goal: { color: "#fff", fontWeight: "700" },
 
-  divider: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 14, paddingBottom: 10 },
-  divider_line: { flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.07)" },
-  divider_label: { fontSize: 10, fontWeight: "700", color: text.secondary, letterSpacing: 1.2, textTransform: "uppercase" },
+  divider: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 10, paddingBottom: 6 },
+  divider_line: { flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.05)" },
+  divider_label: { fontSize: 9, fontWeight: "700", color: text.muted, letterSpacing: 1, textTransform: "uppercase" },
 });

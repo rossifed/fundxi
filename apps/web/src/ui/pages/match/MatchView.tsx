@@ -711,15 +711,16 @@ function DualRoster({
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderBottom: "1px solid rgba(255,255,255,.05)" }}>
         <div
           style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
             padding: "12px 14px",
             fontSize: 13,
             fontWeight: 800,
-            whiteSpace: "nowrap",
             overflow: "hidden",
-            textOverflow: "ellipsis",
-            borderLeft: home_color ? `3px solid ${home_color}` : undefined,
           }}
         >
+          {home_color ? <TeamDot color={home_color} /> : null}
           <TeamLink
             team_id={home_team_id}
             on_open_team={on_open_team}
@@ -730,15 +731,16 @@ function DualRoster({
         </div>
         <div
           style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
             padding: "12px 14px",
             fontSize: 13,
             fontWeight: 800,
-            whiteSpace: "nowrap",
             overflow: "hidden",
-            textOverflow: "ellipsis",
-            borderLeft: away_color ? `3px solid ${away_color}` : undefined,
           }}
         >
+          {away_color ? <TeamDot color={away_color} /> : null}
           <TeamLink
             team_id={away_team_id}
             on_open_team={on_open_team}
@@ -749,7 +751,12 @@ function DualRoster({
         </div>
       </div>
 
-      <div style={{ padding: "0 12px 12px" }}>
+      {/* Column glow — team identity carried by a soft edge halo per column
+          (home on the left, away on the right), replacing the per-card left
+          bar that pulled every row's weight to the left. */}
+      <div style={{ position: "relative", padding: "0 12px 12px" }}>
+        {home_color ? <ColumnGlow color={home_color} side="left" /> : null}
+        {away_color ? <ColumnGlow color={away_color} side="right" /> : null}
         {POSITION_GROUPS.map(g => {
           const home_ps = home_by_pos[g.key];
           const away_ps = away_by_pos[g.key];
@@ -833,9 +840,6 @@ function RosterCard({
         // subtle but clearly secondary to the eye.
         background: sub ? "rgba(255,255,255,.012)" : "rgba(255,255,255,.035)",
         border: sub ? "1px solid rgba(255,255,255,.035)" : "1px solid rgba(255,255,255,.05)",
-        // Thin team-color accent on the left so the two line-ups are
-        // distinguishable at a glance — same color as the team header strip.
-        borderLeft: team_color ? `3px solid ${team_color}` : undefined,
         borderRadius: 10,
         cursor: "pointer",
         transition: "background .15s ease, border-color .15s ease",
@@ -923,7 +927,44 @@ function RosterCard({
           <Stat label="total" value={total_change} hint="Variation cumulée depuis le début du tournoi" dim />
         </div>
       </div>
+
+      {/* Mini marqueur — discrete team-color dot, right-aligned and symmetric
+          across both columns. Confirms team membership without weighting the card. */}
+      {team_color ? <TeamDot color={team_color} style={{ marginLeft: 2 }} /> : null}
     </div>
+  );
+}
+
+// Small team-color dot — the shared "mini marqueur" used in the column headers
+// and on each roster card, replacing the heavy per-card left bar.
+function TeamDot({ color, size = 7, style }: { color: string; size?: number; style?: CSSProperties }) {
+  return (
+    <span
+      aria-hidden
+      style={{ flexShrink: 0, width: size, height: size, borderRadius: "50%", background: color, display: "inline-block", ...style }}
+    />
+  );
+}
+
+// Soft vertical glow hugging a column's outer edge — a thin colored bar blurred
+// into a halo, faking a gradient falloff without an extra dependency.
+function ColumnGlow({ color, side }: { color: string; side: "left" | "right" }) {
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: "absolute",
+        top: 8,
+        bottom: 8,
+        ...(side === "left" ? { left: 0 } : { right: 0 }),
+        width: 3,
+        background: color,
+        opacity: 0.5,
+        borderRadius: 2,
+        filter: "blur(3px)",
+        pointerEvents: "none",
+      }}
+    />
   );
 }
 
