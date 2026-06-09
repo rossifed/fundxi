@@ -7,11 +7,13 @@ same-origin request via ``fetch(..., { credentials: "include" })``.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.dependencies import get_session
+from src.api.dependencies import get_session, resolve_session_user_id
 from src.application.auth_service import (
     AuthenticatedUser,
     EmailAlreadyExistsError,
@@ -20,6 +22,11 @@ from src.application.auth_service import (
     login_user,
     register_user,
 )
+from src.application.password_reset_service import (
+    InvalidResetTokenError,
+    confirm_reset,
+    request_reset,
+)
 from src.config import get_settings
 from src.domain.auth.auth import (
     Email,
@@ -27,6 +34,7 @@ from src.domain.auth.auth import (
     InvalidPasswordError,
     Password,
 )
+from src.infrastructure.email.sender import build_sender
 from src.infrastructure.security.jwt_tokens import JwtIssuer
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -47,6 +55,15 @@ class RegisterBody(BaseModel):
 class LoginBody(BaseModel):
     email: str
     password: str
+
+
+class ForgotPasswordBody(BaseModel):
+    email: str
+
+
+class ResetPasswordBody(BaseModel):
+    token: str = Field(min_length=1)
+    password: str = Field(min_length=8)
 
 
 class MeResponse(BaseModel):
@@ -122,15 +139,53 @@ async def logout(response: Response) -> dict[str, str]:
     return {"status": "ok"}
 
 
+@router.post("/forgot-password")
+async def forgot_password(
+    body: ForgotPasswordBody,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, str]:
+    """Request a password-reset link. Always returns 200 regardless of
+    whether the email is registered (no user-enumeration oracle)."""
+    settings = get_settings()
+    try:
+        email = Email.parse(body.email)
+    except InvalidEmailError:
+        # Malformed input can't match a user — answer the same as success.
+        return {"status": "ok"}
+    await request_reset(
+        session,
+        email=email,
+        sender=build_sender(settings),
+        settings=settings,
+        now=datetime.now(UTC),
+    )
+    return {"status": "ok"}
+
+
+@router.post("/reset-password")
+async def reset_password(
+    body: ResetPasswordBody,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, str]:
+    """Set a new password from a valid reset token. 400 if the token is
+    unknown, expired or already used, or if the new password is too weak."""
+    try:
+        password = Password(value=body.password)
+    except InvalidPasswordError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        await confirm_reset(session, raw_token=body.token, new_password=password, now=datetime.now(UTC))
+    except InvalidResetTokenError as exc:
+        raise HTTPException(status_code=400, detail="invalid or expired reset link") from exc
+    return {"status": "ok"}
+
+
 @router.get("/me", response_model=MeResponse | None)
 async def me(
     request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> MeResponse | None:
-    token = request.cookies.get(SESSION_COOKIE)
-    if not token:
-        return None
-    user_id = _issuer().verify(token)
+    user_id = await resolve_session_user_id(request, session)
     if user_id is None:
         return None
     user = await get_user_by_id(session, user_id)

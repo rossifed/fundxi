@@ -20,4 +20,8 @@ class UserORM(Base):
     # bootstrap test user; required for users created via /auth/register.
     email: Mapped[str | None] = mapped_column(String(255), unique=True)
     password_hash: Mapped[str | None] = mapped_column(String(100))
+    # Bumped whenever the password changes (reset flow). A session JWT whose
+    # ``iat`` predates this stamp is rejected — so a reset invalidates every
+    # previously issued cookie, not just the one that did the reset.
+    password_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

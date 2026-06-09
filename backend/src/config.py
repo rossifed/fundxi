@@ -28,6 +28,15 @@ class Settings(BaseSettings):
     # dev — get_settings() fails fast if the default is left in place.
     jwt_secret: str = Field(default=DEV_JWT_SECRET)
     log_level: str = Field(default="INFO")
+    # Password-reset flow. ``resend_api_key`` empty (or dev) ⇒ emails are
+    # logged to the console instead of sent (see email.build_sender).
+    # ``app_base_url`` is the public origin used to build the reset link
+    # (e.g. https://app.fundxi.io). ``email_from`` is the verified Resend
+    # sender address.
+    resend_api_key: str = Field(default="")
+    email_from: str = Field(default="fundXI <no-reply@fundxi.local>")
+    app_base_url: str = Field(default="http://localhost:5173")
+    password_reset_ttl_seconds: int = Field(default=60 * 60)  # 1 hour
 
     @property
     def is_dev(self) -> bool:

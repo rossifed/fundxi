@@ -16,6 +16,12 @@ import jwt
 
 
 @dataclass(frozen=True, slots=True)
+class SessionClaims:
+    user_id: int
+    issued_at: int  # JWT ``iat`` — epoch seconds
+
+
+@dataclass(frozen=True, slots=True)
 class JwtIssuer:
     secret: str
     ttl_seconds: int = 60 * 60 * 24 * 30  # 30 days
@@ -30,11 +36,20 @@ class JwtIssuer:
 
     def verify(self, token: str) -> int | None:
         """Return the user id when the token is valid, ``None`` otherwise."""
+        claims = self.verify_claims(token)
+        return claims.user_id if claims is not None else None
+
+    def verify_claims(self, token: str) -> SessionClaims | None:
+        """Return the validated ``(user_id, issued_at)`` claims, or ``None``.
+
+        ``issued_at`` (the JWT ``iat``) lets callers reject tokens minted
+        before a security-relevant event such as a password reset."""
         try:
             payload = jwt.decode(token, self.secret, algorithms=["HS256"])
         except (jwt.InvalidTokenError, jwt.ExpiredSignatureError):
             return None
         sub = payload.get("sub")
-        if not isinstance(sub, str) or not sub.isdigit():
+        iat = payload.get("iat")
+        if not isinstance(sub, str) or not sub.isdigit() or not isinstance(iat, int):
             return None
-        return int(sub)
+        return SessionClaims(user_id=int(sub), issued_at=iat)
