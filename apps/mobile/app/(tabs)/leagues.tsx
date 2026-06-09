@@ -11,6 +11,7 @@ import { Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInp
 import { useLocalSearchParams } from "expo-router";
 
 import { leagues_api } from "@fundxi/core/api/leagues_api";
+import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import { refresh_leagues, subscribe_leagues } from "@fundxi/core/infrastructure/repositories/leagues_repository";
 import { ApiError } from "@fundxi/core/infrastructure/api_client";
 import type { League } from "@fundxi/core/domain/league/league";
@@ -18,7 +19,7 @@ import type { League } from "@fundxi/core/domain/league/league";
 import { Avatar } from "@/components/Avatar";
 import { useLiveRefetch, usePricesLiveVersion } from "@/components/live";
 import { useRefresh } from "@/components/use_refresh";
-import { color_for_sign } from "@/lib/format";
+import { color_for_sign, fmt_eur_m, fmt_eur_m_signed, fmt_signed_pct } from "@/lib/format";
 import { mono, palette, text } from "@/theme/tokens";
 
 type View_ = "board" | "create" | "join";
@@ -108,6 +109,10 @@ export default function LeaguesScreen() {
   }
 
   const me = detail?.leaderboard.find(e => e.is_me);
+  const next_target = me && detail ? detail.leaderboard.find(e => e.rank === me.rank - 1) : undefined;
+  const gap = me && next_target ? next_target.value - me.value : null;
+  const totals = portfolio_api.get_totals();
+  const positions = portfolio_api.get_holdings().length;
 
   return (
     <View style={styles.screen}>
@@ -116,6 +121,14 @@ export default function LeaguesScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
       >
+        {/* Your portfolio at a glance — the same value you're ranked on. */}
+        <View style={styles.stats_bar}>
+          <StatCell label="Value" value={fmt_eur_m(totals.total_value)} sub={fmt_signed_pct(totals.return_pct, 1)} sub_color={color_for_sign(totals.return_pct)} />
+          <StatCell label="Cash" value={fmt_eur_m(totals.cash)} />
+          <StatCell label="Positions" value={String(positions)} />
+          <StatCell label="P&L" value={fmt_eur_m_signed(totals.pnl)} value_color={color_for_sign(totals.pnl)} />
+        </View>
+
         <View style={styles.tabs_row}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
             {summaries.map(l => {
@@ -131,34 +144,60 @@ export default function LeaguesScreen() {
           </ScrollView>
         </View>
         <View style={styles.actions_row}>
-          <ActionButton label="+ Create" primary on_press={() => set_view("create")} />
-          <ActionButton label="Join code" on_press={() => set_view("join")} />
+          <ActionButton label="+ Create league" primary on_press={() => set_view("create")} />
+          <ActionButton label="Join with code" on_press={() => set_view("join")} />
         </View>
 
-        {detail && (
-          <View style={styles.detail_head}>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.detail_name}>{detail.name}</Text>
-              {!!detail.description && <Text style={styles.detail_desc}>{detail.description}</Text>}
-            </View>
-            <View style={styles.detail_meta}>
-              {me && (
-                <Text style={styles.detail_rank}>
-                  You · <Text style={styles.detail_rank_num}>#{me.rank}</Text>
-                  <Text style={styles.detail_rank_total}> / {detail.member_count}</Text>
+        {detail && me && (
+          <View style={styles.league_card}>
+            <View style={styles.lc_head}>
+              <Avatar seed={detail.id} name={detail.name} size={38} />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.lc_name} numberOfLines={1}>{detail.name}</Text>
+                <Text style={styles.lc_sub} numberOfLines={1}>
+                  {detail.description ? `${detail.description} · ` : ""}
+                  {detail.leaderboard.length} ranked
                 </Text>
-              )}
-              {!detail.is_public && detail.invite_code && (
-                <Pressable
-                  onPress={() => void Share.share({ message: `Join my fundXI league with code ${detail.invite_code}` })}
-                  style={styles.invite}
-                >
-                  <Text style={styles.invite_code}>{detail.invite_code}</Text>
-                  <Text style={styles.invite_share}>Share</Text>
-                </Pressable>
-              )}
+              </View>
+              <View style={styles.lc_rank_box}>
+                <Text style={styles.lc_rank_label}>YOUR RANK</Text>
+                <Text style={styles.lc_rank}>
+                  #{me.rank}
+                  <Text style={styles.lc_rank_total}> /{detail.leaderboard.length}</Text>
+                </Text>
+                <Text style={[styles.lc_rank_ret, { color: color_for_sign(me.return_pct) }]}>{fmt_signed_pct(me.return_pct, 2)}</Text>
+              </View>
+            </View>
+
+            {next_target && gap != null && (
+              <View style={styles.lc_target}>
+                <Text style={styles.lc_target_label}>NEXT TARGET</Text>
+                <Text style={styles.lc_target_val} numberOfLines={1}>
+                  #{next_target.rank} {next_target.name} · <Text style={styles.lc_target_gap}>{fmt_eur_m(gap)} to overtake</Text>
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.lc_foot}>
+              <Text style={styles.lc_foot_item}>
+                Your value <Text style={styles.lc_foot_val}>{fmt_eur_m(me.value)}</Text>
+              </Text>
+              <Text style={styles.lc_foot_item}>
+                P&L <Text style={[styles.lc_foot_val, { color: color_for_sign(totals.pnl) }]}>{fmt_eur_m_signed(totals.pnl)}</Text>
+              </Text>
             </View>
           </View>
+        )}
+
+        {detail && !detail.is_public && detail.invite_code && (
+          <Pressable
+            onPress={() => void Share.share({ message: `Join my fundXI league with code ${detail.invite_code}` })}
+            style={styles.invite_row}
+          >
+            <Text style={styles.invite_label}>Invite code</Text>
+            <Text style={styles.invite_code}>{detail.invite_code}</Text>
+            <Text style={styles.invite_share}>Share</Text>
+          </Pressable>
         )}
 
         <View style={styles.card}>
@@ -180,7 +219,11 @@ export default function LeaguesScreen() {
               </View>
               {detail.leaderboard.map(e => (
                 <View key={e.rank} style={[styles.lb_row, e.is_me && styles.lb_row_me]}>
-                  <Text style={styles.lb_rank}>{e.rank}</Text>
+                  {e.rank <= 3 ? (
+                    <Text style={styles.lb_medal}>{e.rank === 1 ? "🥇" : e.rank === 2 ? "🥈" : "🥉"}</Text>
+                  ) : (
+                    <Text style={styles.lb_rank}>{e.rank}</Text>
+                  )}
                   <View style={styles.lb_trader_cell}>
                     <Avatar seed={e.name} name={e.name} size={26} />
                     <Text style={[styles.lb_name, e.is_me && styles.lb_name_me]} numberOfLines={1}>
@@ -188,16 +231,26 @@ export default function LeaguesScreen() {
                     </Text>
                     {e.is_me && <Text style={styles.lb_you}>YOU</Text>}
                   </View>
-                  <Text style={styles.lb_value}>€{e.value.toLocaleString()}</Text>
-                  <Text style={[styles.lb_return, { color: color_for_sign(e.return_pct) }]}>
-                    {e.return_pct >= 0 ? "+" : ""}
-                    {e.return_pct}%
-                  </Text>
+                  <Text style={styles.lb_value}>{fmt_eur_m(e.value)}</Text>
+                  <Text style={[styles.lb_return, { color: color_for_sign(e.return_pct) }]}>{fmt_signed_pct(e.return_pct, 1)}</Text>
                 </View>
               ))}
             </>
           )}
         </View>
+
+        {me && (
+          <View style={styles.climb}>
+            <Text style={styles.climb_title}>📈  Keep climbing</Text>
+            <Text style={styles.climb_body}>
+              {me.rank === 1
+                ? "You're top of the league — defend your lead."
+                : next_target && gap != null
+                  ? `${fmt_eur_m(gap)} to catch #${next_target.rank} — your next move could flip the spot.`
+                  : "Make a move to climb the table."}
+            </Text>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -305,6 +358,28 @@ function JoinView({ initial_code, on_back, on_joined }: { initial_code: string; 
   );
 }
 
+function StatCell({
+  label,
+  value,
+  value_color,
+  sub,
+  sub_color,
+}: {
+  label: string;
+  value: string;
+  value_color?: string;
+  sub?: string;
+  sub_color?: string;
+}) {
+  return (
+    <View style={styles.stat_cell}>
+      <Text style={styles.stat_label}>{label}</Text>
+      <Text style={[styles.stat_value, value_color ? { color: value_color } : null]} numberOfLines={1}>{value}</Text>
+      {sub ? <Text style={[styles.stat_sub, sub_color ? { color: sub_color } : null]} numberOfLines={1}>{sub}</Text> : null}
+    </View>
+  );
+}
+
 function EmptyShell({ title, body }: { title: string; body: string }) {
   return (
     <View style={styles.empty_shell}>
@@ -376,6 +451,38 @@ const styles = StyleSheet.create({
   league_tab_name_on: { color: "#fff", fontWeight: "700" },
   league_tab_count: { fontSize: 10, color: text.muted },
   actions_row: { flexDirection: "row", gap: 10 },
+
+  stats_bar: { flexDirection: "row", backgroundColor: "rgba(255,255,255,0.025)", borderWidth: 1, borderColor: "rgba(255,255,255,0.05)", borderRadius: 12, paddingVertical: 11, paddingHorizontal: 12, gap: 8 },
+  stat_cell: { flex: 1, gap: 2, minWidth: 0 },
+  stat_label: { fontSize: 9, fontWeight: "700", color: text.tertiary, letterSpacing: 0.4, textTransform: "uppercase" },
+  stat_value: { fontFamily: mono, fontSize: 14, fontWeight: "800", color: "#fff" },
+  stat_sub: { fontFamily: mono, fontSize: 11, fontWeight: "700", color: text.tertiary },
+
+  league_card: { backgroundColor: "rgba(255,255,255,0.025)", borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", borderRadius: 14, padding: 14, gap: 12 },
+  lc_head: { flexDirection: "row", alignItems: "center", gap: 12 },
+  lc_name: { fontSize: 16, fontWeight: "800", color: "#fff" },
+  lc_sub: { fontSize: 12, color: text.tertiary, marginTop: 2 },
+  lc_rank_box: { alignItems: "flex-end", gap: 1 },
+  lc_rank_label: { fontSize: 8, fontWeight: "700", color: text.tertiary, letterSpacing: 0.5 },
+  lc_rank: { fontFamily: mono, fontSize: 20, fontWeight: "900", color: "#fff", letterSpacing: -0.5 },
+  lc_rank_total: { fontSize: 12, fontWeight: "700", color: text.tertiary },
+  lc_rank_ret: { fontFamily: mono, fontSize: 12, fontWeight: "700" },
+  lc_target: { borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.06)", paddingTop: 10, gap: 2 },
+  lc_target_label: { fontSize: 8, fontWeight: "700", color: text.tertiary, letterSpacing: 0.5 },
+  lc_target_val: { fontSize: 13, color: text.secondary },
+  lc_target_gap: { fontFamily: mono, fontWeight: "700", color: palette.brandBlue },
+  lc_foot: { flexDirection: "row", justifyContent: "space-between", borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.06)", paddingTop: 10 },
+  lc_foot_item: { fontSize: 12, color: text.tertiary },
+  lc_foot_val: { fontFamily: mono, fontSize: 13, fontWeight: "800", color: "#fff" },
+
+  invite_row: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 4 },
+  invite_label: { fontSize: 12, color: text.tertiary, flex: 1 },
+
+  lb_medal: { width: 36, fontSize: 15, textAlign: "left" },
+
+  climb: { backgroundColor: "rgba(47,107,255,0.08)", borderWidth: 1, borderColor: "rgba(47,107,255,0.2)", borderRadius: 12, padding: 14, gap: 4 },
+  climb_title: { fontSize: 12, fontWeight: "800", color: "#fff" },
+  climb_body: { fontSize: 12, color: text.secondary, lineHeight: 18 },
 
   detail_head: { backgroundColor: "rgba(255,255,255,0.025)", borderWidth: 1, borderColor: "rgba(255,255,255,0.05)", borderRadius: 12, padding: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16 },
   detail_name: { fontSize: 16, fontWeight: "800", color: "#fff" },
