@@ -213,6 +213,7 @@ function CalendarView({ days, held_for, on_open }: { days: DayGroup[]; held_for:
 function FixtureCard({ fixture, held_players, on_open }: { fixture: Fixture; held_players: string[]; on_open: (id: number) => void }) {
   const home = teams_api.get(fixture.home_team_id);
   const away = teams_api.get(fixture.away_team_id);
+  const router = useRouter();
   if (!home || !away) return null;
   const is_live = fixture.status === "live";
   const is_finished = fixture.status === "finished";
@@ -237,19 +238,19 @@ function FixtureCard({ fixture, held_players, on_open }: { fixture: Fixture; hel
       </View>
 
       <View style={styles.fx_teams}>
-        <View style={styles.fx_team_right}>
+        <Pressable style={styles.fx_team_right} onPress={() => router.push(`/team/${fixture.home_team_id}`)} hitSlop={4}>
           <Text style={styles.fx_team_name} numberOfLines={1}>{home.name}</Text>
           <Text style={styles.fx_flag}>{home.flag}</Text>
-        </View>
+        </Pressable>
         {fixture.status !== "upcoming" ? (
           <Text style={styles.fx_score}>{fixture.home_score} : {fixture.away_score}</Text>
         ) : (
           <Text style={styles.fx_vs}>VS</Text>
         )}
-        <View style={styles.fx_team_left}>
+        <Pressable style={styles.fx_team_left} onPress={() => router.push(`/team/${fixture.away_team_id}`)} hitSlop={4}>
           <Text style={styles.fx_flag}>{away.flag}</Text>
           <Text style={styles.fx_team_name} numberOfLines={1}>{away.name}</Text>
-        </View>
+        </Pressable>
       </View>
 
       {(fixture.venue_name || fixture.note) && (
@@ -342,13 +343,10 @@ function CompactCell({ fixture, on_open }: { fixture: Fixture; on_open: (id: num
   const finished = fixture.status === "finished";
   const played = finished || is_live;
   const time = format_kickoff_time(fixture.date);
-  const home_win = finished && (fixture.home_score ?? 0) > (fixture.away_score ?? 0);
-  const away_win = finished && (fixture.away_score ?? 0) > (fixture.home_score ?? 0);
-
   return (
     <Pressable style={[styles.cc, is_today && styles.cc_today, is_live && styles.cc_live]} onPress={() => on_open(fixture.id)}>
-      <CellTeamRow flag={home?.flag} code={fixture.home_team_id} score={fixture.home_score} played={played} winner={home_win} />
-      <CellTeamRow flag={away?.flag} code={fixture.away_team_id} score={fixture.away_score} played={played} winner={away_win} />
+      <CellTeamRow flag={home?.flag} code={fixture.home_team_id} score={fixture.home_score} played={played} />
+      <CellTeamRow flag={away?.flag} code={fixture.away_team_id} score={fixture.away_score} played={played} />
       <View style={styles.cc_foot}>
         {is_live ? (
           <>
@@ -365,20 +363,14 @@ function CompactCell({ fixture, on_open }: { fixture: Fixture; on_open: (id: num
   );
 }
 
-function CellTeamRow({ flag, code, score, played, winner }: { flag?: string; code: string; score?: number; played: boolean; winner: boolean }) {
+function CellTeamRow({ flag, code, score, played }: { flag?: string; code: string; score?: number; played: boolean }) {
   const value = played ? (score ?? 0) : "-";
   return (
     <View style={styles.cc_row}>
       <Text style={styles.cc_flag}>{flag ?? ""}</Text>
-      <Text style={[styles.cc_code, winner && styles.cc_code_win]} numberOfLines={1}>{code}</Text>
+      <Text style={styles.cc_code} numberOfLines={1}>{code}</Text>
       <View style={styles.cc_score_slot}>
-        {winner ? (
-          <View style={styles.cc_win_badge}>
-            <Text style={styles.cc_win_txt}>{value}</Text>
-          </View>
-        ) : (
-          <Text style={[styles.cc_score, !played && styles.cc_score_off]}>{value}</Text>
-        )}
+        <Text style={[styles.cc_score, !played && styles.cc_score_off]}>{value}</Text>
       </View>
     </View>
   );
@@ -482,8 +474,8 @@ function GroupsView() {
                 <Text style={[styles.std_num, styles.std_dim]}>{r.lost}</Text>
                 <Text style={styles.std_gd}>{r.goal_difference > 0 ? "+" : ""}{r.goal_difference}</Text>
                 <View style={styles.std_pts_col}>
-                  <View style={[styles.pts_badge, q && styles.pts_badge_q]}>
-                    <Text style={[styles.pts_txt, q && styles.pts_txt_q]}>{r.points}</Text>
+                  <View style={styles.pts_badge}>
+                    <Text style={styles.pts_txt}>{r.points}</Text>
                   </View>
                 </View>
               </Pressable>
