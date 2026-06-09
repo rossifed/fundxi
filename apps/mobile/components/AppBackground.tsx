@@ -13,7 +13,7 @@
 // Rendered once at the root behind everything; screens are transparent so it
 // shows through (see app/_layout.tsx + the per-screen transparent containers).
 
-import { Image, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import Svg, { Defs, RadialGradient, Rect, Stop } from "react-native-svg";
 
 import { palette } from "@/theme/tokens";
@@ -32,11 +32,13 @@ export function AppBackground() {
         </Defs>
         <Rect x="0" y="0" width="100%" height="100%" fill="url(#ambient)" />
       </Svg>
+      {/* Backdrop photo temporarily removed — re-add this <Image> (and the
+          `Image` import) to restore the faint WC stadium background.
       <Image
         source={require("../assets/images/wc-bg.jpg")}
         style={[StyleSheet.absoluteFill, styles.backdrop]}
         resizeMode="cover"
-      />
+      /> */}
     </View>
   );
 }
