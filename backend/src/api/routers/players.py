@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +12,7 @@ from src.api.dependencies import (
     get_player_repo,
     get_session,
     get_valuation_provider,
+    resolve_session_user_id,
 )
 from src.api.dtos.match_comment import MatchCommentResponse
 from src.api.dtos.news import NewsResponse
@@ -139,6 +140,7 @@ async def players_search(
 
 @router.get("/screener-view", response_model=list[PlayerScreenerEntryResponse])
 async def players_screener_view(
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> list[PlayerScreenerEntryResponse]:
     """Single-shot batch payload feeding the Screener page.
@@ -155,17 +157,18 @@ async def players_screener_view(
       - app.holding          (default user's position → pnl, average_buy_price)
     """
     from src.infrastructure.db.repositories.portfolio import SqlAlchemyPortfolioRepository
-    from src.infrastructure.db.repositories.user import SqlAlchemyUserRepository
 
     settings = get_settings()
     season_id = settings.active_season_id
 
-    user_repo = SqlAlchemyUserRepository(session)
-    user = await user_repo.get_default_human()
+    # Holdings are private: scope them to the authenticated caller only.
+    # An anonymous caller gets the screener with empty position columns
+    # (held_shares 0, average_buy_price/pnl NULL) instead of another user's
+    # portfolio. Same auth source as the rest of the app (session cookie).
+    user_id = await resolve_session_user_id(request, session)
     portfolio_id: int | None = None
-    if user is not None:
-        portfolio_repo = SqlAlchemyPortfolioRepository(session)
-        portfolio = await portfolio_repo.get_by_user_id(user.id)
+    if user_id is not None:
+        portfolio = await SqlAlchemyPortfolioRepository(session).get_by_user_id(user_id)
         if portfolio is not None:
             portfolio_id = portfolio.id
 
