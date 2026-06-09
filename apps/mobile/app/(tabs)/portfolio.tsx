@@ -32,19 +32,15 @@ import { useRefresh } from "@/components/use_refresh";
 import { color_for_sign, fmt_eur_m, fmt_eur_m_signed, fmt_shares, fmt_signed_pct } from "@/lib/format";
 import { mono, palette, position_color, text } from "@/theme/tokens";
 
-type PositionsTab = "positions" | "trades";
-// Three analytics tabs (33% each → labels fit, nothing truncated): Exposure
-// (positioning) and Win/Loss (outcome) stay distinct — they aren't the same
-// concept — while the three breakdowns group under Allocation. "Role" (player
-// position FW/MF/DF/GK) is named so it isn't confused with portfolio positions.
-type AnalyticsTab = "exposure" | "winloss" | "allocation";
+// Flat detail panel: four peer tabs, max one sub-level (Allocation only).
+// "Stats" groups Exposure (positioning) + Win/Loss (outcome) — both small,
+// shown stacked, no sub-tabs. "Allocation" holds the three breakdowns directly,
+// so there is no Analytics → Allocation → breakdown chain anymore.
+type PositionsTab = "positions" | "trades" | "stats" | "allocation";
+// "Role" (player position FW/MF/DF/GK) is named so it isn't confused with
+// portfolio positions.
 type AllocTab = "team" | "role" | "age";
 
-const ANALYTICS_TABS: { k: AnalyticsTab; label: string }[] = [
-  { k: "exposure", label: "Exposure" },
-  { k: "winloss", label: "Win/Loss" },
-  { k: "allocation", label: "Allocation" },
-];
 const ALLOC_TABS: { k: AllocTab; label: string }[] = [
   { k: "team", label: "Team" },
   { k: "role", label: "Role" },
@@ -79,15 +75,12 @@ function fmt_short_date(iso?: string): string {
 
 export default function PortfolioScreen() {
   const sheet_ref = useRef<PlayerSheetHandle>(null);
-  const scroll_ref = useRef<ScrollView>(null);
-  // Y offset of the Analytics block inside the scroll content — captured via
-  // onLayout so a tab tap can bring the (otherwise off-screen) chart into view.
-  const analytics_y = useRef(0);
+  // Positions / Trades / Analytics share one segmented control + one fixed
+  // viewport (see the detail panel below) — Analytics is no longer a separate
+  // bottom section, so there is nothing to scroll into view.
   const [positions_tab, set_positions_tab] = useState<PositionsTab>("positions");
   const [period, set_period] = useState<HistoryRange>("all");
-  // Analytics is a single tabbed block (one chart at a time) under the main
-  // hero → chart → positions/trades flow — compact, no deep scroll.
-  const [analytics_tab, set_analytics_tab] = useState<AnalyticsTab>("exposure");
+  // Allocation shows one breakdown at a time via its own sub-tabs.
   const [alloc_tab, set_alloc_tab] = useState<AllocTab>("team");
   const [data_version, set_data_version] = useState(0);
 
@@ -212,7 +205,6 @@ export default function PortfolioScreen() {
   return (
     <View style={styles.screen}>
       <ScrollView
-        ref={scroll_ref}
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
@@ -291,27 +283,51 @@ export default function PortfolioScreen() {
           />
         </View>
 
-        {/* Positions / Trades — standalone tab header + per-row cards (clear
-            separation, like the screener), no nested cards. */}
+        {/* Portfolio detail — one flat segmented control (Positions / Trades /
+            Stats / Allocation) over a single fixed-height viewport. Max one
+            sub-level (Allocation's Team/Role/Age); no Analytics → Allocation →
+            breakdown chain, no page-height jump, no deep scroll. */}
         <View>
           <View style={styles.tabbar}>
-            {([
-              { k: "positions" as PositionsTab, label: "Positions", count: holdings.length },
-              { k: "trades" as PositionsTab, label: "Trade history", count: trades.length },
-            ]).map(t => {
+            {(
+              [
+                { k: "positions", label: "Positions", count: holdings.length },
+                { k: "trades", label: "Trades", count: trades.length },
+                { k: "stats", label: "Stats" },
+                { k: "allocation", label: "Allocation" },
+              ] as { k: PositionsTab; label: string; count?: number }[]
+            ).map(t => {
               const on = positions_tab === t.k;
               return (
                 <Pressable key={t.k} onPress={() => set_positions_tab(t.k)} style={[styles.tabbtn, on && styles.tabbtn_on]}>
-                  <Text style={[styles.tabbtn_label, on && styles.tabbtn_label_on]}>
-                    {t.label} <Text style={[styles.tabbtn_count, on && styles.tabbtn_count_on]}>{t.count}</Text>
+                  <Text style={[styles.tabbtn_label, on && styles.tabbtn_label_on]} numberOfLines={1}>
+                    {t.label}
+                    {t.count !== undefined ? (
+                      <Text style={[styles.tabbtn_count, on && styles.tabbtn_count_on]}> {t.count}</Text>
+                    ) : null}
                   </Text>
                 </Pressable>
               );
             })}
           </View>
 
+          {/* Allocation sub-tabs pinned above the viewport so switching
+              breakdown never scrolls the panel back up. */}
+          {positions_tab === "allocation" && (
+            <View style={[styles.atab_row, styles.atab_row_panel]}>
+              {ALLOC_TABS.map(t => {
+                const on = alloc_tab === t.k;
+                return (
+                  <Pressable key={t.k} onPress={() => set_alloc_tab(t.k)} style={[styles.atab, on && styles.atab_on]}>
+                    <Text style={[styles.atab_label, on && styles.atab_label_on]} numberOfLines={1}>{t.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+
           {/* Fixed-height viewport + inner scroll → the page never jumps when
-              switching between the short Positions list and the long Trades one. */}
+              switching between Positions, Trades, Stats and Allocation. */}
           <View style={styles.list_box}>
             <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={false} contentContainerStyle={styles.list_scroll}>
               {positions_tab === "positions" ? (
@@ -322,65 +338,27 @@ export default function PortfolioScreen() {
                     <PositionRow key={h.player_id} h={h} opened={fmt_short_date(opened_by_player.get(h.player_id))} on_open={() => sheet_ref.current?.open(h.player)} />
                   ))
                 )
-              ) : trades.length === 0 ? (
-                <Text style={styles.list_empty}>No trades yet.</Text>
+              ) : positions_tab === "trades" ? (
+                trades.length === 0 ? (
+                  <Text style={styles.list_empty}>No trades yet.</Text>
+                ) : (
+                  sorted_trades.map(t => <TradeRow key={t.id} trade={t} />)
+                )
+              ) : positions_tab === "stats" ? (
+                <View style={styles.stats_stack}>
+                  <ExposureCard total_value={total_value} />
+                  <WinLossCard holdings={holdings} />
+                </View>
               ) : (
-                sorted_trades.map(t => <TradeRow key={t.id} trade={t} />)
+                <>
+                  {alloc_tab === "team" && <BreakdownCard title="By team" items={with_color(by_team)} chart="bars" />}
+                  {alloc_tab === "role" && <BreakdownCard title="By role" items={with_color(by_position)} chart="pie" />}
+                  {alloc_tab === "age" && <BreakdownCard title="By age" items={with_color(by_age)} chart="pie" />}
+                </>
               )}
             </ScrollView>
           </View>
         </View>
-
-        {/* Analytics — one chart at a time via tabs (no long stack/scroll) */}
-        <Text
-          style={styles.analytics_label}
-          onLayout={e => {
-            analytics_y.current = e.nativeEvent.layout.y;
-          }}
-        >
-          Analytics
-        </Text>
-        {/* Three wide tabs — full labels, nothing truncated or off-screen.
-            Tapping one scrolls the section to the top so the chart that appears
-            below is in view immediately (it otherwise renders off-screen). */}
-        <View style={styles.atab_row}>
-          {ANALYTICS_TABS.map(t => {
-            const on = analytics_tab === t.k;
-            return (
-              <Pressable
-                key={t.k}
-                onPress={() => {
-                  set_analytics_tab(t.k);
-                  scroll_ref.current?.scrollTo({ y: Math.max(0, analytics_y.current - 8), animated: true });
-                }}
-                style={[styles.atab, on && styles.atab_on]}
-              >
-                <Text style={[styles.atab_label, on && styles.atab_label_on]} numberOfLines={1}>{t.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        {analytics_tab === "exposure" && <ExposureCard total_value={total_value} />}
-        {analytics_tab === "winloss" && <WinLossCard holdings={holdings} />}
-
-        {analytics_tab === "allocation" && (
-          <>
-            <View style={styles.atab_row}>
-              {ALLOC_TABS.map(t => {
-                const on = alloc_tab === t.k;
-                return (
-                  <Pressable key={t.k} onPress={() => set_alloc_tab(t.k)} style={[styles.atab, on && styles.atab_on]}>
-                    <Text style={[styles.atab_label, on && styles.atab_label_on]} numberOfLines={1}>{t.label}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-            {alloc_tab === "team" && <BreakdownCard title="By team" items={with_color(by_team)} chart="bars" />}
-            {alloc_tab === "role" && <BreakdownCard title="By role" items={with_color(by_position)} chart="pie" />}
-            {alloc_tab === "age" && <BreakdownCard title="By age" items={with_color(by_age)} chart="pie" />}
-          </>
-        )}
       </ScrollView>
       <PlayerSheet ref={sheet_ref} />
     </View>
@@ -639,8 +617,11 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   scroll: { padding: 16, gap: 16 },
 
-  analytics_label: { fontSize: 11, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase", color: text.secondary, marginTop: 4 },
   atab_row: { flexDirection: "row", gap: 8, paddingVertical: 2 },
+  // Allocation sub-tabs pinned between the main tabbar and the viewport.
+  atab_row_panel: { marginBottom: 10 },
+  // Stats tab: Exposure + Win/Loss cards stacked with breathing room.
+  stats_stack: { gap: 12 },
   atab: {
     flex: 1,
     minWidth: 0,
@@ -708,7 +689,9 @@ const styles = StyleSheet.create({
   kpi_value: { fontFamily: mono, fontSize: 15, fontWeight: "800", color: "#fff" },
 
   tabbar: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.08)", marginBottom: 10 },
-  tabbtn: { paddingHorizontal: 18, paddingVertical: 14, borderBottomWidth: 2, borderBottomColor: "transparent" },
+  // flex:1 so the four tabs split the bar into equal segments (no overflow,
+  // no horizontal scroll) and each label stays centred under its underline.
+  tabbtn: { flex: 1, alignItems: "center", paddingHorizontal: 4, paddingVertical: 14, borderBottomWidth: 2, borderBottomColor: "transparent" },
   tabbtn_on: { borderBottomColor: palette.brandBlue },
   tabbtn_label: { fontSize: 13, fontWeight: "500", color: text.tertiary },
   tabbtn_label_on: { color: "#fff", fontWeight: "800" },
