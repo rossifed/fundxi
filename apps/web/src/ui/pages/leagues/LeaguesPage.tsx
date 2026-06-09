@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { color_for_sign } from "@/ui/helpers/format";
+import { color_for_sign, fmt_eur_m, fmt_eur_m_signed, fmt_signed_pct } from "@/ui/helpers/format";
 import { leagues_api } from "@fundxi/core/api/leagues_api";
+import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import { refresh_leagues, subscribe_leagues } from "@fundxi/core/infrastructure/repositories/leagues_repository";
 import { ApiError } from "@fundxi/core/infrastructure/api_client";
 import { Avatar } from "@/ui/components/Avatar";
@@ -123,79 +124,119 @@ export function LeaguesPage({ initial_join_code }: LeaguesPageProps = {}) {
   }
 
   const me = detail?.leaderboard.find(e => e.is_me);
+  const next_target = me && detail ? detail.leaderboard.find(e => e.rank === me.rank - 1) : undefined;
+  const gap = me && next_target ? next_target.value - me.value : null;
+  const totals = portfolio_api.get_totals();
+  const positions = portfolio_api.get_holdings().length;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-        <div style={{ display: "flex", gap: 6, overflowX: "auto", flex: 1 }}>
-          {summaries.map(l => {
-            const active = l.id === selected_id;
-            return (
-              <button
-                key={l.id}
-                onClick={() => set_active_id(l.id)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "8px 14px",
-                  borderRadius: 10,
-                  border: active ? "1px solid rgba(255,255,255,.2)" : "1px solid rgba(255,255,255,.06)",
-                  background: active ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.02)",
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  flexShrink: 0,
-                  color: active ? "#fff" : "rgba(255,255,255,.45)",
-                }}
-              >
-                <Avatar seed={l.id} name={l.name} size={22} />
-                <span style={{ fontSize: 12, fontWeight: active ? 700 : 500 }}>{l.name}</span>
-                <span style={{ fontSize: 10, color: "rgba(255,255,255,.3)" }}>{l.member_count}</span>
-              </button>
-            );
-          })}
-        </div>
-        <ActionButton label="+ Create" primary on_click={() => set_view("create")} />
-        <ActionButton label="Join code" on_click={() => set_view("join")} />
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Your portfolio at a glance — the same value you're ranked on. */}
+      <div style={{ display: "flex", gap: 8, background: "rgba(255,255,255,.025)", border: "1px solid rgba(255,255,255,.05)", borderRadius: 12, padding: "11px 12px" }}>
+        <StatCell label="Value" value={fmt_eur_m(totals.total_value)} sub={fmt_signed_pct(totals.return_pct, 1)} sub_color={color_for_sign(totals.return_pct)} />
+        <StatCell label="Cash" value={fmt_eur_m(totals.cash)} />
+        <StatCell label="Positions" value={String(positions)} />
+        <StatCell label="P&L" value={fmt_eur_m_signed(totals.pnl)} value_color={color_for_sign(totals.pnl)} />
       </div>
 
-      {detail && (
+      {/* League switcher */}
+      <div style={{ display: "flex", gap: 6, overflowX: "auto" }}>
+        {summaries.map(l => {
+          const active = l.id === selected_id;
+          return (
+            <button
+              key={l.id}
+              onClick={() => set_active_id(l.id)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "8px 14px",
+                borderRadius: 10,
+                border: active ? "1px solid rgba(255,255,255,.2)" : "1px solid rgba(255,255,255,.06)",
+                background: active ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.02)",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                flexShrink: 0,
+                color: active ? "#fff" : "rgba(255,255,255,.45)",
+              }}
+            >
+              <Avatar seed={l.id} name={l.name} size={22} />
+              <span style={{ fontSize: 12, fontWeight: active ? 700 : 500 }}>{l.name}</span>
+              <span style={{ fontSize: 10, color: "rgba(255,255,255,.3)" }}>{l.member_count}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ display: "flex", gap: 10 }}>
+        <ActionButton label="+ Create league" primary on_click={() => set_view("create")} />
+        <ActionButton label="Join with code" on_click={() => set_view("join")} />
+      </div>
+
+      {/* League card — identity + your standing, next target, and footer. */}
+      {detail && me && (
         <div
           style={{
             background: "rgba(255,255,255,.025)",
-            border: "1px solid rgba(255,255,255,.05)",
-            borderRadius: 12,
-            padding: "14px 18px",
+            border: "1px solid rgba(255,255,255,.06)",
+            borderRadius: 14,
+            padding: 14,
             display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 16,
+            flexDirection: "column",
+            gap: 12,
           }}
         >
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 800 }}>{detail.name}</div>
-            <div style={{ fontSize: 12, color: "rgba(255,255,255,.45)" }}>{detail.description}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <Avatar seed={detail.id} name={detail.name} size={38} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 16, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {detail.name}
+              </div>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,.45)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {detail.description ? `${detail.description} · ` : ""}
+                {detail.leaderboard.length} ranked
+              </div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 1 }}>
+              <div style={{ fontSize: 8, fontWeight: 700, color: "rgba(255,255,255,.35)", letterSpacing: 0.5 }}>YOUR RANK</div>
+              <div className="mono" style={{ fontSize: 20, fontWeight: 900, letterSpacing: -0.5 }}>
+                #{me.rank}
+                <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,.35)" }}> /{detail.leaderboard.length}</span>
+              </div>
+              <div className="mono" style={{ fontSize: 12, fontWeight: 700, color: color_for_sign(me.return_pct) }}>
+                {fmt_signed_pct(me.return_pct, 2)}
+              </div>
+            </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 16, fontSize: 12 }}>
-            <span style={{ color: "rgba(255,255,255,.35)" }}>
-              {detail.member_count} {detail.is_public ? "players" : "members"}
-            </span>
-            {me && (
-              <span style={{ color: "rgba(255,255,255,.55)" }}>
-                You · <span className="mono" style={{ fontWeight: 700, color: "#fff" }}>#{me.rank}</span>
-                <span style={{ color: "rgba(255,255,255,.35)" }}> / {detail.member_count}</span>
-              </span>
-            )}
-            {!detail.is_public && detail.invite_code && (
-              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span className="mono" style={{ color: "var(--color-positive)", fontWeight: 700 }}>
-                  {detail.invite_code}
-                </span>
-                <CopyButton text={detail.invite_code} label="Copy" />
-                <CopyButton text={invite_link(detail.invite_code)} label="Copy link" />
-              </span>
-            )}
+
+          {next_target && gap != null && (
+            <div style={{ borderTop: "1px solid rgba(255,255,255,.06)", paddingTop: 10 }}>
+              <div style={{ fontSize: 8, fontWeight: 700, color: "rgba(255,255,255,.35)", letterSpacing: 0.5, marginBottom: 2 }}>NEXT TARGET</div>
+              <div style={{ fontSize: 13, color: "rgba(255,255,255,.55)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                #{next_target.rank} {next_target.name} ·{" "}
+                <span className="mono" style={{ fontWeight: 700, color: "var(--color-brand-blue)" }}>{fmt_eur_m(gap)} to overtake</span>
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid rgba(255,255,255,.06)", paddingTop: 10 }}>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,.45)" }}>
+              Your value <span className="mono" style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>{fmt_eur_m(me.value)}</span>
+            </div>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,.45)" }}>
+              P&amp;L <span className="mono" style={{ fontSize: 13, fontWeight: 800, color: color_for_sign(totals.pnl) }}>{fmt_eur_m_signed(totals.pnl)}</span>
+            </div>
           </div>
+        </div>
+      )}
+
+      {/* Invite row (private leagues) */}
+      {detail && !detail.is_public && detail.invite_code && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 4px" }}>
+          <span style={{ fontSize: 12, color: "rgba(255,255,255,.45)", flex: 1 }}>Invite code</span>
+          <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--color-positive)" }}>{detail.invite_code}</span>
+          <CopyButton text={detail.invite_code} label="Copy" />
+          <CopyButton text={invite_link(detail.invite_code)} label="Copy link" />
         </div>
       )}
 
@@ -268,12 +309,13 @@ export function LeaguesPage({ initial_join_code }: LeaguesPageProps = {}) {
                   background: entry.is_me ? "rgba(55,255,99,.04)" : "transparent",
                 }}
               >
-                <span
-                  className="mono"
-                  style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,.35)" }}
-                >
-                  {entry.rank}
-                </span>
+                {entry.rank <= 3 ? (
+                  <span style={{ fontSize: 15 }}>{entry.rank === 1 ? "🥇" : entry.rank === 2 ? "🥈" : "🥉"}</span>
+                ) : (
+                  <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,.35)" }}>
+                    {entry.rank}
+                  </span>
+                )}
                 <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <Avatar seed={entry.name} name={entry.name} size={26} />
                   <span style={{ fontWeight: entry.is_me ? 700 : 500 }}>
@@ -293,24 +335,54 @@ export function LeaguesPage({ initial_join_code }: LeaguesPageProps = {}) {
                   </span>
                 </span>
                 <span className="mono" style={{ textAlign: "right", color: "rgba(255,255,255,.55)" }}>
-                  €{entry.value.toLocaleString()}
+                  {fmt_eur_m(entry.value)}
                 </span>
-                <span
-                  className="mono"
-                  style={{
-                    textAlign: "right",
-                    fontWeight: 700,
-                    color: color_for_sign(entry.return_pct),
-                  }}
-                >
-                  {entry.return_pct >= 0 ? "+" : ""}
-                  {entry.return_pct}%
+                <span className="mono" style={{ textAlign: "right", fontWeight: 700, color: color_for_sign(entry.return_pct) }}>
+                  {fmt_signed_pct(entry.return_pct, 1)}
                 </span>
               </div>
             ))}
           </>
         )}
       </div>
+
+      {/* Keep climbing — same motivational nudge as mobile. */}
+      {me && (
+        <div style={{ background: "var(--color-accent-blue-soft)", border: "1px solid rgba(47,107,255,.2)", borderRadius: 12, padding: 14 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 4 }}>📈  Keep climbing</div>
+          <div style={{ fontSize: 12, color: "rgba(255,255,255,.55)", lineHeight: 1.5 }}>
+            {me.rank === 1
+              ? "You're top of the league — defend your lead."
+              : next_target && gap != null
+                ? `${fmt_eur_m(gap)} to catch #${next_target.rank} — your next move could flip the spot.`
+                : "Make a move to climb the table."}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Compact portfolio stat (Value / Cash / Positions / P&L), mirroring the mobile
+// leagues header bar.
+function StatCell({
+  label,
+  value,
+  value_color,
+  sub,
+  sub_color,
+}: {
+  label: string;
+  value: string;
+  value_color?: string;
+  sub?: string;
+  sub_color?: string;
+}) {
+  return (
+    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+      <span style={{ fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,.35)", letterSpacing: 0.4, textTransform: "uppercase" }}>{label}</span>
+      <span className="mono" style={{ fontSize: 14, fontWeight: 800, color: value_color ?? "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</span>
+      {sub ? <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: sub_color ?? "rgba(255,255,255,.35)", whiteSpace: "nowrap" }}>{sub}</span> : null}
     </div>
   );
 }
