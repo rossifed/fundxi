@@ -188,7 +188,6 @@ export default function TeamScreen() {
                   return (
                     <View key={grp.key} style={styles.group_panel}>
                       <View style={[styles.group_head, { backgroundColor: `${accent}16`, borderBottomColor: `${accent}33` }]}>
-                        <View style={[styles.group_dot, { backgroundColor: accent }]} />
                         <Text style={styles.group_label}>{grp.label}</Text>
                         <Text style={styles.group_count}>{players.length}</Text>
                       </View>
@@ -452,7 +451,6 @@ const styles = StyleSheet.create({
 
   group_panel: { backgroundColor: "rgba(255,255,255,0.02)", borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", borderRadius: 12, overflow: "hidden" },
   group_head: { flexDirection: "row", alignItems: "center", gap: 9, paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1 },
-  group_dot: { width: 9, height: 9, borderRadius: 5 },
   group_label: { fontSize: 13, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase", color: "#fff", flex: 1 },
   group_count: { fontSize: 11, fontWeight: "800", color: "#fff", backgroundColor: `${palette.brandBlue}33`, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2, overflow: "hidden" },
 
