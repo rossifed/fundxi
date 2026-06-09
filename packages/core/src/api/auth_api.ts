@@ -26,4 +26,14 @@ export const auth_api = {
   async logout(): Promise<void> {
     await api_post<{ status: string }>("/api/auth/logout");
   },
+  /** Request a password-reset link. Resolves regardless of whether the email
+   * is registered — the backend never reveals it (no enumeration). */
+  async request_password_reset(email: string): Promise<void> {
+    await api_post<{ status: string }>("/api/auth/forgot-password", { email });
+  },
+  /** Set a new password from a reset token. Throws ``ApiError`` (status 400)
+   * if the token is unknown, expired or already used. */
+  async reset_password(token: string, password: string): Promise<void> {
+    await api_post<{ status: string }>("/api/auth/reset-password", { token, password });
+  },
 };

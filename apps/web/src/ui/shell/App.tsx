@@ -13,6 +13,8 @@ import { FixturesPage } from "@/ui/pages/fixtures/FixturesPage";
 import { PortfolioPage } from "@/ui/pages/portfolio/PortfolioPage";
 import { LeaguesPage } from "@/ui/pages/leagues/LeaguesPage";
 import { ProfilePage } from "@/ui/pages/profile/ProfilePage";
+import { ResetPasswordPage } from "@/ui/pages/auth/ResetPasswordPage";
+import { AuthDialog } from "@/ui/components/AuthDialog";
 import { MatchView } from "@/ui/pages/match/MatchView";
 import { TeamPage } from "@/ui/pages/team/TeamPage";
 import { PlayerSheet } from "@/ui/pages/player/PlayerSheet";
@@ -42,8 +44,19 @@ function consume_join_code(): string | null {
   return code.trim().toUpperCase();
 }
 
+// Detect the password-reset deep link (``/reset-password?token=…`` from the
+// email). The token is NOT stripped here — it stays until the user finishes
+// (success or cancel), then ``finish_reset`` clears the path + query.
+function read_reset_token(): string | null {
+  if (typeof window === "undefined") return null;
+  if (window.location.pathname !== "/reset-password") return null;
+  return new URLSearchParams(window.location.search).get("token");
+}
+
 export function App() {
   const [initial_join_code] = useState<string | null>(consume_join_code);
+  const [reset_token, set_reset_token] = useState<string | null>(read_reset_token);
+  const [show_login, set_show_login] = useState(false);
   const [tab, set_tab] = useState<TabId>(initial_join_code ? "leagues" : "home");
   const [selected_player, set_selected_player] = useState<Player | null>(null);
   const [selected_match, set_selected_match] = useState<Match | null>(null);
@@ -61,6 +74,16 @@ export function App() {
     set_tab(id as TabId);
     set_selected_match(null);
     set_selected_team(null);
+  };
+
+  // Leave the reset flow: drop the token, restore a clean URL ("/") so a
+  // refresh doesn't re-open it, and optionally pop the sign-in dialog.
+  const finish_reset = ({ open_login }: { open_login: boolean }) => {
+    set_reset_token(null);
+    if (typeof window !== "undefined") {
+      window.history.replaceState({}, "", "/");
+    }
+    set_show_login(open_login);
   };
 
   const open_player = (player: Player) => set_selected_player(player);
@@ -88,6 +111,12 @@ export function App() {
     set_selected_player(null);
     set_selected_match(m);
   };
+
+  // Reset deep link takes over the whole viewport — the user is anonymous
+  // and there's nothing else to do on this screen.
+  if (reset_token) {
+    return <ResetPasswordPage token={reset_token} on_done={finish_reset} />;
+  }
 
   let content: React.ReactNode;
   if (selected_match) {
@@ -262,6 +291,10 @@ export function App() {
           toggle_watch={toggle_watch}
         />
       )}
+
+      {/* Opened after a successful password reset to sign in with the new
+          password (the Header owns its own dialog for normal sign-in). */}
+      {show_login && <AuthDialog initial_mode="login" on_close={() => set_show_login(false)} />}
     </div>
   );
 }
