@@ -3,8 +3,9 @@ import { compute_period_return } from "@fundxi/core/domain/market/return";
 import { players_api } from "@fundxi/core/api/players_api";
 import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import { teams_api } from "@fundxi/core/api/teams_api";
-import { POSITION_ABBR, POSITION_LABEL } from "@fundxi/core/domain/player/player";
+import { POSITION_ABBR } from "@fundxi/core/domain/player/player";
 import type { Player } from "@fundxi/core/domain/player/player";
+import { compute_portfolio_breakdowns } from "@fundxi/core/domain/portfolio/portfolio_breakdown";
 import type { HoldingMetrics } from "@fundxi/core/domain/portfolio/portfolio_metrics";
 import type { Trade } from "@fundxi/core/domain/portfolio/trade";
 import { chart_category_ramp } from "@fundxi/core/design/palette";
@@ -138,58 +139,14 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
   const total_value = totals.total_value;
   const pnl = totals.pnl;
   const return_pct = totals.return_pct;
-  // Win rate = share of open positions in profit (null when no positions).
-  const win_rate = useMemo(
-    () => (holdings.length > 0 ? (holdings.filter(h => h.pnl > 0).length / holdings.length) * 100 : null),
-    [holdings],
+  // Allocation slices (by team / position / age) + win-rate: single source
+  // shared with mobile (packages/core domain). The UI only maps these to
+  // display items below — no calculation leaks here. See COHERENCE-INVARIANT.
+  const breakdowns = useMemo(
+    () => compute_portfolio_breakdowns(holdings, total_value, id => teams_api.get(id)),
+    [holdings, total_value],
   );
-
-  const by_team = useMemo(() => {
-    const map: Record<string, { id: string; name: string; flag: string; v: number }> = {};
-    for (const h of holdings) {
-      const team = teams_api.get(h.player.team_id);
-      if (!team) continue;
-      if (!map[team.id]) map[team.id] = { id: team.id, name: team.name, flag: team.flag, v: 0 };
-      map[team.id].v += h.market_value;
-    }
-    return Object.values(map)
-      .map(x => ({ ...x, pct: ((x.v / total_value) * 100).toFixed(1) }))
-      .sort((a, b) => b.v - a.v);
-  }, [holdings, total_value]);
-
-  const by_position = useMemo(() => {
-    const map: Partial<Record<string, number>> = {};
-    for (const h of holdings) {
-      map[h.player.position] = (map[h.player.position] ?? 0) + h.market_value;
-    }
-    return Object.entries(map)
-      .map(([k, v]) => ({
-        key: k,
-        label: POSITION_LABEL[k as keyof typeof POSITION_LABEL],
-        v: v ?? 0,
-        pct: (((v ?? 0) / total_value) * 100).toFixed(1),
-      }))
-      .sort((a, b) => b.v - a.v);
-  }, [holdings, total_value]);
-
-  const by_age = useMemo(() => {
-    const buckets = [
-      { label: "U21", lo: 0, hi: 21 },
-      { label: "21-25", lo: 21, hi: 26 },
-      { label: "26-30", lo: 26, hi: 31 },
-      { label: "31+", lo: 31, hi: 99 },
-    ];
-    const acc: Record<string, { label: string; v: number }> = {};
-    for (const b of buckets) acc[b.label] = { label: b.label, v: 0 };
-    for (const h of holdings) {
-      const age = h.player.age ?? 25;
-      const b = buckets.find(b => age >= b.lo && age < b.hi) ?? buckets[3];
-      acc[b.label].v += h.market_value;
-    }
-    return Object.values(acc)
-      .filter(x => x.v > 0)
-      .map(x => ({ ...x, pct: ((x.v / total_value) * 100).toFixed(1) }));
-  }, [holdings, total_value]);
+  const win_rate = breakdowns.win_rate;
 
   const [positions_tab, set_positions_tab] = useState<PositionsTab>("positions");
 
@@ -275,24 +232,24 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
     set_selected(prev => new Set([...prev].filter(id => holdings.some(h => h.player_id === id))));
   };
 
-  const team_items = by_team.map((t, i) => ({
+  const team_items = breakdowns.by_team.map((t, i) => ({
     label: `${t.flag} ${t.name}`,
     color: CHART_PALETTE[i] ?? CHART_PALETTE.at(-1)!,
     pct: t.pct,
-    v: t.v,
-    team_id: t.id,
+    v: t.value,
+    team_id: t.key,
   }));
-  const position_items = by_position.map((p, i) => ({
+  const position_items = breakdowns.by_position.map((p, i) => ({
     label: p.label,
     color: CHART_PALETTE[i] ?? CHART_PALETTE.at(-1)!,
     pct: p.pct,
-    v: p.v,
+    v: p.value,
   }));
-  const age_items = by_age.map((a, i) => ({
+  const age_items = breakdowns.by_age.map((a, i) => ({
     label: a.label,
     color: CHART_PALETTE[i] ?? CHART_PALETTE.at(-1)!,
     pct: a.pct,
-    v: a.v,
+    v: a.value,
   }));
 
   return (
@@ -724,7 +681,7 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
 interface BreakdownItem {
   label: string;
   color: string;
-  pct: string;
+  pct: number;
   v: number;
   /** Set only on the "By team" breakdown — turns the row label into a
    * link to that team's page. Absent on position / age breakdowns. */
@@ -795,7 +752,7 @@ function BreakdownCard({
           <Donut segments={segments} size={large ? 140 : 110} />
           <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 1 }}>
             {items.map((item, i) => {
-              const pct_num = parseFloat(item.pct);
+              const pct_num = item.pct;
               const is_negative = pct_num < 0;
               return (
                 <div
@@ -824,7 +781,7 @@ function BreakdownCard({
                       flexShrink: 0,
                     }}
                   >
-                    {pct_num >= 0 ? "+" : ""}{item.pct}%
+                    {pct_num >= 0 ? "+" : ""}{item.pct.toFixed(1)}%
                   </span>
                 </div>
               );
@@ -844,7 +801,7 @@ function BreakdownCard({
           }}
         >
           {items.map((item, i) => {
-            const pct_num = parseFloat(item.pct);
+            const pct_num = item.pct;
             const is_negative = pct_num < 0;
             return (
               <div key={i} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -871,7 +828,7 @@ function BreakdownCard({
                       flexShrink: 0,
                     }}
                   >
-                    {pct_num >= 0 ? "+" : ""}{item.pct}%
+                    {pct_num >= 0 ? "+" : ""}{item.pct.toFixed(1)}%
                   </span>
                 </div>
                 <div style={{ height: 5, borderRadius: 2, background: "rgba(255,255,255,.04)", overflow: "hidden" }}>

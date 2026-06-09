@@ -16,7 +16,8 @@ import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import { teams_api } from "@fundxi/core/api/teams_api";
 import { valuations_api } from "@fundxi/core/api/valuations_api";
 import { compute_period_return } from "@fundxi/core/domain/market/return";
-import { POSITION_ABBR, POSITION_LABEL, type Player } from "@fundxi/core/domain/player/player";
+import { POSITION_ABBR, type Player } from "@fundxi/core/domain/player/player";
+import { compute_portfolio_breakdowns } from "@fundxi/core/domain/portfolio/portfolio_breakdown";
 import type { HoldingDetail } from "@fundxi/core/application/portfolio_service";
 import type { HistoryRange } from "@fundxi/core/infrastructure/repositories/portfolio_history_repository";
 import { chart_category_ramp } from "@fundxi/core/design/palette";
@@ -104,11 +105,14 @@ export default function PortfolioScreen() {
   const trades = useMemo(() => portfolio_api.list_trades(), [data_version]);
   const totals = useMemo(() => portfolio_api.get_totals(), [data_version]);
   const total_value = totals.total_value;
-  // Win rate = share of open positions in profit (null when no positions).
-  const win_rate = useMemo(
-    () => (holdings.length > 0 ? (holdings.filter(h => h.pnl > 0).length / holdings.length) * 100 : null),
-    [holdings],
+  // Allocation slices + win-rate: single source shared with web
+  // (packages/core domain). The UI only maps these to display rows below —
+  // no calculation leaks here. See COHERENCE-INVARIANT.
+  const breakdowns = useMemo(
+    () => compute_portfolio_breakdowns(holdings, total_value, id => teams_api.get(id)),
+    [holdings, total_value],
   );
+  const win_rate = breakdowns.win_rate;
   // Best open position by P&L — the "top position" KPI. Unrealized (we have no
   // realized-P&L-per-closed-trade figure), so it's labelled accordingly.
   const top_position_pnl = useMemo(
@@ -158,44 +162,9 @@ export default function PortfolioScreen() {
   const sorted_holdings = useMemo(() => [...holdings].sort((a, b) => b.market_value - a.market_value), [holdings]);
   const sorted_trades = useMemo(() => [...trades].sort((a, b) => b.date.localeCompare(a.date)), [trades]);
 
-  const by_team = useMemo(() => {
-    const map: Record<string, { id: string; name: string; flag: string; v: number }> = {};
-    for (const h of holdings) {
-      const team = teams_api.get(h.player.team_id);
-      if (!team) continue;
-      if (!map[team.id]) map[team.id] = { id: team.id, name: team.name, flag: team.flag, v: 0 };
-      map[team.id].v += h.market_value;
-    }
-    return Object.values(map)
-      .map(x => ({ label: `${x.flag} ${x.name}`, v: x.v, pct: ((x.v / (total_value || 1)) * 100).toFixed(1) }))
-      .sort((a, b) => b.v - a.v);
-  }, [holdings, total_value]);
-
-  const by_position = useMemo(() => {
-    const map: Partial<Record<string, number>> = {};
-    for (const h of holdings) map[h.player.position] = (map[h.player.position] ?? 0) + h.market_value;
-    return Object.entries(map)
-      .map(([k, v]) => ({ label: POSITION_LABEL[k as keyof typeof POSITION_LABEL], v: v ?? 0, pct: (((v ?? 0) / (total_value || 1)) * 100).toFixed(1) }))
-      .sort((a, b) => b.v - a.v);
-  }, [holdings, total_value]);
-
-  const by_age = useMemo(() => {
-    const buckets = [
-      { label: "U21", lo: 0, hi: 21 },
-      { label: "21-25", lo: 21, hi: 26 },
-      { label: "26-30", lo: 26, hi: 31 },
-      { label: "31+", lo: 31, hi: 99 },
-    ];
-    const acc: Record<string, number> = {};
-    for (const h of holdings) {
-      const age = h.player.age ?? 25;
-      const b = buckets.find(b => age >= b.lo && age < b.hi) ?? buckets[3];
-      acc[b.label] = (acc[b.label] ?? 0) + h.market_value;
-    }
-    return buckets
-      .filter(b => (acc[b.label] ?? 0) > 0)
-      .map(b => ({ label: b.label, v: acc[b.label], pct: ((acc[b.label] / (total_value || 1)) * 100).toFixed(1) }));
-  }, [holdings, total_value]);
+  const by_team = breakdowns.by_team.map(t => ({ label: `${t.flag} ${t.name}`, v: t.value, pct: t.pct }));
+  const by_position = breakdowns.by_position.map(p => ({ label: p.label, v: p.value, pct: p.pct }));
+  const by_age = breakdowns.by_age.map(a => ({ label: a.label, v: a.value, pct: a.pct }));
 
   const with_color = <T extends { v: number }>(items: T[]) =>
     items.map((it, i) => ({ ...it, color: CHART_PALETTE[i] ?? CHART_PALETTE[CHART_PALETTE.length - 1] }));
@@ -523,7 +492,7 @@ function WinLossCard({ holdings }: { holdings: HoldingDetail[] }) {
 interface BItem {
   label: string;
   color: string;
-  pct: string;
+  pct: number;
   v: number;
 }
 function BreakdownCard({ title, items, chart }: { title: string; items: BItem[]; chart: "bars" | "pie" }) {
@@ -541,7 +510,7 @@ function BreakdownCard({ title, items, chart }: { title: string; items: BItem[];
                   <View style={[styles.legend_dot, { backgroundColor: it.color }]} />
                   <Text style={styles.legend_label} numberOfLines={1}>{it.label}</Text>
                 </View>
-                <Text style={styles.legend_pct}>{parseFloat(it.pct) >= 0 ? "+" : ""}{it.pct}%</Text>
+                <Text style={styles.legend_pct}>{it.pct >= 0 ? "+" : ""}{it.pct.toFixed(1)}%</Text>
               </View>
             ))}
           </View>
@@ -549,13 +518,13 @@ function BreakdownCard({ title, items, chart }: { title: string; items: BItem[];
       ) : (
         <View style={{ gap: 8 }}>
           {items.map((it, i) => {
-            const pct = parseFloat(it.pct);
+            const pct = it.pct;
             const neg = pct < 0;
             return (
               <View key={i} style={{ gap: 4 }}>
                 <View style={styles.bars_head}>
                   <Text style={styles.legend_label} numberOfLines={1}>{it.label}</Text>
-                  <Text style={[styles.legend_pct, neg && { color: palette.negative }]}>{pct >= 0 ? "+" : ""}{it.pct}%</Text>
+                  <Text style={[styles.legend_pct, neg && { color: palette.negative }]}>{pct >= 0 ? "+" : ""}{it.pct.toFixed(1)}%</Text>
                 </View>
                 <View style={styles.bars_track}>
                   <View style={[styles.bars_fill, { width: `${Math.max(2, Math.abs(pct))}%`, backgroundColor: neg ? palette.negative : it.color }]} />
