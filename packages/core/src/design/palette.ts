@@ -44,6 +44,9 @@ export type Palette = {
   tooltipBg: string;
   surfaceDeep: string;
   surfaceDeeper: string;
+  // Neutral fallback for a team with no provider kit colour (the real colour
+  // is per-row provider data on `Team.color`; this is only the "—" stand-in).
+  neutralTeam: string;
   // Ambient gradient stops (radial bg on the App shell).
   grad1: string;
   grad2: string;
@@ -69,6 +72,7 @@ const dark: Palette = {
   tooltipBg: "#0d0d0f",
   surfaceDeep: "#0d1419",
   surfaceDeeper: "#0b0f14",
+  neutralTeam: "#3b4049",
   grad1: "#393690",
   grad2: "#11377E",
   grad3: "#07081D",

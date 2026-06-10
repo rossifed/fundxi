@@ -1,5 +1,6 @@
 import type { Team } from "@fundxi/core/domain/team/team";
 import { flag_emoji } from "@fundxi/core/domain/team/flag_emoji";
+import { themes } from "@fundxi/core/design/palette";
 import { api_get } from "@fundxi/core/infrastructure/api_client";
 
 // Backend payload shape — the fields of FastAPI TeamResponse the UI uses.
@@ -16,9 +17,10 @@ interface TeamDTO {
 }
 
 // team.color is always a hex (kit colours are hex literals, and consumers
-// append an alpha pair, e.g. `${color}66`). This is the neutral sentinel
-// used when a team has no kit-colour data yet — not a theme colour.
-const NEUTRAL_TEAM_COLOR = "#3b4049";
+// append an alpha pair, e.g. `${color}66`). The neutral sentinel used when a
+// team has no kit-colour data yet now lives in the shared palette token
+// (`--color-neutral-team`) instead of a bare literal here.
+const NEUTRAL_TEAM_COLOR = themes.dark.neutralTeam;
 
 let TEAMS: Team[] = [];
 let TEAMS_BY_ID = new Map<string, Team>();
