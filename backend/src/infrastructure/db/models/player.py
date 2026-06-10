@@ -4,8 +4,9 @@ DDD role: Adapter. Domain ↔ ORM translation is the Repository's job.
 """
 
 from datetime import date
+from decimal import Decimal
 
-from sqlalchemy import Date, ForeignKey, String, Text
+from sqlalchemy import Date, ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.db.base import Base
@@ -36,3 +37,9 @@ class PlayerORM(Base, AuditMixin):
     nationality_name: Mapped[str | None] = mapped_column(String(64))
     nationality_iso: Mapped[str | None] = mapped_column(String(8))
     nationality_flag_url: Mapped[str | None] = mapped_column(String(255))
+    # Pricing anchor: pre-tournament starting price (t0) of the player instrument,
+    # set once from a real market-value snapshot. NULL → no anchor → price shows
+    # "—" (never synthesised in prod). ``base_value_source`` records provenance
+    # ('transfermarkt' | 'derived') and must never be 'synthetic' in prod.
+    base_value: Mapped[Decimal | None] = mapped_column(Numeric(8, 3))
+    base_value_source: Mapped[str | None] = mapped_column(String(16))

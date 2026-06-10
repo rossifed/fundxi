@@ -21,6 +21,7 @@ from src.infrastructure.db.models.pricing_progress import PricingProgressORM
 from src.infrastructure.db.models.raw_sportmonks_event import RawSportmonksEventORM
 from src.infrastructure.db.models.standings import StandingORM
 from src.infrastructure.db.models.team import TeamORM
+from src.infrastructure.db.models.transfermarkt_market_value import TransfermarktMarketValueORM
 from src.infrastructure.db.models.user import UserORM
 
 __all__ = [
@@ -45,5 +46,6 @@ __all__ = [
     "StandingORM",
     "TeamORM",
     "TradeORM",
+    "TransfermarktMarketValueORM",
     "UserORM",
 ]
