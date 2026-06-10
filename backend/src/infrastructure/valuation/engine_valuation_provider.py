@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.valuation.player_valuation import PlayerValuation, ValuationSource
 from src.infrastructure.db.models.player_price_tick import PlayerPriceTickORM
+from src.infrastructure.valuation.db_starting_price_provider import DbStartingPriceProvider
 from src.infrastructure.valuation.synthetic_valuation_provider import synthesize_valuation
 
 # Neutral rating for an un-ticked player (no performance signal yet).
@@ -145,15 +146,20 @@ class EngineValuationProvider:
         )
 
         now = datetime.now(UTC)
+        # Real pre-tournament starting price (Transfermarkt seed) per player; None
+        # for the un-seeded tail (e.g. stale WC2022 residuals).
+        real_base = await DbStartingPriceProvider(self._session).get_many(ids)
         result: dict[int, PlayerValuation] = {}
         for player_id in ids:
             tick = latest.get(player_id)
             if tick is None:
-                # No tick yet: a player's starting price IS its deterministic
-                # base value (the same price place_trade charges) — flat, not
-                # the random synthetic walk, so no invented movement leaks in.
-                # since_start = 0% (price == base); no match yet → None.
-                base = synthesize_valuation(player_id, as_of=now).base_value
+                # No tick yet: a player's starting price IS its base value, flat
+                # (same price place_trade charges) — no invented movement leaks in.
+                # since_start = 0% (price == base); no match yet → None. Seeded →
+                # the real Transfermarkt price (ENGINE); un-seeded tail → the
+                # deterministic synthetic seed (SYNTHETIC), honestly tagged.
+                seeded = real_base.get(player_id)
+                base = seeded if seeded is not None else synthesize_valuation(player_id, as_of=now).base_value
                 result[player_id] = PlayerValuation(
                     player_id=player_id,
                     base_value=base,
@@ -163,7 +169,7 @@ class EngineValuationProvider:
                     change_last_match=None,
                     performance_rating=_NEUTRAL_RATING,
                     as_of=now,
-                    source=ValuationSource.SYNTHETIC,
+                    source=ValuationSource.ENGINE if seeded is not None else ValuationSource.SYNTHETIC,
                 )
                 continue
             current_price = float(tick.current_price)

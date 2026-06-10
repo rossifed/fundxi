@@ -46,7 +46,9 @@ from src.infrastructure.sportmonks.projectors.match_comment import project_match
 from src.infrastructure.sportmonks.projectors.match_event import project_match_event
 from src.infrastructure.sportmonks.projectors.player_match_stat import project_player_match_stat
 from src.infrastructure.sportmonks.projectors.team_match_stat import project_team_match_stats
-from src.infrastructure.valuation.synthetic_valuation_provider import synthesize_valuation
+from src.infrastructure.valuation.db_or_synthetic_starting_price_provider import (
+    DbOrSyntheticStartingPriceProvider,
+)
 from src.ingest.application.commit_then_publish import commit_then_publish
 from src.ingest.domain.ports import NotificationPublisher
 from src.ingest.infrastructure.sportmonks_id_maps import SportmonksIdMaps
@@ -319,9 +321,17 @@ class SportmonksInplayPoller:
             return []
         ts = datetime.now(UTC)
         last_prices = await SqlAlchemyLatestPriceProvider(session).get_many([c.player_id for c in curr_stats])
+        # Real pre-tournament starting price (Transfermarkt seed) per player; the
+        # transitional provider falls back to the synthetic seed for the un-seeded tail.
+        starting = await DbOrSyntheticStartingPriceProvider(session, as_of=ts).get_many(
+            [c.player_id for c in curr_stats]
+        )
         notifications: list[tuple[str, bytes]] = []
         for curr in curr_stats:
-            base_value = synthesize_valuation(curr.player_id, as_of=ts).base_value
+            base_value = starting.get(curr.player_id)
+            if base_value is None:
+                # No real base value (un-seeded, unpriceable) → emit no tick.
+                continue
             carried = await self._carried_in_price(session, curr.player_id)
             tournament_delta = tournament_delta_from(carried, base_value)
             snapshot = build_snapshot(
@@ -336,7 +346,6 @@ class SportmonksInplayPoller:
             if last is not None and round(last, 2) == new_price:
                 # Unchanged since the last tick — no insert, no notification.
                 continue
-            change_since_open = round(result.live_delta * 100.0, 2)
             await upsert_price_tick(
                 session,
                 player_id=curr.player_id,
@@ -344,7 +353,6 @@ class SportmonksInplayPoller:
                 fixture_id=self.fixture_internal_id,
                 current_price=new_price,
                 performance_rating=round(curr.rating, 2) if curr.rating is not None else 6.0,
-                change_since_open=change_since_open,
                 source="engine",
             )
             notifications.append(
@@ -356,7 +364,6 @@ class SportmonksInplayPoller:
                             "player_id": curr.player_id,
                             "fixture_id": self.fixture_internal_id,
                             "current_price": new_price,
-                            "change_since_open": change_since_open,
                         }
                     ).encode(),
                 )

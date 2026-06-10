@@ -16,10 +16,14 @@ from datetime import UTC, datetime
 
 import pytest
 
-from src.application.place_trade import InsufficientMarginError, PlaceTradeCommand, place_trade
+from src.application.place_trade import (
+    InsufficientMarginError,
+    NoServerPriceError,
+    PlaceTradeCommand,
+    place_trade,
+)
 from src.domain.portfolio.portfolio import Holding, Portfolio, Trade
 from src.domain.portfolio.user import User, UserKind
-from src.infrastructure.valuation.synthetic_valuation_provider import synthesize_valuation
 
 _NOW = datetime.now(UTC)
 
@@ -92,6 +96,16 @@ class _FakePriceProvider:
         return {pid: self.prices[pid] for pid in player_ids if pid in self.prices}
 
 
+@dataclass(slots=True)
+class _FakeStartingPriceProvider:
+    """Starting-price port fake: returns ``None`` for an un-seeded player."""
+
+    prices: dict[int, float]
+
+    async def get_many(self, player_ids: list[int]) -> dict[int, float | None]:
+        return {pid: self.prices.get(pid) for pid in player_ids}
+
+
 def _setup(*, cash: float, prices: dict[int, float], holdings: list[Holding] | None = None):
     user = User(id=1, name="t", kind=UserKind.HUMAN, strategy=None, created_at=_NOW)
     portfolio = Portfolio(id=1, user_id=1, cash=cash, created_at=_NOW, updated_at=_NOW)
@@ -103,11 +117,11 @@ def _run(coro):  # type: ignore[no-untyped-def]
     return asyncio.new_event_loop().run_until_complete(coro)
 
 
-def test_unticked_player_is_traded_at_its_synthetic_base_value() -> None:
+def test_unticked_player_is_traded_at_its_starting_price() -> None:
     # Player 7 has no tick (price provider empty). It must still be tradeable at
-    # its base_value — the same price the Screener shows — not 409.
+    # its starting price (base value) — the same price the Screener shows — not 409.
     user_repo, portfolio_repo, trade_repo, price_provider = _setup(cash=1000.0, prices={})
-    expected_price = synthesize_valuation(7, as_of=_NOW).base_value
+    starting_provider = _FakeStartingPriceProvider({7: 50.0})
 
     out = _run(
         place_trade(
@@ -116,11 +130,30 @@ def test_unticked_player_is_traded_at_its_synthetic_base_value() -> None:
             portfolio_repo=portfolio_repo,
             trade_repo=trade_repo,
             price_provider=price_provider,
+            starting_price_provider=starting_provider,
             max_leverage=1.0,
         )
     )
-    assert out.trade.price == expected_price
-    assert out.trade.total == round(expected_price, 2)
+    assert out.trade.price == 50.0
+    assert out.trade.total == 50.0
+
+
+def test_unpriceable_player_is_rejected() -> None:
+    # No tick AND no starting price (un-seeded) → unpriceable → reject, never an
+    # invented price.
+    user_repo, portfolio_repo, trade_repo, price_provider = _setup(cash=1000.0, prices={})
+    with pytest.raises(NoServerPriceError):
+        _run(
+            place_trade(
+                command=PlaceTradeCommand(user_id=1, player_id=7, kind="buy", shares=1.0),
+                user_repo=user_repo,
+                portfolio_repo=portfolio_repo,
+                trade_repo=trade_repo,
+                price_provider=price_provider,
+                starting_price_provider=_FakeStartingPriceProvider({}),
+                max_leverage=1.0,
+            )
+        )
 
 
 def test_buy_uses_the_server_tick_when_present() -> None:
@@ -132,6 +165,7 @@ def test_buy_uses_the_server_tick_when_present() -> None:
             portfolio_repo=portfolio_repo,
             trade_repo=trade_repo,
             price_provider=price_provider,
+            starting_price_provider=_FakeStartingPriceProvider({}),
             max_leverage=1.0,
         )
     )
@@ -150,6 +184,7 @@ def test_short_beyond_equity_is_rejected_by_margin() -> None:
                 portfolio_repo=portfolio_repo,
                 trade_repo=trade_repo,
                 price_provider=price_provider,
+                starting_price_provider=_FakeStartingPriceProvider({}),
                 max_leverage=1.0,
             )
         )
@@ -167,6 +202,7 @@ def test_short_within_equity_is_allowed() -> None:
             portfolio_repo=portfolio_repo,
             trade_repo=trade_repo,
             price_provider=price_provider,
+            starting_price_provider=_FakeStartingPriceProvider({}),
             max_leverage=1.0,
         )
     )

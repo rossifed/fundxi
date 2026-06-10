@@ -32,6 +32,9 @@ from src.infrastructure.db.repositories.portfolio import (
 )
 from src.infrastructure.db.repositories.portfolio_snapshot_adapters import SqlAlchemyLatestPriceProvider
 from src.infrastructure.db.repositories.user import SqlAlchemyUserRepository
+from src.infrastructure.valuation.db_or_synthetic_starting_price_provider import (
+    DbOrSyntheticStartingPriceProvider,
+)
 
 
 @pytest.mark.anyio
@@ -48,6 +51,7 @@ async def test_concurrent_trades_serialize_on_portfolio_row_lock() -> None:
                 portfolio_repo=SqlAlchemyPortfolioRepository(session),
                 trade_repo=SqlAlchemyTradeRepository(session),
                 price_provider=SqlAlchemyLatestPriceProvider(session),
+                starting_price_provider=DbOrSyntheticStartingPriceProvider(session, as_of=datetime.now(UTC)),
                 max_leverage=1.0,
             )
             await session.commit()
@@ -81,7 +85,6 @@ async def test_concurrent_trades_serialize_on_portfolio_row_lock() -> None:
                     fixture_id=None,
                     current_price=10.0,
                     performance_rating=7.0,
-                    change_since_open=0.0,
                     source="engine",
                 )
             )

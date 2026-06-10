@@ -1,5 +1,7 @@
 """/api/me, /api/portfolio, /api/trades router (mono-user v0)."""
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,6 +40,9 @@ from src.infrastructure.db.repositories.portfolio_snapshot_adapters import (
     SqlAlchemyPortfolioReader,
 )
 from src.infrastructure.db.repositories.user import SqlAlchemyUserRepository
+from src.infrastructure.valuation.db_or_synthetic_starting_price_provider import (
+    DbOrSyntheticStartingPriceProvider,
+)
 
 router = APIRouter(tags=["app"])
 
@@ -110,6 +115,7 @@ async def post_trade(
             portfolio_repo=portfolio_repo,
             trade_repo=SqlAlchemyTradeRepository(session),
             price_provider=SqlAlchemyLatestPriceProvider(session),
+            starting_price_provider=DbOrSyntheticStartingPriceProvider(session, as_of=datetime.now(UTC)),
             max_leverage=get_settings().max_gross_leverage,
         )
     except UserNotFoundError as exc:
