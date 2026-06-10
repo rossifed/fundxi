@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     email_from: str = Field(default="fundXI <no-reply@fundxi.local>")
     app_base_url: str = Field(default="http://localhost:5173")
     password_reset_ttl_seconds: int = Field(default=60 * 60)  # 1 hour
+    # Error tracking. Empty ⇒ Sentry is not initialised (no-op), so local dev
+    # and tests stay offline. Set ``SENTRY_DSN`` in prod to enable reporting.
+    sentry_dsn: str = Field(default="")
 
     @property
     def is_dev(self) -> bool:

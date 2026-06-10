@@ -1,12 +1,46 @@
+import logging
 import os
 from pathlib import Path
 
+import sentry_sdk
+import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.api.routers import auth, fixtures, leagues, news, players, portfolio, standings, teams, valuations
+from src.config import get_settings
+
+
+def _configure_observability() -> None:
+    """Wire logging + error tracking before the app handles any request.
+
+    - structlog: JSON in deployments (machine-parseable, Atonra convention),
+      human-readable console in dev.
+    - Sentry: initialised only when ``SENTRY_DSN`` is set, so dev and tests stay
+      offline. The FastAPI integration is auto-enabled by the SDK.
+    """
+    settings = get_settings()
+    logging.basicConfig(level=settings.log_level.upper(), format="%(message)s")
+    renderer = structlog.dev.ConsoleRenderer() if settings.is_dev else structlog.processors.JSONRenderer()
+    structlog.configure(
+        processors=[
+            structlog.processors.add_log_level,
+            structlog.processors.TimeStamper(fmt="iso"),
+            renderer,
+        ]
+    )
+    if settings.sentry_dsn:
+        sentry_sdk.init(
+            dsn=settings.sentry_dsn,
+            environment=settings.app_env,
+            # Errors only by default — no perf sampling, keeps the free tier safe.
+            traces_sample_rate=0.0,
+        )
+
+
+_configure_observability()
 
 app = FastAPI(title="fundXI Backend", version="0.1.0")
 
