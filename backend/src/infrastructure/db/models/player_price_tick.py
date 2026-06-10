@@ -19,7 +19,10 @@ class PlayerPriceTickORM(Base):
         {"schema": "valuation"},
     )
 
-    player_id: Mapped[int] = mapped_column(ForeignKey("core.player.id", ondelete="CASCADE"), index=True)
+    # No standalone index: the PK (player_id, ts) already serves player_id-
+    # prefix lookups and the FK cascade. A separate player_id index is pure
+    # write overhead (see migration 0029).
+    player_id: Mapped[int] = mapped_column(ForeignKey("core.player.id", ondelete="CASCADE"))
     ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     fixture_id: Mapped[int | None] = mapped_column(ForeignKey("core.fixture.id", ondelete="SET NULL"))
     current_price: Mapped[float] = mapped_column(Numeric(10, 2))

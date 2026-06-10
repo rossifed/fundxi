@@ -33,6 +33,9 @@ class LeagueMemberORM(Base):
         {"schema": "app"},
     )
 
-    league_id: Mapped[int] = mapped_column(ForeignKey("app.league.id", ondelete="CASCADE"), index=True)
+    # PK (league_id, user_id) covers league_id-prefix lookups + the cascade:
+    # no standalone league_id index (see migration 0029). user_id keeps its
+    # index — reverse lookup "which leagues is user X in".
+    league_id: Mapped[int] = mapped_column(ForeignKey("app.league.id", ondelete="CASCADE"))
     user_id: Mapped[int] = mapped_column(ForeignKey("app.user.id", ondelete="CASCADE"), index=True)
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

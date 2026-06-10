@@ -18,5 +18,8 @@ class MatchCommentPlayerMentionORM(Base):
         {"schema": "core"},
     )
 
-    match_comment_id: Mapped[int] = mapped_column(ForeignKey("core.match_comment.id", ondelete="CASCADE"), index=True)
+    # PK (match_comment_id, player_id) covers match_comment_id-prefix lookups
+    # + the cascade: no standalone match_comment_id index (see migration 0029).
+    # player_id keeps its index — reverse lookup "comments mentioning player X".
+    match_comment_id: Mapped[int] = mapped_column(ForeignKey("core.match_comment.id", ondelete="CASCADE"))
     player_id: Mapped[int] = mapped_column(ForeignKey("core.player.id", ondelete="CASCADE"), index=True)

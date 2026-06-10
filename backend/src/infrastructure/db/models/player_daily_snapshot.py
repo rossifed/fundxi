@@ -15,7 +15,9 @@ class PlayerDailySnapshotORM(Base):
         {"schema": "valuation"},
     )
 
-    player_id: Mapped[int] = mapped_column(ForeignKey("core.player.id", ondelete="CASCADE"), index=True)
+    # PK (player_id, date) already covers player_id-prefix lookups + the FK
+    # cascade; no standalone player_id index (see migration 0029).
+    player_id: Mapped[int] = mapped_column(ForeignKey("core.player.id", ondelete="CASCADE"))
     date: Mapped[_date] = mapped_column(Date)
     open_price: Mapped[float] = mapped_column(Numeric(10, 2))
     close_price: Mapped[float] = mapped_column(Numeric(10, 2))
