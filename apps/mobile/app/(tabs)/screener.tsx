@@ -35,6 +35,7 @@ import {
   type ScreenerEntry,
 } from "@fundxi/core/infrastructure/repositories/screener_repository";
 import { spark_for_player } from "@fundxi/core/infrastructure/repositories/valuations_repository";
+import { filter_screener_entries, screener_bounds } from "@fundxi/core/application/screener_filter";
 
 import { Spark } from "@/components/Spark";
 import { PositionBadge } from "@/components/PositionBadge";
@@ -151,45 +152,19 @@ export default function ScreenerScreen() {
     const m = all_entries.reduce((a, e) => Math.max(a, e.current_price), 0);
     return Math.max(PRICE_STEP, Math.ceil(m / PRICE_STEP) * PRICE_STEP);
   }, [all_entries]);
-  const perf_bounds = useMemo<Range>(() => bounds_of(all_entries, e => e.since_start_pct, PERF_STEP, [-50, 100]), [all_entries]);
-  const age_bounds = useMemo<Range>(() => bounds_of(all_entries, e => e.age, 1, [16, 45]), [all_entries]);
+  const perf_bounds = useMemo<Range>(() => screener_bounds(all_entries, e => e.since_start_pct, PERF_STEP, [-50, 100]), [all_entries]);
+  const age_bounds = useMemo<Range>(() => screener_bounds(all_entries, e => e.age, 1, [16, 45]), [all_entries]);
   const price_bounds: Range = [0, price_max];
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const result = all_entries.filter(e => {
-      if (position_filters.size > 0 && !position_filters.has(e.position as Position)) return false;
-      if (team_filters.size > 0 && !team_filters.has(e.team_id)) return false;
-      if (price_range && (e.current_price < price_range[0] || e.current_price > price_range[1])) return false;
-      if (perf_range) {
-        const v = e.since_start_pct;
-        if (v == null || v < perf_range[0] || v > perf_range[1]) return false;
-      }
-      if (age_range) {
-        const v = e.age;
-        if (v == null || v < age_range[0] || v > age_range[1]) return false;
-      }
-      if (held_only && !held_ids.has(e.id)) return false;
-      if (watch_only && !watched_ids.has(e.id)) return false;
-      if (q) {
-        const team = teams_api.get(e.team_id);
-        const hay = `${e.name} ${e.full_name ?? ""} ${e.club ?? ""} ${team?.name ?? ""}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
-      return true;
-    });
-    const dir = sort_dir === "asc" ? 1 : -1;
-    result.sort((a, b) => {
-      const va = pluck(a, sort_key);
-      const vb = pluck(b, sort_key);
-      if (va == null && vb == null) return 0;
-      if (va == null) return 1;
-      if (vb == null) return -1;
-      if (typeof va === "string" && typeof vb === "string") return dir * va.localeCompare(vb);
-      return dir * ((va as number) - (vb as number));
-    });
-    return result;
-  }, [all_entries, position_filters, team_filters, price_range, perf_range, age_range, held_only, watch_only, watched_ids, search, sort_key, sort_dir, held_ids]);
+  const filtered = useMemo(
+    () =>
+      filter_screener_entries(
+        all_entries,
+        { positions: position_filters, team_ids: team_filters, price_range, perf_range, age_range, held_only, watch_only, search, sort_key, sort_dir },
+        { team_name: id => teams_api.get(id)?.name, held_ids, watched_ids },
+      ),
+    [all_entries, position_filters, team_filters, price_range, perf_range, age_range, held_only, watch_only, watched_ids, search, sort_key, sort_dir, held_ids],
+  );
 
   const active_count =
     position_filters.size +
@@ -995,57 +970,12 @@ function FilterLabel({ children }: { children: React.ReactNode }) {
 }
 
 // Generic bounds extractor for the sliders, snapped outward to `step`.
-function bounds_of(
-  entries: ScreenerEntry[],
-  pick: (e: ScreenerEntry) => number | null,
-  step: number,
-  fallback: Range,
-): Range {
-  let lo = Infinity;
-  let hi = -Infinity;
-  for (const e of entries) {
-    const v = pick(e);
-    if (v == null) continue;
-    if (v < lo) lo = v;
-    if (v > hi) hi = v;
-  }
-  if (lo === Infinity) return fallback;
-  const flo = Math.floor(lo / step) * step;
-  const fhi = Math.ceil(hi / step) * step;
-  return [flo, fhi > flo ? fhi : flo + step];
-}
-
 function fmt_price_range([lo, hi]: Range, price_max: number): string {
   return hi >= price_max ? `€${lo}M+` : `€${lo}M – €${hi}M`;
 }
 function fmt_perf_range([lo, hi]: Range): string {
   const s = (v: number) => `${v >= 0 ? "+" : ""}${v}%`;
   return hi >= 999 ? `${s(lo)}+` : `${s(lo)} – ${s(hi)}`;
-}
-
-// Sortable value extraction — mirrors the web `pluck`.
-function pluck(e: ScreenerEntry, key: SortKey): number | string | null {
-  switch (key) {
-    case "name": return e.name;
-    case "value": return e.current_price;
-    case "since_start": return e.since_start_pct;
-    case "last_match": return e.last_match_pct;
-    case "avg_match": return e.avg_match_pct;
-    case "appearances": return e.appearances;
-    case "minutes_played": return e.minutes_played;
-    case "goals": return e.goals;
-    case "assists": return e.assists;
-    case "shots": return e.shots_total;
-    case "yellow_cards": return e.yellow_cards;
-    case "red_cards": return e.red_cards;
-    case "key_passes": return e.key_passes;
-    case "passes": return e.passes_total;
-    case "passes_accuracy": return e.passes_accuracy;
-    case "rating_avg": return e.rating_avg;
-    case "age": return e.age;
-    case "height": return e.height;
-    case "weight": return e.weight;
-  }
 }
 
 const styles = StyleSheet.create({

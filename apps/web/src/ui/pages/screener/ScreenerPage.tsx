@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { players_api } from "@fundxi/core/api/players_api";
 import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import { teams_api } from "@fundxi/core/api/teams_api";
@@ -16,46 +16,36 @@ import {
 import { useLiveRefetch, usePricesLiveVersion } from "@/ui/hooks/use_live_updates";
 import { pulse_class, usePulse } from "@/ui/hooks/use_pulse";
 import { spark_for_player } from "@fundxi/core/infrastructure/repositories/valuations_repository";
+import { filter_screener_entries, type ScreenerSortKey } from "@fundxi/core/application/screener_filter";
 import { color_for_sign, fmt_signed_pct, price_label } from "@/ui/helpers/format";
 import { toggle_set } from "@/ui/helpers/state";
 import { position_color } from "@/ui/design/tokens";
 
-const CONFEDERATIONS = [
-  { code: "UEFA", label: "Europe" },
-  { code: "CONMEBOL", label: "South America" },
-  { code: "CONCACAF", label: "N/C America" },
-  { code: "AFC", label: "Asia" },
-  { code: "CAF", label: "Africa" },
-  { code: "OFC", label: "Oceania" },
-] as const;
+// Preset ranges for the Performance (since-start %) and Age filters. Web uses
+// preset chips (its established filter pattern, like Price) where mobile uses
+// continuous sliders — same filtering capability, platform-native input. The
+// shared predicate lives in @fundxi/core/application/screener_filter.
+const PERF_PRESETS: { label: string; range: [number, number] }[] = [
+  { label: "-20–0%", range: [-20, 0] },
+  { label: "0–10%", range: [0, 10] },
+  { label: "10–30%", range: [10, 30] },
+  { label: "30%+", range: [30, 999] },
+];
+const AGE_PRESETS: { label: string; range: [number, number] }[] = [
+  { label: "U21", range: [0, 20] },
+  { label: "21-25", range: [21, 25] },
+  { label: "26-30", range: [26, 30] },
+  { label: "31+", range: [31, 99] },
+];
+
+const range_eq = (a: [number, number] | null, b: [number, number]): boolean =>
+  a != null && a[0] === b[0] && a[1] === b[1];
 
 type Tab = "valuation" | "statistics" | "personal";
 type SortDir = "asc" | "desc";
 
-type SortKey =
-  | "name"
-  | "team"
-  | "position"
-  | "value"
-  | "pnl"
-  | "since_start"
-  | "last_match"
-  | "avg_match"
-  | "appearances"
-  | "minutes_played"
-  | "goals"
-  | "assists"
-  | "shots"
-  | "yellow_cards"
-  | "red_cards"
-  | "key_passes"
-  | "passes"
-  | "passes_accuracy"
-  | "rating_avg"
-  | "age"
-  | "foot"
-  | "height"
-  | "weight";
+// Sort keys = the shared union from the core screener filter (web + mobile).
+type SortKey = ScreenerSortKey;
 
 type ColumnKey = SortKey | "spark";
 
@@ -117,6 +107,11 @@ export function ScreenerPage({ on_open_player, on_open_team, watchlist, toggle_w
   const [position_filters, set_position_filters] = useState<Set<Position>>(new Set());
   const [team_filters, set_team_filters] = useState<Set<string>>(new Set());
   const [price_range, set_price_range] = useState<[number, number]>([0, 999]);
+  // null ⇒ filter inactive. Same union as mobile, fed to the shared predicate.
+  const [perf_range, set_perf_range] = useState<[number, number] | null>(null);
+  const [age_range, set_age_range] = useState<[number, number] | null>(null);
+  const [held_only, set_held_only] = useState(false);
+  const [watch_only, set_watch_only] = useState(false);
   const [search, set_search] = useState("");
   const [show_filters, set_show_filters] = useState(false);
   const [tab, set_tab] = useState<Tab>("valuation");
@@ -146,36 +141,25 @@ export function ScreenerPage({ on_open_player, on_open_team, watchlist, toggle_w
   const my_holdings = useMemo(() => portfolio_api.get_holdings(), []);
   const held_ids = useMemo(() => new Set(my_holdings.map(h => h.player_id)), [my_holdings]);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const result = all_entries.filter(e => {
-      if (position_filters.size > 0 && !position_filters.has(e.position as Position)) return false;
-      if (team_filters.size > 0 && !team_filters.has(e.team_id)) return false;
-      if (e.current_price < price_range[0] || e.current_price > price_range[1]) return false;
-      if (q) {
-        const team = teams_api.get(e.team_id);
-        const hay = `${e.name} ${e.full_name ?? ""} ${e.club ?? ""} ${team?.name ?? ""}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
-      return true;
-    });
-    const dir = sort_dir === "asc" ? 1 : -1;
-    result.sort((a, b) => {
-      const va = pluck(a, sort_key);
-      const vb = pluck(b, sort_key);
-      if (va == null && vb == null) return 0;
-      if (va == null) return 1;
-      if (vb == null) return -1;
-      if (typeof va === "string" && typeof vb === "string") return dir * va.localeCompare(vb);
-      return dir * ((va as number) - (vb as number));
-    });
-    return result;
-  }, [all_entries, position_filters, team_filters, price_range, search, sort_key, sort_dir]);
+  const filtered = useMemo(
+    () =>
+      filter_screener_entries(
+        all_entries,
+        { positions: position_filters, team_ids: team_filters, price_range, perf_range, age_range, held_only, watch_only, search, sort_key, sort_dir },
+        { team_name: id => teams_api.get(id)?.name, held_ids, watched_ids: watchlist },
+      ),
+    [all_entries, position_filters, team_filters, price_range, perf_range, age_range, held_only, watch_only, search, sort_key, sort_dir, held_ids, watchlist],
+  );
 
-  const has_filters =
-    position_filters.size > 0 || team_filters.size > 0 || price_range[0] > 0 || price_range[1] < 999;
   const active_count =
-    position_filters.size + team_filters.size + (price_range[0] > 0 || price_range[1] < 999 ? 1 : 0);
+    position_filters.size +
+    team_filters.size +
+    (price_range[0] > 0 || price_range[1] < 999 ? 1 : 0) +
+    (perf_range ? 1 : 0) +
+    (age_range ? 1 : 0) +
+    (held_only ? 1 : 0) +
+    (watch_only ? 1 : 0);
+  const has_filters = active_count > 0;
 
   const columns = TABS[tab];
   // Every column except the star is a proportional ``minmax(0, Nfr)``
@@ -291,6 +275,10 @@ export function ScreenerPage({ on_open_player, on_open_team, watchlist, toggle_w
                 set_position_filters(new Set());
                 set_team_filters(new Set());
                 set_price_range([0, 999]);
+                set_perf_range(null);
+                set_age_range(null);
+                set_held_only(false);
+                set_watch_only(false);
               }}
               disabled={!has_filters}
               style={{
@@ -368,6 +356,51 @@ export function ScreenerPage({ on_open_player, on_open_team, watchlist, toggle_w
                     </button>
                   );
                 })}
+              </div>
+            </div>
+          </div>
+
+          {/* Performance + Age presets + ownership toggles (parity with mobile) */}
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 28, flexWrap: "wrap" }}>
+            <div>
+              <FilterLabel>Performance</FilterLabel>
+              <div style={{ display: "flex", gap: 4 }}>
+                {PERF_PRESETS.map(p => (
+                  <Chip
+                    key={p.label}
+                    active={range_eq(perf_range, p.range)}
+                    onClick={() => set_perf_range(range_eq(perf_range, p.range) ? null : p.range)}
+                  >
+                    {p.label}
+                  </Chip>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <FilterLabel>Age</FilterLabel>
+              <div style={{ display: "flex", gap: 4 }}>
+                {AGE_PRESETS.map(a => (
+                  <Chip
+                    key={a.label}
+                    active={range_eq(age_range, a.range)}
+                    onClick={() => set_age_range(range_eq(age_range, a.range) ? null : a.range)}
+                  >
+                    {a.label}
+                  </Chip>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <FilterLabel>Ownership</FilterLabel>
+              <div style={{ display: "flex", gap: 4 }}>
+                <Chip active={held_only} onClick={() => set_held_only(!held_only)}>
+                  Held
+                </Chip>
+                <Chip active={watch_only} onClick={() => set_watch_only(!watch_only)}>
+                  ★ Watchlist
+                </Chip>
               </div>
             </div>
           </div>
@@ -693,57 +726,6 @@ function Row({
   );
 }
 
-function pluck(e: ScreenerEntry, key: SortKey): number | string | null {
-  switch (key) {
-    case "name":
-      return e.name;
-    case "team":
-      return e.team_id;
-    case "position":
-      return e.position;
-    case "value":
-      return e.current_price;
-    case "pnl":
-      return e.pnl;
-    case "since_start":
-      return e.since_start_pct;
-    case "last_match":
-      return e.last_match_pct;
-    case "avg_match":
-      return e.avg_match_pct;
-    case "appearances":
-      return e.appearances;
-    case "minutes_played":
-      return e.minutes_played;
-    case "goals":
-      return e.goals;
-    case "assists":
-      return e.assists;
-    case "shots":
-      return e.shots_total;
-    case "yellow_cards":
-      return e.yellow_cards;
-    case "red_cards":
-      return e.red_cards;
-    case "key_passes":
-      return e.key_passes;
-    case "passes":
-      return e.passes_total;
-    case "passes_accuracy":
-      return e.passes_accuracy;
-    case "rating_avg":
-      return e.rating_avg;
-    case "age":
-      return e.age;
-    case "foot":
-      return e.foot;
-    case "height":
-      return e.height;
-    case "weight":
-      return e.weight;
-  }
-}
-
 function fmt_pct(v: number | null): string {
   if (v === null) return "—";
   return `${fmt_signed_pct(v, 1)}`;
@@ -890,6 +872,29 @@ function FilterLabel({ children, inline }: { children: React.ReactNode; inline?:
     >
       {children}
     </div>
+  );
+}
+
+/** A toggleable filter chip — the shared look for the Price / Performance /
+ * Age presets and the Held / Watchlist toggles. */
+function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: "6px 10px",
+        borderRadius: 6,
+        fontSize: 12,
+        fontWeight: 600,
+        border: "1px solid " + (active ? "rgba(255,255,255,.22)" : "rgba(255,255,255,.06)"),
+        cursor: "pointer",
+        fontFamily: "inherit",
+        background: active ? "rgba(255,255,255,.08)" : "transparent",
+        color: active ? "#fff" : "rgba(255,255,255,.4)",
+      }}
+    >
+      {children}
+    </button>
   );
 }
 
