@@ -25,6 +25,9 @@ export interface BracketLayout {
 }
 
 function compare_by_kickoff(a: Fixture, b: Fixture): number {
+  // Both undated → equal (a stable, symmetric comparator); a single undated
+  // fixture sorts last.
+  if (!a.date && !b.date) return 0;
   if (!a.date) return 1;
   if (!b.date) return -1;
   return a.date.localeCompare(b.date);
