@@ -25,11 +25,10 @@ from datetime import UTC, datetime, timedelta
 from random import Random
 
 import structlog
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.valuation.player_valuation import ValuationSource
-from src.infrastructure.db.models.player_price_tick import PlayerPriceTickORM
+from src.infrastructure.db.price_tick_writer import upsert_price_tick
 from src.infrastructure.sportmonks.projectors.match_event import project_match_event
 from src.simulation.domain.ports import LiveDataSink
 from src.simulation.domain.replay_event import ReplayEvent, ReplayEventKind
@@ -102,18 +101,15 @@ class SyntheticMinutePricingSink:
             rating = next_rating(self._rating.get(pid, 6.0), rng=self._rng, bump=self._bumps.get(pid, 0.0))
             self._rating[pid] = rating
             result = kernel_price(base, 0.0, PriceSnapshot(rating=rating, is_live=True))
-            await self.session.execute(
-                pg_insert(PlayerPriceTickORM)
-                .values(
-                    player_id=pid,
-                    ts=ts,
-                    fixture_id=fixture_internal_id,
-                    current_price=result.price,
-                    performance_rating=round(rating, 2),
-                    change_since_open=round(result.live_delta * 100.0, 2),
-                    source=ValuationSource.REHEARSAL.value,
-                )
-                .on_conflict_do_nothing(index_elements=["player_id", "ts"])
+            await upsert_price_tick(
+                self.session,
+                player_id=pid,
+                ts=ts,
+                fixture_id=fixture_internal_id,
+                current_price=result.price,
+                performance_rating=round(rating, 2),
+                change_since_open=round(result.live_delta * 100.0, 2),
+                source=ValuationSource.REHEARSAL.value,
             )
             await self._publish(pid, fixture_internal_id, result.price, result.live_delta)
         # Bucketed portfolio-value snapshot for every holder of any

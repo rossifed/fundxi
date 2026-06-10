@@ -27,11 +27,10 @@ from typing import Self
 
 import structlog
 from sqlalchemy import text
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.valuation.player_valuation import ValuationSource
-from src.infrastructure.db.models.player_price_tick import PlayerPriceTickORM
+from src.infrastructure.db.price_tick_writer import upsert_price_tick
 from src.infrastructure.db.session import SessionLocal
 from src.infrastructure.messaging.nats_publisher import NatsPublisher
 from src.simulation.domain.synthetic_rating import event_bump, next_rating
@@ -130,18 +129,15 @@ async def run(*, fixture_smk_id: int, interval: float, minutes: int, seed: int, 
                     rating[pid] = next_rating(rating[pid], rng=rng, bump=bumps.get(pid, 0.0))
                     snap = PriceSnapshot(rating=rating[pid], is_live=True)
                     result = kernel_price(base, 0.0, snap)
-                    await session.execute(
-                        pg_insert(PlayerPriceTickORM)
-                        .values(
-                            player_id=pid,
-                            ts=ts,
-                            fixture_id=fixture_id,
-                            current_price=result.price,
-                            performance_rating=round(rating[pid], 2),
-                            change_since_open=round(result.live_delta * 100.0, 2),
-                            source=ValuationSource.REHEARSAL.value,
-                        )
-                        .on_conflict_do_nothing(index_elements=["player_id", "ts"])
+                    await upsert_price_tick(
+                        session,
+                        player_id=pid,
+                        ts=ts,
+                        fixture_id=fixture_id,
+                        current_price=result.price,
+                        performance_rating=round(rating[pid], 2),
+                        change_since_open=round(result.live_delta * 100.0, 2),
+                        source=ValuationSource.REHEARSAL.value,
                     )
                     payload = (
                         f'{{"kind":"player_price_tick","player_id":{pid},'

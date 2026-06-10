@@ -12,11 +12,10 @@ tick emitted here is the output of the events-based v0 strategy.
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.valuation.player_valuation import ValuationSource
-from src.infrastructure.db.models.player_price_tick import PlayerPriceTickORM
+from src.infrastructure.db.price_tick_writer import upsert_price_tick
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,7 +32,8 @@ class SqlAlchemyPlayerPriceTickWriter:
         performance_rating: float,
         change_since_open: float,
     ) -> None:
-        stmt = pg_insert(PlayerPriceTickORM).values(
+        await upsert_price_tick(
+            self.session,
             player_id=player_id,
             ts=ts,
             fixture_id=fixture_id,
@@ -42,4 +42,3 @@ class SqlAlchemyPlayerPriceTickWriter:
             change_since_open=change_since_open,
             source=ValuationSource.ENGINE.value,
         )
-        await self.session.execute(stmt.on_conflict_do_nothing(index_elements=["player_id", "ts"]))

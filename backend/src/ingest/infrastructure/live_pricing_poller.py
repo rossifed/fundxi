@@ -34,7 +34,6 @@ from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.match.match_event import MatchEvent
@@ -42,6 +41,7 @@ from src.domain.valuation.player_valuation import ValuationSource
 from src.infrastructure.db.models.fixture import FixtureORM
 from src.infrastructure.db.models.player import PlayerORM
 from src.infrastructure.db.models.player_price_tick import PlayerPriceTickORM
+from src.infrastructure.db.price_tick_writer import upsert_price_tick
 from src.infrastructure.db.repositories.match_event import SqlAlchemyMatchEventRepository
 from src.infrastructure.db.repositories.pricing_progress import SqlAlchemyPricingProgressRepository
 from src.infrastructure.valuation.synthetic_valuation_provider import synthesize_valuation
@@ -169,18 +169,15 @@ class LivePricingPoller:
                 if affected not in state.current_price_by_player:
                     state.current_price_by_player[affected] = _safe_base_value(affected, seed_at)
                 new_price = state.apply_delta(affected, delta_pct)
-                await session.execute(
-                    pg_insert(PlayerPriceTickORM)
-                    .values(
-                        player_id=affected,
-                        ts=ts,
-                        fixture_id=event.fixture_id,
-                        current_price=new_price,
-                        performance_rating=round(6.5 + delta_pct / 4.0, 2),
-                        change_since_open=round(delta_pct, 2),
-                        source=ValuationSource.ENGINE.value,
-                    )
-                    .on_conflict_do_nothing(index_elements=["player_id", "ts"])
+                await upsert_price_tick(
+                    session,
+                    player_id=affected,
+                    ts=ts,
+                    fixture_id=event.fixture_id,
+                    current_price=new_price,
+                    performance_rating=round(6.5 + delta_pct / 4.0, 2),
+                    change_since_open=round(delta_pct, 2),
+                    source=ValuationSource.ENGINE.value,
                 )
                 notifications.append(
                     (

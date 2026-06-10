@@ -11,14 +11,13 @@ import contextlib
 from datetime import datetime, timedelta
 
 from sqlalchemy import select, text
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.db.models.fixture import FixtureORM
 from src.infrastructure.db.models.lineup import LineupORM
 from src.infrastructure.db.models.player import PlayerORM
-from src.infrastructure.db.models.player_price_tick import PlayerPriceTickORM
 from src.infrastructure.db.models.team import TeamORM
+from src.infrastructure.db.price_tick_writer import upsert_price_ticks
 from src.infrastructure.valuation.synthetic_valuation_provider import synthesize_valuation
 from src.simulation.domain.price_state import PriceState
 from src.valuation.strategies.layered_v1 import TeamRosters
@@ -108,11 +107,7 @@ async def seed_baseline_ticks(session: AsyncSession, price_state: PriceState) ->
         }
         for player_id, base_value in price_state.current_price_by_player.items()
     ]
-    if not rows:
-        return 0
-    stmt = pg_insert(PlayerPriceTickORM).values(rows).on_conflict_do_nothing(index_elements=["player_id", "ts"])
-    await session.execute(stmt)
-    return len(rows)
+    return await upsert_price_ticks(session, rows)
 
 
 async def load_fixture_rosters(session: AsyncSession, *, fixture_sportmonks_id: int) -> TeamRosters:

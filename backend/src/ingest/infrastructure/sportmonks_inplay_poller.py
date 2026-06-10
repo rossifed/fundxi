@@ -27,11 +27,10 @@ from typing import Any
 import httpx
 import structlog
 from sqlalchemy import text
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.match.player_match_stat import PlayerMatchStat
-from src.infrastructure.db.models.player_price_tick import PlayerPriceTickORM
+from src.infrastructure.db.price_tick_writer import upsert_price_tick
 from src.infrastructure.db.repositories.fixture import SqlAlchemyFixtureRepository
 from src.infrastructure.db.repositories.lineup import SqlAlchemyLineupRepository
 from src.infrastructure.db.repositories.match_comment import SqlAlchemyMatchCommentRepository
@@ -338,18 +337,15 @@ class SportmonksInplayPoller:
                 # Unchanged since the last tick — no insert, no notification.
                 continue
             change_since_open = round(result.live_delta * 100.0, 2)
-            await session.execute(
-                pg_insert(PlayerPriceTickORM)
-                .values(
-                    player_id=curr.player_id,
-                    ts=ts,
-                    fixture_id=self.fixture_internal_id,
-                    current_price=new_price,
-                    performance_rating=round(curr.rating, 2) if curr.rating is not None else 6.0,
-                    change_since_open=change_since_open,
-                    source="engine",
-                )
-                .on_conflict_do_nothing(index_elements=["player_id", "ts"])
+            await upsert_price_tick(
+                session,
+                player_id=curr.player_id,
+                ts=ts,
+                fixture_id=self.fixture_internal_id,
+                current_price=new_price,
+                performance_rating=round(curr.rating, 2) if curr.rating is not None else 6.0,
+                change_since_open=change_since_open,
+                source="engine",
             )
             notifications.append(
                 (
