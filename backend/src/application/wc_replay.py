@@ -35,6 +35,7 @@ from src.infrastructure.db.models.match_event import MatchEventORM
 from src.infrastructure.db.models.player import PlayerORM
 from src.infrastructure.db.models.player_daily_snapshot import PlayerDailySnapshotORM
 from src.infrastructure.db.models.player_price_tick import PlayerPriceTickORM
+from src.infrastructure.db.price_tick_writer import price_tick_row
 from src.infrastructure.valuation.synthetic_valuation_provider import synthesize_valuation
 from src.valuation.coefficients import DEFAULT_COEFFICIENTS
 from src.valuation.strategies.layered_v1 import (
@@ -395,7 +396,21 @@ async def replay_tournament(*, session: AsyncSession, tournament_start: datetime
         deduped_ticks, base_value_by_player=base_value_by_player, fixture_dates=fixture_dates
     )
 
-    inserted_ticks = await _bulk_insert(session, PlayerPriceTickORM, [asdict(r) for r in deduped_ticks])
+    # Tick column set comes from price_tick_row (the single source shared with
+    # the live/sim writers); TickRow stays the in-memory compute structure.
+    tick_payload = [
+        price_tick_row(
+            player_id=r.player_id,
+            ts=r.ts,
+            fixture_id=r.fixture_id,
+            current_price=r.current_price,
+            performance_rating=r.performance_rating,
+            change_since_open=r.change_since_open,
+            source=r.source,
+        )
+        for r in deduped_ticks
+    ]
+    inserted_ticks = await _bulk_insert(session, PlayerPriceTickORM, tick_payload)
     inserted_snapshots = await _bulk_insert(session, PlayerDailySnapshotORM, [asdict(r) for r in daily_rows])
 
     log.info(

@@ -17,7 +17,7 @@ from src.infrastructure.db.models.fixture import FixtureORM
 from src.infrastructure.db.models.lineup import LineupORM
 from src.infrastructure.db.models.player import PlayerORM
 from src.infrastructure.db.models.team import TeamORM
-from src.infrastructure.db.price_tick_writer import upsert_price_ticks
+from src.infrastructure.db.price_tick_writer import price_tick_row, upsert_price_ticks
 from src.infrastructure.valuation.synthetic_valuation_provider import synthesize_valuation
 from src.simulation.domain.price_state import PriceState
 from src.valuation.strategies.layered_v1 import TeamRosters
@@ -96,15 +96,15 @@ async def seed_baseline_ticks(session: AsyncSession, price_state: PriceState) ->
     if anchor_ts is None:
         return 0
     rows = [
-        {
-            "player_id": player_id,
-            "ts": anchor_ts,
-            "fixture_id": None,
-            "current_price": round(base_value, 2),
-            "performance_rating": 6.5,
-            "change_since_open": 0.0,
-            "source": "engine",
-        }
+        price_tick_row(
+            player_id=player_id,
+            ts=anchor_ts,
+            fixture_id=None,
+            current_price=round(base_value, 2),
+            performance_rating=6.5,
+            change_since_open=0.0,
+            source="engine",
+        )
         for player_id, base_value in price_state.current_price_by_player.items()
     ]
     return await upsert_price_ticks(session, rows)
