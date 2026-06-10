@@ -54,6 +54,25 @@ service's build settings.
    fresh DB you then need to **bootstrap reference data** (teams/players/
    fixtures) — see `backend/` CLI. The ingest daemon then keeps live fixtures
    updated during matches.
+10. **Seed baseline price ticks — MANDATORY before opening trading.** A fresh DB
+    has an empty `valuation.player_price_tick`. Trades read the latest tick as
+    the server price; with no tick the trade endpoint returns **HTTP 409**
+    (`no current price for player …`) for **every** player. After bootstrap, run
+    the replay worker once to emit the tournament-open baseline tick
+    (`fixture_id = NULL`) for every player:
+
+    ```bash
+    uv run python -m src.infrastructure.workers.wc_replay
+    ```
+
+    Then verify a non-zero count before letting users trade:
+
+    ```sql
+    SELECT count(*) FROM valuation.player_price_tick;  -- must be > 0
+    ```
+
+    The ingest daemon adds live ticks during matches, but the baseline seed is
+    what makes trading work on day 1 (and between matches).
 
 ## Notes / open items
 
