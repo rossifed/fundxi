@@ -35,7 +35,6 @@ def price_tick_row(
     fixture_id: int | None,
     current_price: float,
     performance_rating: float,
-    change_since_open: float,
     source: str,
 ) -> dict[str, object]:
     """Build one tick row dict — the column set is defined here, once."""
@@ -45,7 +44,6 @@ def price_tick_row(
         "fixture_id": fixture_id,
         "current_price": current_price,
         "performance_rating": performance_rating,
-        "change_since_open": change_since_open,
         "source": source,
     }
 
@@ -58,7 +56,6 @@ async def upsert_price_tick(
     fixture_id: int | None,
     current_price: float,
     performance_rating: float,
-    change_since_open: float,
     source: str,
 ) -> None:
     """Append one tick; the first writer for a ``(player_id, ts)`` wins."""
@@ -68,7 +65,6 @@ async def upsert_price_tick(
         fixture_id=fixture_id,
         current_price=current_price,
         performance_rating=performance_rating,
-        change_since_open=change_since_open,
         source=source,
     )
     await session.execute(

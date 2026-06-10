@@ -75,7 +75,6 @@ class TickRow:
     fixture_id: int | None
     current_price: float
     performance_rating: float
-    change_since_open: float
     source: str
 
 
@@ -215,7 +214,6 @@ def _build_tick_rows(
                 fixture_id=fx_id,
                 current_price=new_price,
                 performance_rating=round(_BASELINE_RATING + delta_pct / 4.0, 2),
-                change_since_open=round(delta_pct, 2),
                 source=_ENGINE,
             )
         )
@@ -229,7 +227,6 @@ def _build_tick_rows(
                 fixture_id=None,
                 current_price=round(base, 2),
                 performance_rating=_BASELINE_RATING,
-                change_since_open=0.0,
                 source=_ENGINE,
             )
         )
@@ -405,7 +402,6 @@ async def replay_tournament(*, session: AsyncSession, tournament_start: datetime
             fixture_id=r.fixture_id,
             current_price=r.current_price,
             performance_rating=r.performance_rating,
-            change_since_open=r.change_since_open,
             source=r.source,
         )
         for r in deduped_ticks

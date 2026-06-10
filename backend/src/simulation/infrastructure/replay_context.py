@@ -79,7 +79,7 @@ async def seed_baseline_ticks(session: AsyncSession, price_state: PriceState) ->
 
     One tick per player at the pre-tournament anchor ts (earliest
     kickoff minus 1 day, see ``_tournament_open_ts``), ``fixture_id IS
-    NULL``, ``current_price = base_value``, ``change_since_open = 0.0``.
+    NULL``, ``current_price = base_value``.
     This is the anchor ``EngineValuationProvider`` (and the screener)
     divide by for the total-change metric; without it the first
     *post-event* tick is mistaken for the baseline and the total is
@@ -102,7 +102,6 @@ async def seed_baseline_ticks(session: AsyncSession, price_state: PriceState) ->
             fixture_id=None,
             current_price=round(base_value, 2),
             performance_rating=6.5,
-            change_since_open=0.0,
             source="engine",
         )
         for player_id, base_value in price_state.current_price_by_player.items()

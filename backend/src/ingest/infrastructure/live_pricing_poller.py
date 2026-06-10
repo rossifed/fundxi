@@ -176,7 +176,6 @@ class LivePricingPoller:
                     fixture_id=event.fixture_id,
                     current_price=new_price,
                     performance_rating=round(6.5 + delta_pct / 4.0, 2),
-                    change_since_open=round(delta_pct, 2),
                     source=ValuationSource.ENGINE.value,
                 )
                 notifications.append(
@@ -188,7 +187,6 @@ class LivePricingPoller:
                                 "player_id": affected,
                                 "fixture_id": event.fixture_id,
                                 "current_price": new_price,
-                                "change_since_open": round(delta_pct, 2),
                             }
                         ).encode(),
                     )

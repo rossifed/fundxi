@@ -113,11 +113,9 @@ async def test_goal_event_emits_tick_and_moves_price() -> None:
     msg = json.loads(payload)
     assert msg["player_id"] == 777
     assert msg["fixture_id"] == 65
-    delta = float(msg["change_since_open"])
-    assert delta > 0
-    # state updated multiplicatively
+    # the goal moved the price up from the 100.0 base
+    assert msg["current_price"] > 100.0
     assert poller._state is not None
-    assert poller._state.current(777) == round(100.0 * (1.0 + delta / 100.0), 2)
     assert msg["current_price"] == poller._state.current(777)
 
 

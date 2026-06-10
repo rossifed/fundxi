@@ -30,7 +30,6 @@ class SqlAlchemyPlayerPriceTickWriter:
         fixture_id: int | None,
         current_price: float,
         performance_rating: float,
-        change_since_open: float,
     ) -> None:
         await upsert_price_tick(
             self.session,
@@ -39,6 +38,5 @@ class SqlAlchemyPlayerPriceTickWriter:
             fixture_id=fixture_id,
             current_price=current_price,
             performance_rating=performance_rating,
-            change_since_open=change_since_open,
             source=ValuationSource.ENGINE.value,
         )

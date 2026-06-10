@@ -77,7 +77,6 @@ async def test_cross_source_coherence(isolated_session: AsyncSession) -> None:
             fixture_id=None,
             current_price=42.42,  # literal sentinel
             performance_rating=7.0,
-            change_since_open=0.0,
             source="engine",
         )
         .on_conflict_do_nothing(index_elements=["player_id", "ts"])
@@ -130,7 +129,6 @@ async def test_cross_source_coherence(isolated_session: AsyncSession) -> None:
                 fixture_id=None,
                 current_price=price,
                 performance_rating=7.0,
-                change_since_open=0.0,
                 source="engine",
             )
             .on_conflict_do_nothing(index_elements=["player_id", "ts"])

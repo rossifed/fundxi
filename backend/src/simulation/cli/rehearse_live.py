@@ -136,13 +136,11 @@ async def run(*, fixture_smk_id: int, interval: float, minutes: int, seed: int, 
                         fixture_id=fixture_id,
                         current_price=result.price,
                         performance_rating=round(rating[pid], 2),
-                        change_since_open=round(result.live_delta * 100.0, 2),
                         source=ValuationSource.REHEARSAL.value,
                     )
                     payload = (
                         f'{{"kind":"player_price_tick","player_id":{pid},'
-                        f'"fixture_id":{fixture_id},"current_price":{result.price},'
-                        f'"change_since_open":{round(result.live_delta * 100.0, 2)}}}'
+                        f'"fixture_id":{fixture_id},"current_price":{result.price}}}'
                     ).encode()
                     try:
                         await pub.publish(f"fundxi.player_price_tick.{pid}", payload)

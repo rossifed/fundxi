@@ -27,5 +27,4 @@ class PlayerPriceTickORM(Base):
     fixture_id: Mapped[int | None] = mapped_column(ForeignKey("core.fixture.id", ondelete="SET NULL"))
     current_price: Mapped[float] = mapped_column(Numeric(10, 2))
     performance_rating: Mapped[float] = mapped_column(Numeric(4, 2))
-    change_since_open: Mapped[float] = mapped_column(Numeric(6, 2))
     source: Mapped[str] = mapped_column(String(16))

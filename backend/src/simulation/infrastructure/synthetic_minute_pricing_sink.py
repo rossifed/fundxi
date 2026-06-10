@@ -108,10 +108,9 @@ class SyntheticMinutePricingSink:
                 fixture_id=fixture_internal_id,
                 current_price=result.price,
                 performance_rating=round(rating, 2),
-                change_since_open=round(result.live_delta * 100.0, 2),
                 source=ValuationSource.REHEARSAL.value,
             )
-            await self._publish(pid, fixture_internal_id, result.price, result.live_delta)
+            await self._publish(pid, fixture_internal_id, result.price)
         # Bucketed portfolio-value snapshot for every holder of any
         # player priced this minute. The snapshot bucket is WALL-CLOCK
         # now() — a portfolio's value history lives on the user's real
@@ -125,14 +124,13 @@ class SyntheticMinutePricingSink:
         )
         self._bumps = {}
 
-    async def _publish(self, player_id: int, fixture_id: int, price: float, live_delta: float) -> None:
+    async def _publish(self, player_id: int, fixture_id: int, price: float) -> None:
         payload = json.dumps(
             {
                 "kind": "player_price_tick",
                 "player_id": player_id,
                 "fixture_id": fixture_id,
                 "current_price": price,
-                "change_since_open": round(live_delta * 100.0, 2),
             }
         ).encode()
         try:

@@ -94,7 +94,6 @@ class PlayerPriceTickWriter(Protocol):
         fixture_id: int | None,
         current_price: float,
         performance_rating: float,
-        change_since_open: float,
     ) -> None: ...
 
 

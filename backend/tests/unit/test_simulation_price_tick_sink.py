@@ -42,7 +42,6 @@ class _RecordingTickWriter:
         fixture_id: int | None,
         current_price: float,
         performance_rating: float,
-        change_since_open: float,
     ) -> None:
         self.inserted.append(
             {
@@ -51,7 +50,6 @@ class _RecordingTickWriter:
                 "fixture_id": fixture_id,
                 "current_price": current_price,
                 "performance_rating": performance_rating,
-                "change_since_open": change_since_open,
             }
         )
 
@@ -125,10 +123,9 @@ async def test_goal_event_emits_tick_and_updates_price() -> None:
     assert tick["fixture_id"] == 42
     # ts = kickoff + minute*60 + sequence -> 15:00 + 30 min 4s = 15:30:04
     assert tick["ts"] == datetime(2022, 12, 18, 15, 30, 4, tzinfo=UTC)
-    # change_since_open should match the v0 goal coefficient.
-    delta_pct = float(tick["change_since_open"])  # type: ignore[arg-type]
-    assert delta_pct > 0
-    assert state.current(777) == round(100.0 * (1.0 + delta_pct / 100.0), 2)
+    # the v0 goal coefficient moved the price up from the 100.0 base.
+    assert float(tick["current_price"]) > 100.0  # type: ignore[arg-type]
+    assert state.current(777) == tick["current_price"]
 
 
 @pytest.mark.anyio

@@ -85,7 +85,6 @@ class PriceTickEmittingSink:
                 fixture_id=fixture_internal_id,
                 current_price=new_price,
                 performance_rating=round(6.5 + delta_pct / 4.0, 2),
-                change_since_open=round(delta_pct, 2),
             )
             ticked_players.append(affected_player)
         if ticked_players and self.snapshot_materializer is not None:

@@ -35,7 +35,6 @@ class NatsPublishingTickWriter:
         fixture_id: int | None,
         current_price: float,
         performance_rating: float,
-        change_since_open: float,
     ) -> None:
         await self.inner.insert(
             player_id=player_id,
@@ -43,7 +42,6 @@ class NatsPublishingTickWriter:
             fixture_id=fixture_id,
             current_price=current_price,
             performance_rating=performance_rating,
-            change_since_open=change_since_open,
         )
         subject = f"fundxi.player_price_tick.{player_id}"
         payload = json.dumps(
@@ -52,7 +50,6 @@ class NatsPublishingTickWriter:
                 "player_id": player_id,
                 "fixture_id": fixture_id,
                 "current_price": current_price,
-                "change_since_open": change_since_open,
             }
         ).encode()
         try:
