@@ -13,12 +13,11 @@ from dataclasses import dataclass
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.config import get_settings
+from src.application.provision_portfolio import provision_portfolio
 from src.domain.auth.auth import Email, Password
 from src.domain.portfolio.user import UserKind
 from src.infrastructure.db.models.user import UserORM
 from src.infrastructure.db.repositories.league import SqlAlchemyLeagueRepository
-from src.infrastructure.db.repositories.portfolio import SqlAlchemyPortfolioRepository
 from src.infrastructure.db.repositories.user import SqlAlchemyUserRepository
 from src.infrastructure.security.passwords import dummy_verify, hash_password, verify_password
 
@@ -49,8 +48,6 @@ async def register_user(
 
     Raises ``EmailAlreadyExistsError`` on conflict on email."""
     user_repo = SqlAlchemyUserRepository(session)
-    portfolio_repo = SqlAlchemyPortfolioRepository(session)
-    settings = get_settings()
 
     existing = await session.execute(select(UserORM).where(UserORM.email == email.value))
     if existing.scalar_one_or_none() is not None:
@@ -68,13 +65,9 @@ async def register_user(
         name = f"{base_name}-{suffix}"[:64]
 
     user = await user_repo.create(name=name, kind=UserKind.HUMAN)
-    portfolio = await portfolio_repo.create_for_user(user_id=user.id, cash=settings.initial_cash)
-    # Seed the first portfolio-value snapshot so the chart has a
-    # zero point. Same session ⇒ atomic with the portfolio insert.
-    from src.application.portfolio_snapshot_service import PortfolioSnapshotService
-    await PortfolioSnapshotService.from_session(session).bootstrap(
-        portfolio.id, opened_at=portfolio.created_at
-    )
+    # Starter portfolio + opening snapshot — the "1 user = 1 portfolio" invariant,
+    # shared with the self-healing get-or-create on read. Same session ⇒ atomic.
+    await provision_portfolio(session, user.id)
     await session.execute(
         update(UserORM)
         .where(UserORM.id == user.id)

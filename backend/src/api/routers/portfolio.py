@@ -25,6 +25,7 @@ from src.application.place_trade import (
     place_trade,
 )
 from src.application.portfolio_history_service import HistoryRange, PortfolioHistoryService
+from src.application.provision_portfolio import get_or_create_portfolio
 from src.application.trade_execution import TradeError
 from src.config import get_settings
 from src.domain.portfolio.portfolio import Portfolio
@@ -51,13 +52,12 @@ async def _resolve_user_and_portfolio(
     session: AsyncSession, user_id: int
 ) -> tuple[int, str, Portfolio]:
     user_repo = SqlAlchemyUserRepository(session)
-    portfolio_repo = SqlAlchemyPortfolioRepository(session)
     user = await user_repo.get_by_id(user_id)
     if user is None:
         raise HTTPException(status_code=401, detail="user not found")
-    portfolio = await portfolio_repo.get_by_user_id(user.id)
-    if portfolio is None:
-        raise HTTPException(status_code=503, detail=f"no portfolio for user {user.id}")
+    # "1 user = 1 portfolio": self-heal legacy users that predate auto-provisioning
+    # instead of 503-ing (a missing portfolio is not a service outage).
+    portfolio = await get_or_create_portfolio(session, user.id)
     return user.id, user.name, portfolio
 
 
