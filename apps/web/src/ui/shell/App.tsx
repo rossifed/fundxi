@@ -25,7 +25,10 @@ import { RightRail } from "./RightRail";
 
 type TabId = "home" | "screener" | "fixtures" | "portfolio" | "leagues" | "profile";
 
-const DEFAULT_WATCHLIST = new Set<number>([16, 7, 108, 148]);
+// The watchlist starts EMPTY. It is session-only client state today (no
+// backend persistence yet); seeding it with hardcoded player ids was a
+// mock-prototype leftover that mapped to arbitrary real players on the live
+// DB. Users add their own; per-user persistence is a future backend feature.
 const APP_MAX_WIDTH = 1800;
 
 // Pages where the right rail adds value (live ticker, watchlist, movers).
@@ -61,7 +64,7 @@ export function App() {
   const [selected_player, set_selected_player] = useState<Player | null>(null);
   const [selected_match, set_selected_match] = useState<Match | null>(null);
   const [selected_team, set_selected_team] = useState<Team | null>(null);
-  const [watchlist, set_watchlist] = useState<Set<number>>(DEFAULT_WATCHLIST);
+  const [watchlist, set_watchlist] = useState<Set<number>>(() => new Set());
 
   const toggle_watch = (id: number) => {
     const next = new Set(watchlist);
