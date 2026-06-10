@@ -12,12 +12,14 @@ HTTP, no commit — the caller owns the transaction boundary.
 """
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from src.application.portfolio_snapshot_service import LatestPriceProvider
 from src.application.trade_execution import TradeOutcome, TradeRequest, execute_trade
 from src.domain.portfolio.margin import MarginVerdict, evaluate_margin
 from src.domain.portfolio.portfolio import PortfolioRepository, TradeKind, TradeRepository
 from src.domain.portfolio.user import UserRepository
+from src.infrastructure.valuation.synthetic_valuation_provider import synthesize_valuation
 
 
 class UserNotFoundError(Exception):
@@ -94,6 +96,12 @@ async def place_trade(
     prices = await price_provider.get_many([command.player_id])
     server_price = prices.get(command.player_id)
     if server_price is None or server_price <= 0:
+        # No tick yet (never priced / pre-seed): a player's starting price IS
+        # its deterministic synthetic base value — the SAME price the Screener
+        # shows — so it stays tradeable instead of 409-ing. base_value depends
+        # only on player_id (stable, always > 0).
+        server_price = synthesize_valuation(command.player_id, as_of=datetime.now(UTC)).base_value
+    if server_price <= 0:  # pragma: no cover — base_value is always positive; defensive only
         raise NoServerPriceError(command.player_id)
 
     await _enforce_margin(
