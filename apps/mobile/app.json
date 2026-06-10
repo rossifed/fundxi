@@ -10,7 +10,10 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.atonra.fundxi",
-      "buildNumber": "1"
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.atonra.fundxi",
@@ -43,33 +46,29 @@
         "expo-font",
         {
           "fonts": [
-            {
-              "fontFamily": "Inter",
-              "fontDefinitions": [
-                { "path": "./assets/fonts/Inter-Regular.ttf", "weight": 400 },
-                { "path": "./assets/fonts/Inter-Medium.ttf", "weight": 500 },
-                { "path": "./assets/fonts/Inter-SemiBold.ttf", "weight": 600 },
-                { "path": "./assets/fonts/Inter-Bold.ttf", "weight": 700 },
-                { "path": "./assets/fonts/Inter-ExtraBold.ttf", "weight": 800 },
-                { "path": "./assets/fonts/Inter-Black.ttf", "weight": 900 }
-              ]
-            },
-            {
-              "fontFamily": "JetBrains Mono",
-              "fontDefinitions": [
-                { "path": "./assets/fonts/JetBrainsMono-Regular.ttf", "weight": 400 },
-                { "path": "./assets/fonts/JetBrainsMono-Medium.ttf", "weight": 500 },
-                { "path": "./assets/fonts/JetBrainsMono-SemiBold.ttf", "weight": 600 },
-                { "path": "./assets/fonts/JetBrainsMono-Bold.ttf", "weight": 700 },
-                { "path": "./assets/fonts/JetBrainsMono-ExtraBold.ttf", "weight": 800 }
-              ]
-            }
+            "./assets/fonts/Inter-Regular.ttf",
+            "./assets/fonts/Inter-Medium.ttf",
+            "./assets/fonts/Inter-SemiBold.ttf",
+            "./assets/fonts/Inter-Bold.ttf",
+            "./assets/fonts/Inter-ExtraBold.ttf",
+            "./assets/fonts/Inter-Black.ttf",
+            "./assets/fonts/JetBrainsMono-Regular.ttf",
+            "./assets/fonts/JetBrainsMono-Medium.ttf",
+            "./assets/fonts/JetBrainsMono-SemiBold.ttf",
+            "./assets/fonts/JetBrainsMono-Bold.ttf",
+            "./assets/fonts/JetBrainsMono-ExtraBold.ttf"
           ]
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "120bb082-a074-4c2b-8dbd-01415d33bbdb"
+      }
     }
   }
 }
