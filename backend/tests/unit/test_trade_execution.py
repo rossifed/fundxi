@@ -106,6 +106,11 @@ class _FakePortfolioRepo:
                 return p
         return None
 
+    async def get_by_user_id_for_update(
+        self, user_id: int
+    ) -> Portfolio | None:  # pragma: no cover — the row lock lives in place_trade, not execute_trade
+        return await self.get_by_user_id(user_id)
+
     async def create_for_user(self, *, user_id: int, cash: float) -> Portfolio:  # pragma: no cover
         now = datetime.now(UTC)
         pid = max(self.portfolios.keys(), default=0) + 1

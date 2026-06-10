@@ -32,6 +32,9 @@ class FakePortfolioRepo:
     async def get_by_user_id(self, user_id: int):  # pragma: no cover
         raise NotImplementedError
 
+    async def get_by_user_id_for_update(self, user_id: int):  # pragma: no cover
+        raise NotImplementedError
+
     async def create_for_user(self, *, user_id: int, cash: float):  # pragma: no cover
         raise NotImplementedError
 
