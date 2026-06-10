@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { init_public_repositories } from "@fundxi/core/infrastructure/repositories/init";
+import { Logo } from "@/ui/shell/Logo";
 
 type State = "loading" | "ready" | "error";
 
@@ -49,7 +50,7 @@ export function BootstrapGate({ children }: Props) {
     >
       {state === "loading" && (
         <>
-          <div style={{ fontSize: 32, fontWeight: 800, letterSpacing: -0.5 }}>fundXI</div>
+          <Logo size={46} tagline />
           <div style={{ opacity: 0.6, fontSize: 13 }}>loading market data…</div>
         </>
       )}

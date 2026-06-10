@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { AuthDialog } from "@/ui/components/AuthDialog";
 import { Avatar } from "@/ui/components/Avatar";
+import { Logo } from "@/ui/shell/Logo";
 import { useAuth } from "@/ui/shell/AuthContext";
 
 interface HeaderProps {
@@ -31,24 +32,7 @@ export function Header({ on_logo_click }: HeaderProps) {
         style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}
         onClick={on_logo_click}
       >
-        <div
-          className="mono"
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 7,
-            background: "rgba(255,255,255,.08)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 12,
-            fontWeight: 800,
-            color: "#fff",
-          }}
-        >
-          XI
-        </div>
-        <span style={{ fontSize: 15, fontWeight: 800, letterSpacing: -0.2 }}>FundXI</span>
+        <Logo size={22} />
         <span
           style={{
             fontSize: 11,

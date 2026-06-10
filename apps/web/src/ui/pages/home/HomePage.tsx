@@ -8,6 +8,7 @@ import { leagues_api } from "@fundxi/core/api/leagues_api";
 import type { Match } from "@fundxi/core/domain/match/match";
 import type { Player } from "@fundxi/core/domain/player/player";
 import type { PlayerWithValuation } from "@fundxi/core/domain/market/player_valuation";
+import { Logo } from "@/ui/shell/Logo";
 import { LiveBadge } from "@/ui/components/LiveBadge";
 import { PlayerChip } from "@/ui/components/PlayerChip";
 import { SectionHeader } from "@/ui/components/SectionHeader";
@@ -72,34 +73,7 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match, on_op
           marginTop: 4,
         }}
       >
-        <h1
-          style={{
-            fontSize: 56,
-            fontWeight: 900,
-            letterSpacing: -2.2,
-            lineHeight: 1,
-            margin: 0,
-            background:
-              "linear-gradient(135deg, rgba(255,255,255,.95) 0%, rgba(255,255,255,.55) 100%)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text",
-          }}
-        >
-          Fund<span style={{ color: "var(--color-accent)", WebkitTextFillColor: "var(--color-accent)", background: "none" }}>XI</span>
-        </h1>
-        <span
-          style={{
-            fontSize: 13,
-            fontWeight: 700,
-            color: "rgba(255,255,255,.4)",
-            letterSpacing: 3,
-            textTransform: "uppercase",
-          }}
-        >
-          Every touch has a{" "}
-          <span style={{ color: "var(--color-accent)" }}>price</span>
-        </span>
+        <Logo size={52} tagline />
       </header>
 
       {/* Match Center + Leagues */}
