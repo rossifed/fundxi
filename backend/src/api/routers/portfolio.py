@@ -14,6 +14,7 @@ from src.api.dtos.portfolio import (
 )
 from src.api.dtos.portfolio_history import PortfolioHistoryPoint, PortfolioHistoryResponse
 from src.application.place_trade import (
+    InsufficientMarginError,
     InvalidTradeKindError,
     NoServerPriceError,
     PlaceTradeCommand,
@@ -23,6 +24,7 @@ from src.application.place_trade import (
 )
 from src.application.portfolio_history_service import HistoryRange, PortfolioHistoryService
 from src.application.trade_execution import TradeError
+from src.config import get_settings
 from src.domain.portfolio.portfolio import Portfolio
 from src.infrastructure.db.repositories.portfolio import (
     SqlAlchemyPortfolioRepository,
@@ -108,6 +110,7 @@ async def post_trade(
             portfolio_repo=portfolio_repo,
             trade_repo=SqlAlchemyTradeRepository(session),
             price_provider=SqlAlchemyLatestPriceProvider(session),
+            max_leverage=get_settings().max_gross_leverage,
         )
     except UserNotFoundError as exc:
         raise HTTPException(status_code=401, detail="user not found") from exc
@@ -119,6 +122,8 @@ async def post_trade(
         raise HTTPException(
             status_code=409, detail=f"no current price for player {body.player_id}; cannot execute trade"
         ) from exc
+    except InsufficientMarginError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except TradeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

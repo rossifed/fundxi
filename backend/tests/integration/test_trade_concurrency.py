@@ -48,6 +48,7 @@ async def test_concurrent_trades_serialize_on_portfolio_row_lock() -> None:
                 portfolio_repo=SqlAlchemyPortfolioRepository(session),
                 trade_repo=SqlAlchemyTradeRepository(session),
                 price_provider=SqlAlchemyLatestPriceProvider(session),
+                max_leverage=1.0,
             )
             await session.commit()
 

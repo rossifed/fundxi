@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     # Error tracking. Empty ⇒ Sentry is not initialised (no-op), so local dev
     # and tests stay offline. Set ``SENTRY_DSN`` in prod to enable reporting.
     sentry_dsn: str = Field(default="")
+    # Buying-power limit: gross exposure (longs + shorts) may not exceed equity
+    # times this factor. 1.0 = no leverage (the total size of all positions can
+    # never exceed the portfolio's own money); shorting stays allowed but bounded
+    # by capital. See domain/portfolio/margin.py.
+    max_gross_leverage: float = Field(default=1.0)
 
     @property
     def is_dev(self) -> bool:
