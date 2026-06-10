@@ -11,8 +11,8 @@ export interface PlayerValuation {
   base_value: number; // €M, reference value (tournament-open anchor)
   current_price: number; // €M, latest tradable price
   change_since_inception: number; // %, current vs base — the canonical "% change" (screeners / movers)
-  change_avg_per_match: number; // %, mean net change per fixture priced
-  change_last_match: number; // %, net change over the latest fixture — moves live during play
+  change_avg_per_match: number | null; // %, mean net change per fixture priced; null if no match yet
+  change_last_match: number | null; // %, net change over the latest fixture; null if no match yet
   performance_rating: number; // 0-10, latest match rating
   as_of: string; // ISO timestamp of the snapshot
   source: ValuationSource;

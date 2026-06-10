@@ -1,7 +1,6 @@
 """/api/players router."""
 
 from dataclasses import asdict
-from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select, text
@@ -143,19 +142,20 @@ async def players_search(
 async def players_screener_view(
     request: Request,
     session: AsyncSession = Depends(get_session),
+    valuation_provider: ValuationProvider = Depends(get_valuation_provider),
 ) -> list[PlayerScreenerEntryResponse]:
     """Single-shot batch payload feeding the Screener page.
 
-    Everything is computed server-side in one SQL — the frontend just renders
-    and sorts/filters in memory on this dataset.
+    Everything is computed server-side — the frontend just renders and
+    sorts/filters in memory on this dataset.
 
-    Joined / computed:
-      - core.player          (identity, personal attrs)
-      - latest valuation tick (current_price, performance_rating)
-      - baseline anchor tick  (since_start_pct = current vs base_value)
-      - per-fixture deltas    (last_match_pct from the most recent fixture's ticks)
-      - core.player_tournament_stat (tournament aggregate)
-      - app.holding          (default user's position → pnl, average_buy_price)
+    Composed by load_screener_view:
+      - core.player                 (identity, personal attrs) — SQL
+      - core.player_tournament_stat (tournament aggregate) — SQL
+      - app.holding                 (caller's position → pnl, average_buy_price) — SQL
+      - valuation fields            (current_price, since_start/last/avg %, rating,
+                                     source) — the shared ValuationProvider read-model,
+                                     same source as top-movers / search.
     """
     from src.infrastructure.db.repositories.portfolio import SqlAlchemyPortfolioRepository
 
@@ -174,7 +174,7 @@ async def players_screener_view(
             portfolio_id = portfolio.id
 
     entries = await load_screener_view(
-        session, season_id=season_id, portfolio_id=portfolio_id, now=datetime.now(UTC)
+        session, valuation_provider=valuation_provider, season_id=season_id, portfolio_id=portfolio_id
     )
     return [PlayerScreenerEntryResponse(**asdict(e)) for e in entries]
 

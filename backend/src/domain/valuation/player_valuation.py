@@ -24,14 +24,17 @@ class PlayerValuation:
     current_price: float
     # Cumulative return vs the tournament-open price. The canonical "% change"
     # for screeners / top-movers. ((current_price / base_value) - 1) * 100.
+    # Always a number: an un-played player legitimately sits at 0% (price = base).
     change_since_inception: float
     # Mean, over every fixture the player has been priced in, of that fixture's
-    # net price change. 0.0 if the player has not been priced in any fixture.
-    change_avg_per_match: float
+    # net price change. None when the player has not been priced in any fixture
+    # (no matches yet → "n/a", NOT 0%, which would read as "a flat match").
+    change_avg_per_match: float | None
     # Net price change over the most recent fixture the player was priced in —
     # i.e. the latest tick's "change since that fixture's kickoff". Moves live
     # while a match is in progress, then holds until the next match's first tick.
-    change_last_match: float
+    # None when the player has no fixture ticks yet (same n/a vs 0% reasoning).
+    change_last_match: float | None
     performance_rating: float
     as_of: datetime
     source: ValuationSource

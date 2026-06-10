@@ -39,8 +39,9 @@ def synthesize_valuation(player_id: int, *, as_of: datetime) -> PlayerValuation:
         base_value=base_value,
         current_price=current_price,
         change_since_inception=change_since_inception,
-        change_avg_per_match=0.0,
-        change_last_match=0.0,
+        # No match data for a never-priced player → n/a, not 0%.
+        change_avg_per_match=None,
+        change_last_match=None,
         performance_rating=performance_rating,
         as_of=as_of,
         source=ValuationSource.SYNTHETIC,

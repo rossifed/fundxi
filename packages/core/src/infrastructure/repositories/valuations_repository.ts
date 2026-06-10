@@ -13,8 +13,8 @@ interface PlayerWithValuationDTO {
     base_value: number;
     current_price: number;
     change_since_inception: number;
-    change_avg_per_match: number;
-    change_last_match: number;
+    change_avg_per_match: number | null; // null = no match priced yet
+    change_last_match: number | null; // null = no match priced yet
     performance_rating: number;
     as_of: string;
     source: string;

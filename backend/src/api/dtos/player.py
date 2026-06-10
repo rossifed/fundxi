@@ -63,8 +63,8 @@ class PlayerValuationResponse(BaseModel):
     base_value: float
     current_price: float
     change_since_inception: float  # %, vs tournament-open price — the canonical "% change"
-    change_avg_per_match: float  # %, mean net change per fixture priced
-    change_last_match: float  # %, net change over the latest fixture — moves live
+    change_avg_per_match: float | None  # %, mean net change per fixture priced; None if no match yet
+    change_last_match: float | None  # %, net change over the latest fixture; None if no match yet
     performance_rating: float
     as_of: datetime
     source: str

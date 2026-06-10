@@ -28,8 +28,8 @@ def test_synthesize_value_ranges() -> None:
         v = synthesize_valuation(pid, as_of=datetime(2026, 1, 1, tzinfo=UTC))
         assert 5.0 <= v.base_value <= 120.0
         assert -8.0 <= v.change_since_inception <= 8.0
-        assert v.change_avg_per_match == 0.0
-        assert v.change_last_match == 0.0
+        assert v.change_avg_per_match is None
+        assert v.change_last_match is None
         assert 5.0 <= v.performance_rating <= 9.0
         assert v.source is ValuationSource.SYNTHETIC
 

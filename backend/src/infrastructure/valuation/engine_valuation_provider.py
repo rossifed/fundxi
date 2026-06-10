@@ -25,6 +25,9 @@ from src.domain.valuation.player_valuation import PlayerValuation, ValuationSour
 from src.infrastructure.db.models.player_price_tick import PlayerPriceTickORM
 from src.infrastructure.valuation.synthetic_valuation_provider import synthesize_valuation
 
+# Neutral rating for an un-ticked player (no performance signal yet).
+_NEUTRAL_RATING = 6.5
+
 
 def compound_per_match_changes(
     rows: list[tuple[int, int | None, float]],
@@ -131,15 +134,31 @@ class EngineValuationProvider:
         for player_id in ids:
             tick = latest.get(player_id)
             if tick is None:
-                # No tick yet → deterministic synthetic seed.
-                result[player_id] = synthesize_valuation(player_id, as_of=now)
+                # No tick yet: a player's starting price IS its deterministic
+                # base value (the same price place_trade charges) — flat, not
+                # the random synthetic walk, so no invented movement leaks in.
+                # since_start = 0% (price == base); no match yet → None.
+                base = synthesize_valuation(player_id, as_of=now).base_value
+                result[player_id] = PlayerValuation(
+                    player_id=player_id,
+                    base_value=base,
+                    current_price=base,
+                    change_since_inception=0.0,
+                    change_avg_per_match=None,
+                    change_last_match=None,
+                    performance_rating=_NEUTRAL_RATING,
+                    as_of=now,
+                    source=ValuationSource.SYNTHETIC,
+                )
                 continue
             current_price = float(tick.current_price)
             base_value = anchor.get(player_id, current_price)
             change_since_inception = (
                 round((current_price / base_value - 1.0) * 100.0, 2) if base_value > 0 else 0.0
             )
-            change_avg_per_match, change_last_match = per_match.get(player_id, (0.0, 0.0))
+            # None (not 0.0) when the player has no fixture ticks: "no match
+            # yet" is n/a, not a flat 0% match.
+            change_avg_per_match, change_last_match = per_match.get(player_id, (None, None))
             result[player_id] = PlayerValuation(
                 player_id=player_id,
                 base_value=base_value,
