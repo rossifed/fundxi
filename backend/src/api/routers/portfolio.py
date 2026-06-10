@@ -13,13 +13,17 @@ from src.api.dtos.portfolio import (
     UserResponse,
 )
 from src.api.dtos.portfolio_history import PortfolioHistoryPoint, PortfolioHistoryResponse
-from src.application.portfolio_history_service import HistoryRange, PortfolioHistoryService
-from src.application.trade_execution import (
-    TradeError,
-    TradeRequest,
-    execute_trade,
+from src.application.place_trade import (
+    InvalidTradeKindError,
+    NoServerPriceError,
+    PlaceTradeCommand,
+    PortfolioNotFoundError,
+    UserNotFoundError,
+    place_trade,
 )
-from src.domain.portfolio.portfolio import Portfolio, TradeKind
+from src.application.portfolio_history_service import HistoryRange, PortfolioHistoryService
+from src.application.trade_execution import TradeError
+from src.domain.portfolio.portfolio import Portfolio
 from src.infrastructure.db.repositories.portfolio import (
     SqlAlchemyPortfolioRepository,
     SqlAlchemyTradeRepository,
@@ -94,49 +98,27 @@ async def post_trade(
     user_id: int = Depends(get_current_user_id),
     session: AsyncSession = Depends(get_session),
 ) -> TradeOutcomeResponse:
-    user_repo = SqlAlchemyUserRepository(session)
-    user = await user_repo.get_by_id(user_id)
-    if user is None:
-        raise HTTPException(status_code=401, detail="user not found")
-
     portfolio_repo = SqlAlchemyPortfolioRepository(session)
-    # Lock the portfolio row FOR UPDATE: concurrent trade requests on the
-    # same portfolio now serialize on this lock (held until commit below),
-    # so the read-modify-write on cash/holdings can't lose an update.
-    portfolio = await portfolio_repo.get_by_user_id_for_update(user.id)
-    if portfolio is None:
-        raise HTTPException(status_code=503, detail=f"no portfolio for user {user.id}")
-    trade_repo = SqlAlchemyTradeRepository(session)
-
     try:
-        kind = TradeKind(body.kind)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=f"invalid kind={body.kind!r}") from exc
-
-    # Authoritative execution price = latest server-side valuation tick.
-    # ``body.price`` is advisory (client display only) and is NEVER trusted
-    # for execution — otherwise a client could buy low / sell high at will.
-    prices = await SqlAlchemyLatestPriceProvider(session).get_many([body.player_id])
-    server_price = prices.get(body.player_id)
-    if server_price is None or server_price <= 0:
-        raise HTTPException(
-            status_code=409,
-            detail=f"no current price for player {body.player_id}; cannot execute trade",
-        )
-
-    try:
-        outcome = await execute_trade(
-            request=TradeRequest(
-                portfolio_id=portfolio.id,
-                player_id=body.player_id,
-                kind=kind,
-                shares=body.shares,
-                price=server_price,
+        outcome = await place_trade(
+            command=PlaceTradeCommand(
+                user_id=user_id, player_id=body.player_id, kind=body.kind, shares=body.shares
             ),
-            portfolio=portfolio,
+            user_repo=SqlAlchemyUserRepository(session),
             portfolio_repo=portfolio_repo,
-            trade_repo=trade_repo,
+            trade_repo=SqlAlchemyTradeRepository(session),
+            price_provider=SqlAlchemyLatestPriceProvider(session),
         )
+    except UserNotFoundError as exc:
+        raise HTTPException(status_code=401, detail="user not found") from exc
+    except PortfolioNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=f"no portfolio for user {user_id}") from exc
+    except InvalidTradeKindError as exc:
+        raise HTTPException(status_code=400, detail=f"invalid kind={body.kind!r}") from exc
+    except NoServerPriceError as exc:
+        raise HTTPException(
+            status_code=409, detail=f"no current price for player {body.player_id}; cannot execute trade"
+        ) from exc
     except TradeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
