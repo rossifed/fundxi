@@ -453,15 +453,18 @@ async def test_bootstrap_squads_skips_malformed_entries() -> None:
                         {"has_values": True, "jersey_number": "not-an-int", "player": {"id": 1}},  # bad jersey
                         {"has_values": True, "player": {"id": 2}},  # missing jersey
                         {"has_values": True, "jersey_number": 10},  # missing player
-                        # non-active squad entry (pre-tournament call-up etc.) — must be skipped
+                        # has_values=False is NOT a skip reason: the roster
+                        # signal is the shirt number (has_values means "has
+                        # played/has stats", false for everyone before a
+                        # tournament). Valid jersey + player ⇒ KEPT.
                         {
                             "has_values": False,
                             "jersey_number": 22,
                             "player": {
                                 "id": 998,
-                                "common_name": "Ghost",
-                                "display_name": "Ghost",
-                                "name": "Ghost",
+                                "common_name": "Pre-Tournament",
+                                "display_name": "Pre-Tournament",
+                                "name": "Pre-Tournament",
                                 "position": {"id": 27, "name": "Attacker"},
                             },
                         },
@@ -495,8 +498,10 @@ async def test_bootstrap_squads_skips_malformed_entries() -> None:
         today=date(2026, 6, 1),
     )
 
-    assert count == 1
-    assert player_repo.upserts[0][1] == 999
+    # The 3 malformed entries are skipped; both well-formed entries are kept
+    # regardless of has_values (jersey is the roster gate now).
+    assert count == 2
+    assert {u[1] for u in player_repo.upserts} == {998, 999}
 
 
 @pytest.mark.anyio

@@ -212,12 +212,15 @@ async def bootstrap_squads(
             for squad_entry in _data_items(envelope):
                 # Sportmonks ``/squads/seasons/{s}/teams/{t}`` returns every
                 # player registered for the team across the whole season
-                # (incl. pre-tournament call-ups). The active final-tournament
-                # squad is the subset where ``has_values=true`` — that's the
-                # 26-man (FIFA 2022) or 23-man (FIFA 2018) roster.
-                if squad_entry.get("has_values") is not True:
-                    skipped += 1
-                    continue
+                # (incl. pre-tournament call-ups). The final tournament roster
+                # is the subset with a shirt number — only called-up players are
+                # assigned one.
+                #
+                # We deliberately do NOT gate on ``has_values``: semantically it
+                # means "this player has values/stats" (a consequence of having
+                # PLAYED), not "is on the roster". It only coincides with the 26
+                # for a COMPLETED tournament; for an upcoming one (e.g. WC2026)
+                # it is false for everyone, which would skip the entire squad.
                 jersey = squad_entry.get("jersey_number")
                 if not isinstance(jersey, int):
                     skipped += 1
@@ -278,11 +281,11 @@ async def bootstrap_player_stats(
         async for params, envelope in _paginate_pages(client, endpoint, base_params=base_params):
             await raw_archive.insert_if_new(endpoint=endpoint, params=params, response=envelope)
             for squad_entry in _data_items(envelope):
-                # Match the bootstrap_squads filter: only the active final
-                # tournament squad (has_values=true). Otherwise we'd materialise
-                # player_tournament_stat rows for pre-tournament call-ups that
-                # never played the final tournament.
-                if squad_entry.get("has_values") is not True:
+                # Match the bootstrap_squads filter: roster = entries with a
+                # shirt number. Not ``has_values`` — that flag means "has
+                # played/has stats", false for everyone before a tournament
+                # (see bootstrap_squads for the full rationale).
+                if not isinstance(squad_entry.get("jersey_number"), int):
                     skipped += 1
                     continue
                 player_payload = squad_entry.get("player")
