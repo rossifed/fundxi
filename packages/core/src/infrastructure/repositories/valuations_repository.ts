@@ -98,7 +98,6 @@ export interface PricePoint {
   ts: string; // ISO timestamp
   price: number;
   fixture_id: number | null;
-  change_since_open: number;
 }
 
 interface PriceHistoryDTO {

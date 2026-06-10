@@ -17,7 +17,7 @@ class MatchPlayerResponse(BaseModel):
     team_id: str
     value: float
     rating: float
-    change_last_match: float  # %, net price change over the latest fixture — moves live during play
+    change_last_match: float | None  # %, net change over the latest fixture; None if no match yet
     formation_position: int | None = None
     # Sportmonks "row:col" tactical grid coordinate (e.g. "2:3"). When present,
     # this is the authoritative source for placing the player on the pitch;
@@ -66,4 +66,3 @@ class MatchResponse(BaseModel):
     home_bench: list[MatchPlayerResponse]
     away_bench: list[MatchPlayerResponse]
     events: list[MatchEventDTO]
-    player_changes: dict[str, float]

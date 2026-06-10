@@ -20,7 +20,6 @@ from src.infrastructure.db.models.fixture import FixtureORM
 from src.infrastructure.db.models.lineup import LineupORM
 from src.infrastructure.db.models.match_event import MatchEventORM
 from src.infrastructure.db.models.player import PlayerORM
-from src.infrastructure.db.models.player_price_tick import PlayerPriceTickORM
 from src.infrastructure.db.models.standings import StandingORM
 from src.infrastructure.db.models.venue import VenueORM
 
@@ -87,7 +86,6 @@ class MatchView:
     away_bench: list[MatchPlayerView]
     events: list[MatchEvent]
     player_names: dict[int, str]
-    player_changes: dict[int, float]
 
 
 def _orm_lineup_to_domain(orm: LineupORM) -> Lineup:
@@ -216,17 +214,9 @@ async def get_match_view(
     home_bench.sort(key=lambda v: v.lineup.jersey_number or 99)
     away_bench.sort(key=lambda v: v.lineup.jersey_number or 99)
 
-    # player_changes: read change_since_open from valuation.player_price_tick
-    # for ticks anchored at this fixture.
-    tick_rows = (
-        await session.execute(
-            select(PlayerPriceTickORM.player_id, PlayerPriceTickORM.change_since_open).where(
-                PlayerPriceTickORM.fixture_id == fixture_id
-            )
-        )
-    ).all()
-    player_changes: dict[int, float] = {row.player_id: float(row.change_since_open) for row in tick_rows}
-
+    # Per-player match move is carried on each MatchPlayerView.valuation
+    # (change_last_match, from the single price-based read-model) — no separate
+    # raw-tick map.
     return MatchView(
         fixture=fixture,
         home_xi=home_xi,
@@ -235,5 +225,4 @@ async def get_match_view(
         away_bench=away_bench,
         events=events,
         player_names=player_names,
-        player_changes=player_changes,
     )

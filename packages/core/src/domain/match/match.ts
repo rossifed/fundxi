@@ -58,7 +58,6 @@ export interface Match {
   status: MatchStatus;
   home_xi: (number | MatchPlayer)[];
   away_xi: MatchPlayer[];
-  player_changes: Record<number, number>;
   events: MatchEvent[];
   player_curves?: Record<number, PlayerCurvePoint[]>;
 }

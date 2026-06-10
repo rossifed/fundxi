@@ -355,7 +355,6 @@ async def players_price_history(
                 PlayerPriceTickORM.ts,
                 PlayerPriceTickORM.current_price,
                 PlayerPriceTickORM.fixture_id,
-                PlayerPriceTickORM.change_since_open,
             )
             .where(PlayerPriceTickORM.player_id == player_id)
             .order_by(PlayerPriceTickORM.ts)
@@ -366,7 +365,6 @@ async def players_price_history(
             ts=row.ts,
             price=float(row.current_price),
             fixture_id=row.fixture_id,
-            change_since_open=float(row.change_since_open),
         )
         for row in rows
     ]

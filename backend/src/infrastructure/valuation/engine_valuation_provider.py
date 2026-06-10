@@ -7,13 +7,14 @@ with no tick yet (e.g. before any replay run).
 Three change metrics, all in percent:
 - ``change_since_inception``: (current_price / base_value - 1) * 100 — the
   canonical "% change" used by screeners / top-movers.
-- ``change_avg_per_match``: mean, over each fixture the player has ticks in,
-  of that fixture's net change (compound of the fixture's per-event ticks).
-- ``change_last_match``: the most recent fixture's net change.
+- ``change_avg_per_match``: mean, over each fixture the player was priced in,
+  of that fixture's net change, derived from pre/post PRICES (not stored
+  deltas). None when the player has no fixtured tick.
+- ``change_last_match``: the most recent fixture's net change, same basis.
 
 Batched by design: ``get_for_players`` resolves any number of players in a
-fixed THREE queries (latest tick, anchor, in-match ticks) — never one query
-per player. A 26-player squad costs 3 round-trips, not ~90.
+fixed THREE queries (latest tick, anchor, fixtured-tick prices) — never one
+query per player. A 26-player squad costs 3 round-trips, not ~90.
 """
 
 from datetime import UTC, datetime
@@ -29,35 +30,47 @@ from src.infrastructure.valuation.synthetic_valuation_provider import synthesize
 _NEUTRAL_RATING = 6.5
 
 
-def compound_per_match_changes(
-    rows: list[tuple[int, int | None, float]],
+def per_match_changes_from_prices(
+    rows: list[tuple[int, int, float]],
+    *,
+    base_by_player: dict[int, float],
 ) -> dict[int, tuple[float, float]]:
-    """Per player, the ``(avg, last)`` NET price move across the fixtures it
-    has ticks in.
+    """Per player, the ``(avg, last)`` NET price move across the fixtures it was
+    priced in — computed from PRICES, not from any stored per-tick delta.
 
-    ``rows`` is ``(player_id, fixture_id, change_since_open)`` ordered by
-    ``player_id, ts ASC``. A tick's ``change_since_open`` is one event's
-    delta, so a fixture's real net move is the COMPOUND of its ticks
-    (product of ``1 + d/100``, minus 1). The last fixture seen in ts order
-    is the most recent match.
+    ``rows`` is ``(player_id, fixture_id, current_price)`` for the player's
+    FIXTURED ticks, ordered by ``player_id, ts ASC``. A fixture's net move is
+    ``last_price / pre_price - 1``, where ``pre_price`` is the player's price
+    right before that fixture's first tick: the previous fixture's close, or —
+    for the first fixture — the tournament-open price in ``base_by_player``.
+
+    This is independent of how per-tick deltas are stored (it only reads
+    prices), so it is the single, semantic-proof definition of "match %" — the
+    same one the per-match list endpoint derives from pre/post prices. The last
+    fixture in ts order is the most recent match. Players with no fixtured tick
+    are absent (caller maps to None).
     """
-    factors: dict[int, dict[int, float]] = {}
+    pre: dict[int, dict[int, float]] = {}
+    post: dict[int, dict[int, float]] = {}
     order: dict[int, list[int]] = {}
-    for player_id, fixture_id, change in rows:
-        if fixture_id is None:
-            continue
-        player_factors = factors.setdefault(player_id, {})
-        player_order = order.setdefault(player_id, [])
-        if fixture_id not in player_factors:
-            player_factors[fixture_id] = 1.0
-            player_order.append(fixture_id)
-        player_factors[fixture_id] *= 1.0 + float(change) / 100.0
+    carried: dict[int, float] = dict(base_by_player)  # first fixture's pre = tournament-open
+    for player_id, fixture_id, price in rows:
+        player_pre = pre.setdefault(player_id, {})
+        if fixture_id not in player_pre:
+            player_pre[fixture_id] = carried.get(player_id, price)
+            order.setdefault(player_id, []).append(fixture_id)
+        post.setdefault(player_id, {})[fixture_id] = price
+        carried[player_id] = price  # this fixture's running close → next fixture's pre
+
     out: dict[int, tuple[float, float]] = {}
-    for player_id, player_factors in factors.items():
-        nets = {fid: (factor - 1.0) * 100.0 for fid, factor in player_factors.items()}
-        avg = round(sum(nets.values()) / len(nets), 2)
-        last = round(nets[order[player_id][-1]], 2)
-        out[player_id] = (avg, last)
+    for player_id, fixtures in order.items():
+        nets = [
+            round((post[player_id][fid] / pre[player_id][fid] - 1.0) * 100.0, 2)
+            for fid in fixtures
+            if pre[player_id][fid] > 0
+        ]
+        if nets:
+            out[player_id] = (round(sum(nets) / len(nets), 2), nets[-1])
     return out
 
 
@@ -110,13 +123,14 @@ class EngineValuationProvider:
         ).all()
         anchor = {row.player_id: float(row.current_price) for row in anchor_rows}
 
-        # Query 3 — every in-match tick, to compound per-fixture net moves.
+        # Query 3 — every fixtured tick's PRICE, to derive each fixture's net
+        # move from pre/post prices (semantic-proof; no stored-delta dependency).
         match_rows = (
             await self._session.execute(
                 select(
                     PlayerPriceTickORM.player_id,
                     PlayerPriceTickORM.fixture_id,
-                    PlayerPriceTickORM.change_since_open,
+                    PlayerPriceTickORM.current_price,
                 )
                 .where(
                     PlayerPriceTickORM.player_id.in_(ids),
@@ -125,8 +139,9 @@ class EngineValuationProvider:
                 .order_by(PlayerPriceTickORM.player_id, PlayerPriceTickORM.ts.asc())
             )
         ).all()
-        per_match = compound_per_match_changes(
-            [(row.player_id, row.fixture_id, float(row.change_since_open)) for row in match_rows]
+        per_match = per_match_changes_from_prices(
+            [(row.player_id, row.fixture_id, float(row.current_price)) for row in match_rows],
+            base_by_player=anchor,
         )
 
         now = datetime.now(UTC)

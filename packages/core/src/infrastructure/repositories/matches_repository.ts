@@ -48,7 +48,6 @@ interface MatchResponseDTO {
   home_bench: MatchPlayerDTO[];
   away_bench: MatchPlayerDTO[];
   events: MatchEventDTO[];
-  player_changes: Record<string, number>;
 }
 
 function dto_player(p: MatchPlayerDTO): MatchPlayer {
@@ -82,10 +81,6 @@ function dto_event(e: MatchEventDTO): MatchEvent {
 }
 
 function dto_to_match(dto: MatchResponseDTO): Match {
-  const player_changes: Record<number, number> = {};
-  for (const [pid, pct] of Object.entries(dto.player_changes)) {
-    player_changes[Number(pid)] = pct;
-  }
   return {
     fixture_id: dto.fixture_id,
     home_team_id: dto.home_team_id,
@@ -103,7 +98,6 @@ function dto_to_match(dto: MatchResponseDTO): Match {
     away_xi: dto.away_xi.map(dto_player),
     home_bench: dto.home_bench.map(dto_player),
     away_bench: dto.away_bench.map(dto_player),
-    player_changes,
     events: dto.events.map(dto_event),
   };
 }

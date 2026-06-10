@@ -130,7 +130,6 @@ async def fixtures_match(
         home_bench=[_player_view_to_dto(v) for v in view.home_bench],
         away_bench=[_player_view_to_dto(v) for v in view.away_bench],
         events=[_event_dto(ev, view.player_names) for ev in view.events],
-        player_changes={str(pid): pct for pid, pct in view.player_changes.items()},
     )
 
 
