@@ -203,5 +203,6 @@ class LivePricingPoller:
 def _safe_base_value(player_id: int, as_of: datetime) -> float:
     try:
         return synthesize_valuation(player_id, as_of=as_of).base_value
-    except Exception:  # defensive; the synthetic seed should never raise
+    except Exception as exc:  # defensive; the synthetic seed should never raise
+        log.warning("ingest.pricing.synth_seed_failed", player_id=player_id, error=str(exc))
         return _DEFAULT_BASE_PRICE

@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+import httpx
 import structlog
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -91,7 +92,7 @@ class SportmonksInplayPoller:
         params = {"include": _INPLAY_INCLUDE}
         try:
             envelope = await self.client.get(endpoint, params=params)
-        except (SportmonksError, Exception) as exc:
+        except (SportmonksError, httpx.HTTPError) as exc:
             log.warning(
                 "ingest.inplay.fetch_failed",
                 fixture_internal_id=self.fixture_internal_id,
