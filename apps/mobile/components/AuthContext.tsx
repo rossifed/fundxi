@@ -10,6 +10,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 
 import { auth_api, type AuthUser } from "@fundxi/core/api/auth_api";
+import { ApiError } from "@fundxi/core/infrastructure/api_client";
 import { init_authenticated_repositories } from "@fundxi/core/infrastructure/repositories/init";
 import { clear_leagues } from "@fundxi/core/infrastructure/repositories/leagues_repository";
 
@@ -40,12 +41,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (u) {
       try {
         await init_authenticated_repositories();
-      } catch {
-        // Stale cookie / network blip — drop to anonymous rather than a
-        // broken half-authed state (mirrors web).
-        set_user(null);
-        set_status("anonymous");
-        return;
+      } catch (e) {
+        // Only a genuine auth failure (401/403) means we are NOT logged in. A
+        // data/infra error (500/503/network) must not log the user out — login /
+        // me already proved the session; each screen surfaces its own load error.
+        if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+          set_user(null);
+          set_status("anonymous");
+          return;
+        }
       }
       set_status("authenticated");
     } else {
