@@ -111,11 +111,18 @@ export function TradeDialog({
                 fontSize: 13,
                 fontWeight: 800,
                 borderRadius: 10,
-                background: "rgba(255,255,255,.08)",
+                // Solid accent fill (same prominence as the Confirm button) so
+                // the success state reads as a clear "OK", not a greyed-out one.
+                background: c_is_buy
+                  ? "linear-gradient(135deg,var(--color-action-buy),color-mix(in srgb, var(--color-action-buy), black 28%))"
+                  : "linear-gradient(135deg,var(--color-action-sell),color-mix(in srgb, var(--color-action-sell), black 18%))",
                 color: "#fff",
                 border: "none",
                 cursor: "pointer",
                 fontFamily: "inherit",
+                boxShadow: c_is_buy
+                  ? "0 4px 16px color-mix(in srgb, var(--color-positive) 25%, transparent)"
+                  : "0 4px 16px color-mix(in srgb, var(--color-negative) 25%, transparent)",
               }}
             >
               Done ✓
