@@ -5,9 +5,10 @@ DDD role: Adapter (driven) + ordering guard. Wraps the real
 the session and THEN drains the buffer.
 
 Why this exists — fidelity to live. The real ingest worker
-(``live_pricing_poller``) processes a poll batch, ``commit``s, and only
-then publishes. The replay must behave the same: buffer a game-minute's
-notifications, commit that minute's writes, then publish. Before this,
+(``sportmonks_inplay_poller``) processes a poll batch, ``commit``s, and
+only then publishes. The replay must behave the same: buffer a
+game-minute's notifications, commit that minute's writes, then publish.
+Before this,
 the simulator published per event while committing per minute, so the
 app was pinged about a minute it could not yet read — the GUI / Home /
 Fixtures minute diverged. With commit-then-publish the app is never

@@ -2,13 +2,11 @@
 
 import json
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 
 import pytest
 
 from src.simulation.domain.replay_event import ReplayEvent, ReplayEventKind
 from src.simulation.infrastructure.nats_publishing_sink import NatsPublishingSink
-from src.simulation.infrastructure.nats_publishing_tick_writer import NatsPublishingTickWriter
 
 
 @dataclass(slots=True)
@@ -28,30 +26,6 @@ class _RecordingSink:
 
     async def emit(self, event: ReplayEvent, *, fixture_internal_id: int) -> None:
         self.emitted.append((event.kind, fixture_internal_id))
-
-
-@dataclass(slots=True)
-class _RecordingTickWriter:
-    inserts: list[dict[str, object]] = field(default_factory=list)
-
-    async def insert(
-        self,
-        *,
-        player_id: int,
-        ts: datetime,
-        fixture_id: int | None,
-        current_price: float,
-        performance_rating: float,
-    ) -> None:
-        self.inserts.append(
-            {
-                "player_id": player_id,
-                "ts": ts,
-                "fixture_id": fixture_id,
-                "current_price": current_price,
-                "performance_rating": performance_rating,
-            }
-        )
 
 
 def _event(kind: ReplayEventKind, *, minute: int, extra: int | None = None) -> ReplayEvent:
@@ -88,54 +62,4 @@ async def test_sink_publish_failure_does_not_break_emit() -> None:
     await sink.emit(_event(ReplayEventKind.MATCH_EVENT, minute=10), fixture_internal_id=65)  # must not raise
 
     assert inner.emitted == [(ReplayEventKind.MATCH_EVENT, 65)]
-    assert pub.log == []
-
-
-# --- NatsPublishingTickWriter ---------------------------------------------
-
-
-@pytest.mark.anyio
-async def test_tick_writer_forwards_then_publishes() -> None:
-    inner = _RecordingTickWriter()
-    pub = _RecordingPublisher()
-    writer = NatsPublishingTickWriter(inner=inner, publisher=pub)
-    ts = datetime(2022, 12, 18, 15, 30, 4, tzinfo=UTC)
-
-    await writer.insert(
-        player_id=777,
-        ts=ts,
-        fixture_id=65,
-        current_price=15.5,
-        performance_rating=7.75,
-    )
-
-    assert len(inner.inserts) == 1
-    assert inner.inserts[0]["player_id"] == 777
-    assert len(pub.log) == 1
-    subject, payload = pub.log[0]
-    assert subject == "fundxi.player_price_tick.777"
-    assert json.loads(payload) == {
-        "kind": "player_price_tick",
-        "player_id": 777,
-        "fixture_id": 65,
-        "current_price": 15.5,
-    }
-
-
-@pytest.mark.anyio
-async def test_tick_writer_publish_failure_does_not_break_insert() -> None:
-    inner = _RecordingTickWriter()
-    pub = _RecordingPublisher(fail=True)
-    writer = NatsPublishingTickWriter(inner=inner, publisher=pub)
-    ts = datetime(2022, 12, 18, 15, 0, 0, tzinfo=UTC)
-
-    await writer.insert(
-        player_id=1,
-        ts=ts,
-        fixture_id=65,
-        current_price=10.0,
-        performance_rating=6.5,
-    )  # must not raise
-
-    assert len(inner.inserts) == 1
     assert pub.log == []

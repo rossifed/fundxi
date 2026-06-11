@@ -1,17 +1,14 @@
 """Shared writer for ``valuation.player_price_tick``.
 
 ``price_tick_row`` is the single source for the tick COLUMN SET — every
-producer builds its rows through it: the live pollers, the synthetic minute
-sink, the rehearsal CLI, the simulation ``PlayerPriceTickWriter`` adapter, the
-replay baseline seeding (``upsert_price_ticks``), and the offline ``wc_replay``
-bulk insert. So a column change is a one-line edit here, not a six-site sweep.
+producer builds its rows through it: the live Sportmonks in-play poller, the
+synthetic minute sink, and the replay baseline seeding
+(``upsert_price_ticks``). So a column change is a one-line edit here, not a
+multi-site sweep.
 
 The UPSERT idempotency — ``ON CONFLICT (player_id, ts) DO NOTHING``, "first
 writer for a (player_id, ts) wins" — is shared by ``upsert_price_tick`` (one
-row) and ``upsert_price_ticks`` (batch). The one deliberate exception is
-``wc_replay``: it dedups in memory and bulk-inserts into a freshly truncated
-table, so it has no conflicts to resolve and chunks a plain insert instead —
-but it still builds its rows via ``price_tick_row``.
+row) and ``upsert_price_ticks`` (batch).
 
 DDD role: shared persistence helper (driven side). Pure SQL emission, no
 business logic — callers supply already-computed values.

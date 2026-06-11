@@ -6,7 +6,6 @@ layer depends on these abstractions; concrete implementations live in
 """
 
 from collections.abc import Awaitable, Callable
-from datetime import datetime
 from typing import Protocol
 
 from src.simulation.domain.replay_event import ReplayEvent
@@ -77,24 +76,6 @@ class LiveDataSink(Protocol):
     """
 
     async def emit(self, event: ReplayEvent, *, fixture_internal_id: int) -> None: ...
-
-
-class PlayerPriceTickWriter(Protocol):
-    """Port for appending one row to ``valuation.player_price_tick``.
-
-    The simulation invokes this once per impactful event so the live
-    store reflects price moves in real time.
-    """
-
-    async def insert(
-        self,
-        *,
-        player_id: int,
-        ts: datetime,
-        fixture_id: int | None,
-        current_price: float,
-        performance_rating: float,
-    ) -> None: ...
 
 
 class ReplayController(Protocol):

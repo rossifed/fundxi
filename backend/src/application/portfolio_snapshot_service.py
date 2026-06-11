@@ -9,9 +9,9 @@ DDD role: Application Service. Orchestrates the recomputation of a
 ``PortfolioSnapshot`` for every portfolio that holds at least one of
 the players whose price just ticked.
 
-Wired into the price-tick emission path (cf. ``PriceTickEmittingSink``):
-after a batch of ticks lands, the sink hands the set of affected
-player_ids + the batch timestamp to ``materialize_for_player_ticks``.
+Wired into the price-tick emission path: after a batch of ticks lands,
+the pricing sink hands the set of affected player_ids + the batch
+timestamp to ``materialize_for_player_ticks``.
 The service:
 
 1. Finds the *dirty* portfolios = those holding any of the ticked

@@ -1,7 +1,7 @@
 """Replay pricing sink — per-minute synthetic rating → canonical kernel.
 
 DDD role: Adapter (driven), decorates the inner ``LiveDataSink``.
-Replaces the events-only ``PriceTickEmittingSink`` on the replay path.
+The sole price-tick producer on the replay path.
 
 WC2022 has no real per-minute rating (only end-state pulls exist), so a
 replay cannot drive Model A from real data. This sink fabricates a
@@ -60,7 +60,7 @@ class SyntheticMinutePricingSink:
         self._rng = Random(self.seed)
 
     def _roster(self) -> list[int]:
-        return [pid for players in self.rosters.by_team.values() for pid, _pos in players]
+        return [pid for players in self.rosters.by_team.values() for pid, _ in players]
 
     async def emit(self, event: ReplayEvent, *, fixture_internal_id: int) -> None:
         # Project the event first (narrative plays), then react.
