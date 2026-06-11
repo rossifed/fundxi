@@ -45,7 +45,7 @@ from src.infrastructure.db.repositories.portfolio_snapshot_adapters import SqlAl
 from src.infrastructure.db.repositories.raw_sportmonks_event import SqlAlchemyRawSportmonksEventRepository
 from src.infrastructure.db.repositories.team_match_stat import SqlAlchemyTeamMatchStatRepository
 from src.infrastructure.sportmonks.client import SportmonksClient, SportmonksError
-from src.infrastructure.sportmonks.projectors.fixture import project_fixture
+from src.infrastructure.sportmonks.projectors.fixture import penalty_shootout_winner, project_fixture
 from src.infrastructure.sportmonks.projectors.lineup import project_lineup
 from src.infrastructure.sportmonks.projectors.match_comment import project_match_comment
 from src.infrastructure.sportmonks.projectors.match_event import project_match_event
@@ -59,6 +59,7 @@ from src.ingest.domain.ports import NotificationPublisher
 from src.ingest.infrastructure.sportmonks_id_maps import SportmonksIdMaps
 from src.valuation.pricing import price_from_carried
 from src.valuation.snapshot import build_snapshot
+from src.valuation.tournament import Side
 
 log = structlog.get_logger(__name__)
 
@@ -180,7 +181,9 @@ class SportmonksInplayPoller:
         )
         # Full-time settlement runs AFTER live pricing so it reads each player's
         # final in-match price and applies the result event on top of it.
-        settlement_notifs = await self._settle_if_finished(session=session, fixture=fixture)
+        settlement_notifs = await self._settle_if_finished(
+            session=session, fixture=fixture, scores_payload=data.get("scores")
+        )
         team_stats_count = await self._project_team_match_stats(
             session=session, stats_payload=_array(data.get("statistics"))
         )
@@ -258,14 +261,24 @@ class SportmonksInplayPoller:
         await SqlAlchemyFixtureRepository(session).upsert_by_sportmonks_id(fixture, sportmonks_id=smk_id)
         return fixture
 
-    async def _settle_if_finished(self, *, session: AsyncSession, fixture: Fixture | None) -> list[tuple[str, bytes]]:
+    async def _settle_if_finished(
+        self, *, session: AsyncSession, fixture: Fixture | None, scores_payload: Any
+    ) -> list[tuple[str, bytes]]:
         """At the full-time transition, settle the fixture's result ONCE: bank
         the collective win / qualification / elimination impact on top of each
-        player's last live price. No-op until FT, and only the first time."""
+        player's last live price. No-op until FT, and only the first time.
+
+        For a knockout decided on penalties (level CURRENT score), the winner is
+        read from the PENALTY_SHOOTOUT block and passed as ``winner_override`` so
+        the eliminated side still takes the -40% drop."""
         if self._settled or fixture is None or fixture.status is not FixtureStatus.FINISHED:
             return []
         ts = datetime.now(UTC)
-        notifications = await settle_fixture(session, fixture_id=self.fixture_internal_id, ts=ts)
+        pen_winner = penalty_shootout_winner(scores_payload)
+        winner_override = Side(pen_winner) if pen_winner is not None else None
+        notifications = await settle_fixture(
+            session, fixture_id=self.fixture_internal_id, ts=ts, winner_override=winner_override
+        )
         notifications += await apply_suspensions(session, fixture_id=self.fixture_internal_id, ts=ts)
         notifications += await apply_did_not_play(session, fixture_id=self.fixture_internal_id, ts=ts)
         # Mark settled even when nothing was produced (knockout winner

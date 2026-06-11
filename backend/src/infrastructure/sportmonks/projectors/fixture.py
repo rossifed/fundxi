@@ -51,17 +51,16 @@ def _project_status(state_payload: object) -> FixtureStatus:
     return FixtureStatus.UPCOMING
 
 
-def _final_score(scores_payload: object, location: str) -> int | None:
-    """Pick the final ('CURRENT') score for the home/away participant.
-    Sportmonks emits multiple score blocks per fixture (1ST_HALF, 2ND_HALF,
-    CURRENT). CURRENT is the running total, which equals full-time once the
-    fixture is finished."""
+def _score_for(scores_payload: object, location: str, *, description: str) -> int | None:
+    """Pick a score block's goals for the home/away participant. Sportmonks
+    emits several blocks per fixture (1ST_HALF, 2ND_HALF, ET, CURRENT,
+    PENALTY_SHOOTOUT); ``description`` selects which one."""
     if not isinstance(scores_payload, list):
         return None
     for entry in scores_payload:
         if not isinstance(entry, dict):
             continue
-        if entry.get("description") != "CURRENT":
+        if entry.get("description") != description:
             continue
         score = entry.get("score")
         if not isinstance(score, dict):
@@ -71,6 +70,29 @@ def _final_score(scores_payload: object, location: str) -> int | None:
         goals = score.get("goals")
         if isinstance(goals, int):
             return goals
+    return None
+
+
+def _final_score(scores_payload: object, location: str) -> int | None:
+    """The full-time ('CURRENT') score for a participant — regulation + ET, but
+    NOT the penalty shootout (that is a separate block)."""
+    return _score_for(scores_payload, location, description="CURRENT")
+
+
+def penalty_shootout_winner(scores_payload: object) -> str | None:
+    """``"home"`` / ``"away"`` for a knockout decided on penalties, or ``None``
+    when there was no shootout (or it is undecided). Reads the
+    ``PENALTY_SHOOTOUT`` score block — the side with more converted penalties
+    won. This is what lets a team eliminated on penalties take the -40% drop
+    that the level CURRENT score alone cannot reveal."""
+    home = _score_for(scores_payload, "home", description="PENALTY_SHOOTOUT")
+    away = _score_for(scores_payload, "away", description="PENALTY_SHOOTOUT")
+    if home is None or away is None:
+        return None
+    if home > away:
+        return "home"
+    if away > home:
+        return "away"
     return None
 
 
