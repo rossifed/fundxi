@@ -28,8 +28,6 @@ export function PlayerSheetHeader({
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
         <PlayerAvatar
           image_path={player.image_path}
-          jersey_number={player.jersey_number}
-          team_color={team.color}
           size={72}
           radius={10}
           fit="contain"

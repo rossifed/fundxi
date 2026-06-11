@@ -10,6 +10,7 @@ import { team_stats_api } from "@fundxi/core/api/team_stats_api";
 import { teams_api } from "@fundxi/core/api/teams_api";
 import { valuations_api } from "@fundxi/core/api/valuations_api";
 import type { TeamMatchStats } from "@fundxi/core/domain/match/team_match_stats";
+import { PlayerAvatar } from "@/ui/components/PlayerAvatar";
 import { TeamLink } from "@/ui/components/TeamLink";
 import { TickValue } from "@/ui/components/TickValue";
 import { useFixtureLiveVersion, useLiveRefetch, usePricesLiveVersion } from "@/ui/hooks/use_live_updates";
@@ -848,38 +849,11 @@ function RosterCard({
         opacity: sub ? 0.62 : 1,
       }}
     >
-      {/* Avatar with jersey badge overlay */}
+      {/* Avatar with jersey badge overlay. The photo/fallback decision is owned
+          by PlayerAvatar (silhouette when missing/broken); the number stays a
+          separate corner badge below. */}
       <div style={{ position: "relative", width: 40, height: 40, flexShrink: 0 }}>
-        <div
-          style={{
-            position: "relative",
-            width: 40,
-            height: 40,
-            borderRadius: "50%",
-            overflow: "hidden",
-            background: "rgba(255,255,255,.06)",
-            border: "1px solid rgba(255,255,255,.08)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          {/* Jersey number sits behind; the photo covers it and, if it fails to
-              load, hides itself to reveal the number — no broken-image icon. */}
-          <span className="mono" style={{ fontSize: 12, fontWeight: 800, color: "rgba(255,255,255,.55)" }}>
-            {p.jersey_number}
-          </span>
-          {photo && (
-            <img
-              src={photo}
-              alt=""
-              onError={e => {
-                e.currentTarget.style.display = "none";
-              }}
-              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
-            />
-          )}
-        </div>
+        <PlayerAvatar image_path={photo} size={40} radius={20} fit="cover" alt="" />
         <span
           className="mono"
           style={{

@@ -10,6 +10,7 @@ import type { Match, MatchPlayer } from "@fundxi/core/domain/match/match";
 import { compute_pitch_positions, type PitchPosition } from "@fundxi/core/domain/match/formation_layout";
 import { players_api } from "@fundxi/core/api/players_api";
 import { teams_api } from "@fundxi/core/api/teams_api";
+import { PlayerAvatar } from "@/ui/components/PlayerAvatar";
 import { fmt_eur_m, fmt_signed_pct } from "@/ui/helpers/format";
 import { count_match_events, MatchEventBadge, SubBadge, type MatchEventCounts } from "./event_badge";
 import { apply_subs, type SubInfo } from "@fundxi/core/domain/match/substitutions";
@@ -498,7 +499,6 @@ function PlayerToken({
             height: 54,
             borderRadius: "50%",
             overflow: "hidden",
-            background: photo ? "transparent" : color,
             border: `2px solid ${color}`,
             boxShadow: "0 4px 10px rgba(0,0,0,.75), 0 0 0 1px rgba(0,0,0,.4)",
             display: "flex",
@@ -506,23 +506,16 @@ function PlayerToken({
             justifyContent: "center",
           }}
         >
-          {/* Number behind; the photo covers it. If the photo fails to load it
-              hides itself and paints the team color back in, so we get the
-              number-on-color jersey look instead of a broken image. */}
-          <span className="mono" style={{ fontSize: 20, fontWeight: 800, color: "#fff" }}>
-            {p.jersey_number}
-          </span>
-          {photo && (
-            <img
-              src={photo}
-              alt=""
-              onError={e => {
-                e.currentTarget.style.display = "none";
-                if (e.currentTarget.parentElement) e.currentTarget.parentElement.style.background = color;
-              }}
-              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-            />
-          )}
+          {/* Photo/fallback decision owned by PlayerAvatar (empty silhouette on
+              missing/broken). The team-color ring carries the identity. */}
+          <PlayerAvatar
+            image_path={photo}
+            size={54}
+            radius={27}
+            fit="cover"
+            alt=""
+            style={{ border: "none", background: "transparent" }}
+          />
         </span>
         {/* Jersey corner badge — only when we have a photo, otherwise it
             duplicates the number already shown in the avatar center. */}

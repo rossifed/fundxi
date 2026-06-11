@@ -420,8 +420,6 @@ function MoversColumn({
           >
             <PlayerAvatar
               image_path={p.image_path}
-              jersey_number={p.jersey_number}
-              team_color={team?.color ?? "#666"}
               size={34}
               radius={7}
               fit="contain"
