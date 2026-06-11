@@ -57,7 +57,7 @@ export type Palette = {
 const dark: Palette = {
   actionBuy: "#5CF26C",
   actionSell: "#F41258",
-  positive: "#5CF26C", // aligned → green canonical (was #00805d)
+  positive: "#10B981", // TEST: positive = emerald (was #5CF26C green; orig #00805d)
   negative: "#F41258", // aligned → red canonical (was #E41541)
   cardYellow: "#E0A800",
   chartPrimary: "#2F6BFF", // aligned → blue canonical (was #183C82)

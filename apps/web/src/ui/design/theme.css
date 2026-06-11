@@ -34,7 +34,7 @@
   --color-action-sell: #F41258;
 
   /* Positive / negative semantic colors (P&L, percentages, winners). */
-  --color-positive: #5CF26C; /* aligned → green canonical (was #00805d) */
+  --color-positive: #10B981; /* TEST: positive = emerald (was #5CF26C green; orig #00805d) */
   --color-negative: #F41258; /* aligned → red canonical (was #E41541) */
 
   /* Discipline — yellow-card booking colour (red card reuses --color-negative). */

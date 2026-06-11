@@ -7,7 +7,7 @@ describe("palette", () => {
     const dark = themes.dark;
     expect(dark.actionBuy).toBe("#5CF26C");
     expect(dark.actionSell).toBe("#F41258");
-    expect(dark.positive).toBe("#5CF26C");
+    expect(dark.positive).toBe("#10B981");
     expect(dark.negative).toBe("#F41258");
     expect(dark.bg).toBe("#020406");
   });
@@ -32,7 +32,7 @@ describe("palette", () => {
     const dark_block = palette_to_css_block("dark", themes.dark);
     expect(dark_block).toContain(`:root,\n[data-theme="dark"]`);
     expect(dark_block).toContain("--color-action-buy: #5CF26C;");
-    expect(dark_block).toContain("--color-positive: #5CF26C;");
+    expect(dark_block).toContain("--color-positive: #10B981;");
     expect(dark_block).toContain("--color-tooltip-bg: #0d0d0f;");
     expect(dark_block).toContain("--color-grad-1: #2F6BFF;");
 
