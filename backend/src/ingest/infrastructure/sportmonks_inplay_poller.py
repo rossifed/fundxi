@@ -99,11 +99,20 @@ class SportmonksInplayPoller:
     publisher: NotificationPublisher
     session_factory: Callable[[], AsyncSession]
     id_maps: SportmonksIdMaps
+    # Stabilization window after full-time before we settle the result. Sportmonks
+    # finalizes late events (a 90'+ red) and the final ratings for up to ~10 min
+    # after the whistle; settling on the FIRST finished poll banks a premature,
+    # incomplete result (e.g. misses a stoppage-time sending-off → no suspension).
+    # We wait this long, still ticking live so the final rating is captured, then
+    # settle once on stable data. Overridable per deployment.
+    settle_grace_seconds: float = 420.0
     # Set once the fixture's full-time result has been settled, so the result
     # event (win / qualif / elimination) is applied exactly once even though the
     # poller keeps ticking through the post-FT window. The DB guard in
     # ``settle_fixture`` backs this up across a poller restart.
     _settled: bool = False
+    # When the fixture was FIRST observed FINISHED — anchors the grace window.
+    _finished_since: datetime | None = None
     # Set once the starting XI has been judged for drops (after the first
     # complete-XI poll, or once the match is no longer upcoming): stops the
     # pre-kickoff lineup-drop check from recomputing every poll.
@@ -122,7 +131,35 @@ class SportmonksInplayPoller:
                 await asyncio.sleep(self.poll_seconds)
         except asyncio.CancelledError:
             log.info("ingest.inplay.stop", fixture_internal_id=self.fixture_internal_id)
+            await self._settle_on_shutdown()
             raise
+
+    async def _settle_on_shutdown(self) -> None:
+        """Last-chance settlement when the poller is cancelled after full-time but
+        before the grace window elapsed — without it that match would never settle
+        (no more polls come). Best-effort: any failure is logged, never masks the
+        cancellation (a re-cancellation mid-flight propagates as CancelledError)."""
+        if self._settled:
+            return
+        try:
+            async with self.session_factory() as session:
+                fixture = await SqlAlchemyFixtureRepository(session).get_by_id(self.fixture_internal_id)
+                if fixture is None or fixture.status is not FixtureStatus.FINISHED:
+                    return
+                notifications = await self._run_settlement(
+                    session=session,
+                    scores_payload=None,
+                    ts=datetime.now(UTC),
+                    coefficients=current_coefficients(),
+                )
+                await commit_then_publish(session=session, publisher=self.publisher, notifications=notifications)
+                await self._materialize_value_snapshots(_ticked_player_ids_from(notifications))
+        except Exception as exc:
+            log.warning(
+                "ingest.inplay.shutdown_settle_failed",
+                fixture_internal_id=self.fixture_internal_id,
+                error=str(exc),
+            )
 
     async def poll_once(self) -> None:
         endpoint = f"/fixtures/{self.fixture_sportmonks_id}"
@@ -184,8 +221,17 @@ class SportmonksInplayPoller:
         lineup_drop_notifs = await self._apply_lineup_drops_if_published(
             session=session, fixture=fixture, coefficients=coefficients
         )
-        price_notifs = await self._price_players(
-            session=session, curr_stats=curr_stats, prev_by_player=prev_by_player, coefficients=coefficients
+        # Live pricing STOPS once the fixture is settled: otherwise a post-FT poll
+        # would recompute base*(1+liveDelta) from the carried-in price and
+        # overwrite the settlement ticks (win bonus, suspension, did-not-play),
+        # silently erasing the whole result. Before settlement it keeps running so
+        # the final rating is captured.
+        price_notifs = (
+            []
+            if self._settled
+            else await self._price_players(
+                session=session, curr_stats=curr_stats, prev_by_player=prev_by_player, coefficients=coefficients
+            )
         )
         # Full-time settlement runs AFTER live pricing so it reads each player's
         # final in-match price and applies the result event on top of it.
@@ -279,16 +325,41 @@ class SportmonksInplayPoller:
         scores_payload: Any,
         coefficients: PricingCoefficients,
     ) -> list[tuple[str, bytes]]:
-        """At the full-time transition, settle the fixture's result ONCE: bank
-        the collective win / qualification / elimination impact on top of each
-        player's last live price. No-op until FT, and only the first time.
-
-        For a knockout decided on penalties (level CURRENT score), the winner is
-        read from the PENALTY_SHOOTOUT block and passed as ``winner_override`` so
-        the eliminated side still takes the -40% drop."""
+        """At full-time, settle the fixture's result ONCE — but only after the
+        ``settle_grace_seconds`` stabilization window (anchored on the first
+        finished poll) has elapsed, so late events and final ratings have landed.
+        No-op until FT, during the window, and after the one settlement."""
         if self._settled or fixture is None or fixture.status is not FixtureStatus.FINISHED:
             return []
-        ts = datetime.now(UTC)
+        now = datetime.now(UTC)
+        if self._finished_since is None:
+            self._finished_since = now
+        if (now - self._finished_since).total_seconds() < self.settle_grace_seconds:
+            # Inside the post-FT stabilization window: keep ticking live (the
+            # caller still prices), wait for late events / final ratings before
+            # banking the result. Catches a 90'+ red card the first finished poll
+            # would have missed.
+            return []
+        return await self._run_settlement(
+            session=session, scores_payload=scores_payload, ts=now, coefficients=coefficients
+        )
+
+    async def _run_settlement(
+        self,
+        *,
+        session: AsyncSession,
+        scores_payload: Any,
+        ts: datetime,
+        coefficients: PricingCoefficients,
+    ) -> list[tuple[str, bytes]]:
+        """Bank the fixture's result ONCE: collective result event + suspensions +
+        did-not-play penalties. Each underlying use case is idempotent (its own DB
+        guard), so this is safe from both the grace path and the shutdown fallback.
+
+        For a knockout decided on penalties (level CURRENT score), the winner is
+        read from the PENALTY_SHOOTOUT block (``scores_payload``) and passed as
+        ``winner_override`` so the eliminated side still takes the -40% drop.
+        Sets ``_settled`` so live pricing stops overwriting these ticks."""
         pen_winner = penalty_shootout_winner(scores_payload)
         winner_override = Side(pen_winner) if pen_winner is not None else None
         notifications = await settle_fixture(

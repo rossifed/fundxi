@@ -54,12 +54,16 @@ def _clamp(value: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, value))
 
 
-def volatility(base_value: float) -> float:
+def volatility(base_value: float, coefficients: PricingCoefficients = DEFAULT_COEFFICIENTS) -> float:
     """Small caps move harder than blue chips (spec §4.2):
-    ``(50 / BaseValue) ** 0.4``. Guards a non-positive base."""
+    ``(50 / max(BaseValue, vol_base_floor)) ** 0.4``. The floor caps the
+    multiplier for micro-caps (deep-squad players at 0.25-0.8 M€): without it
+    they get a 5-8x multiplier (the formula was calibrated for a ~10 M€ smallest
+    base), so a mediocre rating outmoves a star and one bad game swings -44%.
+    Guards a non-positive base."""
     if base_value <= 0.0:
         return 1.0
-    return (50.0 / base_value) ** 0.4
+    return (50.0 / max(base_value, coefficients.vol_base_floor)) ** 0.4
 
 
 def rating_level(rating: float | None, coefficients: PricingCoefficients = DEFAULT_COEFFICIENTS) -> float:
@@ -96,7 +100,10 @@ def live_delta(
         snapshot.prev_stats, snapshot.curr_stats, coefficients
     )
     bounded = _clamp(core, coefficients.live_floor_frac, coefficients.live_ceil_frac)
-    return bounded * volatility(base_value) * pressure_mod(snapshot.pressure_factor, coefficients)
+    scaled = bounded * volatility(base_value, coefficients) * pressure_mod(snapshot.pressure_factor, coefficients)
+    # Hard, symmetric bound on the FINAL move: even a high-volatility small cap
+    # can't swing more than +/-live_abs_cap_frac in one match.
+    return _clamp(scaled, -coefficients.live_abs_cap_frac, coefficients.live_abs_cap_frac)
 
 
 def multiplier(

@@ -26,9 +26,11 @@ min_delta_pct_per_poll = -2.0
 # === Model A: rating-driven live multiplier ===
 rating_baseline = 6.0
 k_rating = 0.04                 # +4% of price per rating point above baseline
-live_floor_frac = -0.30         # one match can't pull a player below -30%
-live_ceil_frac = 0.40           # ...nor above +40%
+live_floor_frac = -0.30         # one match can't pull a player below -30% (pre-volatility core clamp)
+live_ceil_frac = 0.40           # ...nor above +40% (pre-volatility core clamp)
 multiplier_floor = 0.05         # price stays strictly positive
+vol_base_floor = 10.0           # volatility uses max(base, this): caps micro-cap explosion (spec §4.2 floor)
+live_abs_cap_frac = 0.30        # hard +/-30% bound on the final live move (post-volatility), any base
 
 # === Tournament events (persistent; multiplicative on current price, NOT vol-scaled) ===
 # A result is a collective fate hitting the whole squad equally.

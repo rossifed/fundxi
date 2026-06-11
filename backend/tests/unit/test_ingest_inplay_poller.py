@@ -17,17 +17,21 @@ import json
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.domain.match.fixture import Fixture, FixtureStatus
 from src.infrastructure.sportmonks.client import SportmonksError
+from src.ingest.infrastructure import sportmonks_inplay_poller as poller_mod
 from src.ingest.infrastructure.sportmonks_id_maps import SportmonksIdMaps
 from src.ingest.infrastructure.sportmonks_inplay_poller import (
     SportmonksInplayPoller,
     _ticked_player_ids_from,
 )
+from src.valuation.coefficients import DEFAULT_COEFFICIENTS
 
 # --- fakes ----------------------------------------------------------------
 
@@ -479,3 +483,168 @@ async def test_malformed_event_payload_skipped_others_proceed() -> None:
     subject, payload = publisher.log[0]
     assert subject == "fundxi.match_event.42"
     assert json.loads(payload)["count"] == 1
+
+
+# --- settlement timing + live-pricing gate (Bug A/B regression) -----------
+#
+# Two coupled fixes for the Mexico-RSA opener bugs:
+#   A) post-FT live polls were overwriting the settlement ticks (win bonus,
+#      suspension, did-not-play) → all results silently erased for any player
+#      who took the pitch. Fix: stop live pricing once settled.
+#   B) settlement fired on the FIRST finished poll, before a 90'+ red card and
+#      the final ratings had landed → premature, incomplete result. Fix: defer
+#      settlement by a stabilization grace window.
+
+
+def _settlement_poller(**overrides: Any) -> SportmonksInplayPoller:
+    kwargs: dict[str, Any] = {
+        "fixture_internal_id": 42,
+        "fixture_sportmonks_id": 1000,
+        "poll_seconds": 10.0,
+        "client": _StubClient(response=_envelope_with()),
+        "publisher": _RecordingPublisher(),
+        "session_factory": _fake_session_factory(write_log=[]),
+        "id_maps": _id_maps(),
+    }
+    kwargs.update(overrides)
+    return SportmonksInplayPoller(**kwargs)
+
+
+def _finished_fixture() -> Fixture:
+    return Fixture(
+        id=42,
+        home_team_id="FRA",
+        away_team_id="ARG",
+        status=FixtureStatus.FINISHED,
+        group="D",
+        home_score=1,
+        away_score=0,
+    )
+
+
+@pytest.mark.anyio
+async def test_settled_poller_does_not_run_live_pricing(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Bug A: once settled, no more live (engine) ticks — they would overwrite the
+    # settlement and erase the result.
+    priced = AsyncMock(return_value=[])
+    monkeypatch.setattr(SportmonksInplayPoller, "_price_players", priced)  # slots → patch the class
+    poller = _settlement_poller()
+    poller._settled = True
+
+    async with poller.session_factory() as session:
+        await poller._project_and_persist(session=session, endpoint="/x", params={}, envelope=_envelope_with())
+
+    priced.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_unsettled_poller_runs_live_pricing(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Mirror of the above: before settlement, live pricing DOES run (so the final
+    # rating is still captured during the grace window).
+    priced = AsyncMock(return_value=[])
+    monkeypatch.setattr(SportmonksInplayPoller, "_price_players", priced)  # slots → patch the class
+    poller = _settlement_poller()
+    poller._settled = False
+
+    async with poller.session_factory() as session:
+        await poller._project_and_persist(session=session, endpoint="/x", params={}, envelope=_envelope_with())
+
+    priced.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_first_finished_poll_defers_settlement(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Bug B: the first finished poll only arms the grace window — it must NOT
+    # settle yet (a 90'+ red / final ratings may still be in flight).
+    settle = AsyncMock(return_value=[])
+    monkeypatch.setattr(poller_mod, "settle_fixture", settle)
+    monkeypatch.setattr(poller_mod, "apply_suspensions", AsyncMock(return_value=[]))
+    monkeypatch.setattr(poller_mod, "apply_did_not_play", AsyncMock(return_value=[]))
+    poller = _settlement_poller()
+
+    result = await poller._settle_if_finished(
+        session=MagicMock(), fixture=_finished_fixture(), scores_payload=None, coefficients=DEFAULT_COEFFICIENTS
+    )
+
+    assert result == []
+    settle.assert_not_awaited()
+    assert poller._settled is False
+    assert poller._finished_since is not None  # window is now armed
+
+
+@pytest.mark.anyio
+async def test_settlement_fires_after_grace_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    settle = AsyncMock(return_value=[])
+    suspensions = AsyncMock(return_value=[])
+    did_not_play = AsyncMock(return_value=[])
+    monkeypatch.setattr(poller_mod, "settle_fixture", settle)
+    monkeypatch.setattr(poller_mod, "apply_suspensions", suspensions)
+    monkeypatch.setattr(poller_mod, "apply_did_not_play", did_not_play)
+    poller = _settlement_poller()
+    # Pretend full-time was observed longer ago than the grace window.
+    poller._finished_since = datetime.now(UTC) - timedelta(seconds=poller.settle_grace_seconds + 1)
+
+    await poller._settle_if_finished(
+        session=MagicMock(), fixture=_finished_fixture(), scores_payload=None, coefficients=DEFAULT_COEFFICIENTS
+    )
+
+    settle.assert_awaited_once()
+    suspensions.assert_awaited_once()
+    did_not_play.assert_awaited_once()
+    assert poller._settled is True
+
+
+@pytest.mark.anyio
+async def test_settled_fixture_never_resettles(monkeypatch: pytest.MonkeyPatch) -> None:
+    settle = AsyncMock(return_value=[])
+    monkeypatch.setattr(poller_mod, "settle_fixture", settle)
+    monkeypatch.setattr(poller_mod, "apply_suspensions", AsyncMock(return_value=[]))
+    monkeypatch.setattr(poller_mod, "apply_did_not_play", AsyncMock(return_value=[]))
+    poller = _settlement_poller()
+    poller._settled = True
+    poller._finished_since = datetime.now(UTC) - timedelta(seconds=poller.settle_grace_seconds + 1)
+
+    result = await poller._settle_if_finished(
+        session=MagicMock(), fixture=_finished_fixture(), scores_payload=None, coefficients=DEFAULT_COEFFICIENTS
+    )
+
+    assert result == []
+    settle.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_shutdown_settles_when_finished_but_unsettled(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Safety net: poller cancelled after FT but before the grace elapsed must
+    # still settle once (no more polls will come).
+    class _FakeRepo:
+        def __init__(self, fixture: Fixture) -> None:
+            self._fixture = fixture
+
+        def __call__(self, _session: Any) -> "_FakeRepo":
+            return self
+
+        async def get_by_id(self, _fixture_id: int) -> Fixture:
+            return self._fixture
+
+    monkeypatch.setattr(poller_mod, "SqlAlchemyFixtureRepository", _FakeRepo(_finished_fixture()))
+    monkeypatch.setattr(poller_mod, "commit_then_publish", AsyncMock())
+    run_settlement = AsyncMock(return_value=[])
+    monkeypatch.setattr(SportmonksInplayPoller, "_run_settlement", run_settlement)  # slots → patch the class
+    monkeypatch.setattr(SportmonksInplayPoller, "_materialize_value_snapshots", AsyncMock())
+    poller = _settlement_poller()
+
+    await poller._settle_on_shutdown()
+
+    run_settlement.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_shutdown_noop_when_already_settled(monkeypatch: pytest.MonkeyPatch) -> None:
+    run_settlement = AsyncMock(return_value=[])
+    monkeypatch.setattr(SportmonksInplayPoller, "_run_settlement", run_settlement)  # slots → patch the class
+    poller = _settlement_poller()
+    poller._settled = True
+
+    await poller._settle_on_shutdown()
+
+    run_settlement.assert_not_awaited()

@@ -19,6 +19,7 @@ from src.valuation.pricing import (
     rating_level,
     settle,
     tournament_delta_from,
+    volatility,
 )
 from src.valuation.strategies.layered_v1 import StatSnapshot
 
@@ -120,13 +121,47 @@ def test_pressure_mod_clamped(p: float | None, expected_ld: float) -> None:
     assert live_delta(_snap(8.0, pressure=p), BASE) == pytest.approx(expected_ld)
 
 
-# 6. Bounds — spec floor = -0.30, ceil = +0.40 (literal, NOT from C).
-# Extreme rating ⇒ should clamp BEFORE volatility/pressure scaling.
+# 6. Bounds — pre-volatility core clamp (floor -0.30, ceil +0.40) AND the
+# post-volatility hard cap (+/-0.30). At BASE=50, vol=1 so the post cap binds
+# the +0.40 core down to +0.30; the -0.30 core is already at the cap.
 def test_live_delta_bounded() -> None:
-    # rating 50 → would be (50-6)*0.04 = 1.76, clamped to +0.40; vol(50)=1.
-    assert live_delta(_snap(50.0), BASE) == pytest.approx(0.40)
-    # rating -50 → would be -2.24, clamped to -0.30; vol(50)=1.
+    # rating 50 → core 1.76 → core-clamp +0.40 → vol(50)=1 → +0.40 → cap +0.30.
+    assert live_delta(_snap(50.0), BASE) == pytest.approx(0.30)
+    # rating -50 → core -2.24 → core-clamp -0.30 → vol(50)=1 → cap -0.30.
     assert live_delta(_snap(-50.0), BASE) == pytest.approx(-0.30)
+
+
+# 6b. Volatility base floor — micro-caps are priced as if their base were
+# ``vol_base_floor`` (10 M€), so the multiplier can't explode (spec §4.2 was
+# calibrated for a ~10 M€ smallest base). vol(10) = 5^0.4 ≈ 1.9037.
+@pytest.mark.parametrize("base", [0.25, 0.8, 5.0, 8.0, 10.0])
+def test_volatility_floored_below_threshold(base: float) -> None:
+    assert volatility(base) == pytest.approx(volatility(10.0))
+    assert volatility(base) == pytest.approx(5.0**0.4, rel=5e-4)
+
+
+def test_volatility_not_floored_above_threshold() -> None:
+    # A 20 M€ base is above the floor → unchanged formula, < the floored value.
+    assert volatility(20.0) == pytest.approx((50.0 / 20.0) ** 0.4, rel=5e-4)
+    assert volatility(20.0) < volatility(10.0)
+
+
+# 6c. Hard post-volatility cap — even a micro-cap with an extreme rating can't
+# swing more than +/-live_abs_cap_frac (0.30). Without the floor+cap a 0.25 M€
+# player at rating 10 would move ~+130%.
+def test_live_abs_cap_binds_micro_cap() -> None:
+    assert live_delta(_snap(10.0), 0.25) == pytest.approx(0.30)
+    assert live_delta(_snap(2.0), 0.25) == pytest.approx(-0.30)
+
+
+# 6d. Regression — the micro-cap merit inversion seen on the Mexico-RSA opener:
+# a clean-sheet keeper (rating 7.11, 6.5 M€) was outmoved by a conceding keeper
+# (6.72, 0.8 M€) purely because the cheaper base got a 5x volatility. With the
+# base floored, both are priced at vol(10), so the higher rating now moves more.
+def test_base_floor_fixes_merit_inversion() -> None:
+    clean_sheet_keeper = live_delta(_snap(7.11), 6.5)
+    conceding_keeper = live_delta(_snap(6.72), 0.8)
+    assert clean_sheet_keeper > conceding_keeper
 
 
 def test_multiplier_strictly_positive() -> None:

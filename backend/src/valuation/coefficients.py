@@ -37,8 +37,10 @@ class PricingCoefficients:
     min_delta_pct_per_poll: float = -2.0
 
     # --- Model A: rating-driven live multiplier ------------------------
-    # LiveDelta = clamp(rating_level + stat_bonus, live_floor, live_ceil)
-    #             * volatility(base) * pressure_mod
+    # LiveDelta = clamp(
+    #     clamp(rating_level + stat_bonus, live_floor, live_ceil)
+    #         * volatility(max(base, vol_base_floor)) * pressure_mod,
+    #     -live_abs_cap, +live_abs_cap)
     # rating_level(r) = (r - rating_baseline) * k_rating  — a LEVEL, not a
     # delta: recomputed from the CURRENT rating every poll, so the price
     # FALLS when the rating falls (reversible by construction). Frozen v1
@@ -49,6 +51,19 @@ class PricingCoefficients:
     live_floor_frac: float = -0.30  # one match can't pull a player below -30%
     live_ceil_frac: float = 0.40  # ...nor above +40%
     multiplier_floor: float = 0.05  # price stays strictly positive
+    # Volatility is `(50 / max(base, vol_base_floor)) ^ 0.4`. The floor caps how
+    # hard a small cap can move: without it a deep-squad player at 0.25-0.8 M€
+    # gets a 5-8x multiplier (calibrated for a ~10 M€ floor, the spec §4.2
+    # reference table's smallest entry), so a mediocre rating outmoves a star and
+    # a single bad game swings -44%. Flooring the base keeps the small-cap-moves-
+    # harder spirit within the calibrated range without the micro-cap explosion.
+    vol_base_floor: float = 10.0
+    # Hard, symmetric bound on the FINAL live move (after volatility + pressure):
+    # one match's rating-driven swing can't exceed +/-30% regardless of base.
+    # The live_floor/ceil above clamp the pre-volatility core; this clamps the
+    # post-volatility result — the belt-and-suspenders that keeps any base value
+    # realistic.
+    live_abs_cap_frac: float = 0.30
 
     # --- Tournament result events (persistent, settled at full-time) ----
     # Applied ONCE per fixture, MULTIPLICATIVELY on the player's current price
