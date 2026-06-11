@@ -29,6 +29,7 @@ import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.apply_did_not_play import apply_did_not_play
 from src.application.apply_lineup_drops import apply_lineup_drops
 from src.application.apply_suspensions import apply_suspensions
 from src.application.settle_fixture import settle_fixture
@@ -65,6 +66,24 @@ log = structlog.get_logger(__name__)
 # in v3, but listing them explicitly makes the contract self-documenting
 # and lets us add fields without ambiguity later.
 _INPLAY_INCLUDE = "state;participants;scores;events.type;comments;lineups.position;lineups.details;statistics.type"
+
+# Subject prefix every per-player price tick is published under (live, settlement,
+# suspension, lineup-drop — all share it). Used both to build the live ticks'
+# subjects and to recover the set of ticked players for the portfolio-value
+# snapshot at the end of a poll.
+_PRICE_TICK_SUBJECT_PREFIX = "fundxi.player_price_tick."
+
+
+def _ticked_player_ids_from(notifications: list[tuple[str, bytes]]) -> set[int]:
+    """The set of players whose price ticked this poll, recovered from the
+    price-tick notification subjects (``fundxi.player_price_tick.<player_id>``).
+    Pure — covers every tick source (live, settlement, suspension, lineup-drop)
+    since they all publish under the same prefix; ignores non-price subjects."""
+    return {
+        int(subject.rsplit(".", 1)[1])
+        for subject, _ in notifications
+        if subject.startswith(_PRICE_TICK_SUBJECT_PREFIX)
+    }
 
 
 @dataclass(slots=True)
@@ -192,6 +211,14 @@ class SportmonksInplayPoller:
 
         await commit_then_publish(session=session, publisher=self.publisher, notifications=notifications)
 
+        # Portfolio-value snapshot for every holder of a player whose price moved
+        # this poll. The ticked set is recovered from the price-tick notifications
+        # just published — live, settlement, suspension AND lineup-drop ticks all
+        # carry the same subject — so no source is missed. Runs AFTER the ticks
+        # are committed, in its own session, and never breaks the live feed (see
+        # the helper): the value history is a secondary, self-healing projection.
+        await self._materialize_value_snapshots(_ticked_player_ids_from(notifications))
+
         log.info(
             "ingest.inplay.tick",
             fixture_internal_id=self.fixture_internal_id,
@@ -240,8 +267,10 @@ class SportmonksInplayPoller:
         ts = datetime.now(UTC)
         notifications = await settle_fixture(session, fixture_id=self.fixture_internal_id, ts=ts)
         notifications += await apply_suspensions(session, fixture_id=self.fixture_internal_id, ts=ts)
+        notifications += await apply_did_not_play(session, fixture_id=self.fixture_internal_id, ts=ts)
         # Mark settled even when nothing was produced (knockout winner
-        # undetermined, group draw, no cards): a retry next poll would only re-log.
+        # undetermined, group draw, no cards, everyone featured): a retry next
+        # poll would only re-log.
         self._settled = True
         return notifications
 
@@ -411,7 +440,7 @@ class SportmonksInplayPoller:
             )
             notifications.append(
                 (
-                    f"fundxi.player_price_tick.{curr.player_id}",
+                    f"{_PRICE_TICK_SUBJECT_PREFIX}{curr.player_id}",
                     json.dumps(
                         {
                             "kind": "player_price_tick",
@@ -423,6 +452,39 @@ class SportmonksInplayPoller:
                 )
             )
         return notifications
+
+    async def _materialize_value_snapshots(self, ticked_player_ids: set[int]) -> None:
+        """Bucketed portfolio-value snapshot for holders of the ticked players.
+
+        Deliberately decoupled from the live tick path:
+        - runs in its OWN session, AFTER the ticks are committed, so it reads the
+          just-persisted prices and cannot roll back the tick write;
+        - NEVER propagates an error to the ingest loop — the value history is a
+          secondary projection, and a snapshot failure must not drop live prices.
+          The next poll re-materialises (idempotent per (portfolio, minute)).
+
+        ``ts`` is WALL-CLOCK now(): a portfolio's value history lives on the
+        user's real timeline, not the match clock."""
+        if not ticked_player_ids:
+            return
+        from src.application.portfolio_snapshot_service import PortfolioSnapshotService
+
+        try:
+            async with self.session_factory() as session:
+                await PortfolioSnapshotService.from_session(session).materialize_for_player_ticks(
+                    ticked_player_ids=ticked_player_ids,
+                    ts=datetime.now(UTC),
+                )
+                await session.commit()
+        except Exception as exc:
+            # Broad on purpose: a secondary projection must never break ingest;
+            # logged (not silently swallowed) so the failure stays visible.
+            log.warning(
+                "ingest.inplay.value_snapshot_failed",
+                fixture_internal_id=self.fixture_internal_id,
+                players=len(ticked_player_ids),
+                error=str(exc),
+            )
 
     async def _project_team_match_stats(self, *, session: AsyncSession, stats_payload: list[dict[str, Any]]) -> int:
         if not stats_payload:

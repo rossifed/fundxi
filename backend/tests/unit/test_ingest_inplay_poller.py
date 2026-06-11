@@ -24,7 +24,10 @@ import pytest
 
 from src.infrastructure.sportmonks.client import SportmonksError
 from src.ingest.infrastructure.sportmonks_id_maps import SportmonksIdMaps
-from src.ingest.infrastructure.sportmonks_inplay_poller import SportmonksInplayPoller
+from src.ingest.infrastructure.sportmonks_inplay_poller import (
+    SportmonksInplayPoller,
+    _ticked_player_ids_from,
+)
 
 # --- fakes ----------------------------------------------------------------
 
@@ -173,6 +176,25 @@ def _lineup_payload(
             {"type_id": 1584, "data": {"value": 88}},  # passes accuracy %
         ]
     return payload
+
+
+# --- ticked-player extraction (drives the value-snapshot step) ------------
+
+
+def test_ticked_player_ids_from_recovers_only_price_tick_subjects() -> None:
+    notifications = [
+        ("fundxi.player_price_tick.100", b""),
+        ("fundxi.fixture_status.42", b""),  # not a price tick → ignored
+        ("fundxi.player_price_tick.101", b""),  # live
+        ("fundxi.player_price_tick.7", b""),  # settlement/suspension/drop — same subject
+        ("fundxi.match_event.42", b""),  # ignored
+    ]
+    assert _ticked_player_ids_from(notifications) == {100, 101, 7}
+
+
+def test_ticked_player_ids_from_empty_when_no_price_ticks() -> None:
+    assert _ticked_player_ids_from([("fundxi.match_comment.42", b"")]) == set()
+    assert _ticked_player_ids_from([]) == set()
 
 
 # --- tests ----------------------------------------------------------------
@@ -388,6 +410,42 @@ async def test_full_envelope_emits_four_notifications() -> None:
         "fundxi.match_comment.42",
         "fundxi.match_event.42",
     ]
+
+
+@pytest.mark.anyio
+async def test_priced_players_feed_the_value_snapshot_step(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A poll that moves prices hands exactly those player_ids to the
+    portfolio-value snapshot step (wiring of F6). Spying the method keeps the
+    assertion independent of the snapshot service's own DB reads."""
+    captured: dict[str, set[int]] = {}
+
+    async def _spy(self: SportmonksInplayPoller, ticked_player_ids: set[int]) -> None:
+        captured["ids"] = ticked_player_ids
+
+    monkeypatch.setattr(SportmonksInplayPoller, "_materialize_value_snapshots", _spy)
+
+    client = _StubClient(
+        response=_envelope_with(
+            lineups=[
+                _lineup_payload(smk_id=900, player_smk=500, with_details=True),
+                _lineup_payload(smk_id=901, player_smk=501, with_details=True),
+            ]
+        )
+    )
+    poller = SportmonksInplayPoller(
+        fixture_internal_id=42,
+        fixture_sportmonks_id=1000,
+        poll_seconds=10.0,
+        client=client,
+        publisher=_RecordingPublisher(),
+        session_factory=_fake_session_factory(write_log=[]),
+        id_maps=_id_maps(),
+    )
+
+    await poller.poll_once()
+
+    # players 500/501 → internal 100/101, both priced this poll.
+    assert captured["ids"] == {100, 101}
 
 
 @pytest.mark.anyio
