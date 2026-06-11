@@ -46,13 +46,3 @@ def build_snapshot(
         pressure_factor=pressure_factor,
         is_live=is_live,
     )
-
-
-def tournament_delta_from(last_settled_price: float | None, base_value: float) -> float:
-    """The persistent "account balance" carried into the current match,
-    derived from the existing price series (no separate store):
-    ``last_settled_price / base - 1``. None / non-positive base ⇒ 0.0
-    (tournament start: nothing banked yet)."""
-    if last_settled_price is None or base_value <= 0.0:
-        return 0.0
-    return last_settled_price / base_value - 1.0

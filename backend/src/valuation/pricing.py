@@ -124,6 +124,31 @@ def price(
     )
 
 
+def tournament_delta_from(last_settled_price: float | None, base_value: float) -> float:
+    """The persistent "account balance" carried into the current match,
+    derived from the existing price series (no separate store):
+    ``last_settled_price / base - 1``. None / non-positive base ⇒ 0.0
+    (tournament start: nothing banked yet)."""
+    if last_settled_price is None or base_value <= 0.0:
+        return 0.0
+    return last_settled_price / base_value - 1.0
+
+
+def price_from_carried(
+    base_value: float,
+    carried_price: float | None,
+    snapshot: PriceSnapshot,
+    coefficients: PricingCoefficients = DEFAULT_COEFFICIENTS,
+) -> PriceResult:
+    """Price a player from his carried-in price + this poll's live
+    snapshot. THE entry point both the live poller and the simulation
+    use: the persistent (tournament) / transient (live) split is computed
+    here once, so the two ingestion paths cannot diverge on the formula —
+    they differ only in their inputs (the carried price and the rating)."""
+    tournament_delta = tournament_delta_from(carried_price, base_value)
+    return price(base_value, tournament_delta, snapshot, coefficients)
+
+
 def settle(tournament_delta: float, live_delta_at_ft: float) -> float:
     """Full-time: cash the realised in-match performance into the
     persistent component ONCE. ``LiveDelta`` then resets to 0 for the

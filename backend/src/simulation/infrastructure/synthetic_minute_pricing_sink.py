@@ -33,8 +33,7 @@ from src.infrastructure.sportmonks.projectors.match_event import project_match_e
 from src.simulation.domain.ports import LiveDataSink
 from src.simulation.domain.replay_event import ReplayEvent, ReplayEventKind
 from src.simulation.domain.synthetic_rating import event_bump, next_rating
-from src.valuation.pricing import PriceSnapshot
-from src.valuation.pricing import price as kernel_price
+from src.valuation.pricing import PriceSnapshot, price_from_carried
 from src.valuation.strategies.layered_v1 import TeamRosters
 
 log = structlog.get_logger(__name__)
@@ -100,7 +99,10 @@ class SyntheticMinutePricingSink:
                 continue
             rating = next_rating(self._rating.get(pid, 6.0), rng=self._rng, bump=self._bumps.get(pid, 0.0))
             self._rating[pid] = rating
-            result = kernel_price(base, 0.0, PriceSnapshot(rating=rating, is_live=True))
+            # Same pricing entry point as the live poller — only the inputs
+            # differ (synthetic rating; no carried-in price because a
+            # single-fixture rehearsal banks nothing across matches).
+            result = price_from_carried(base, None, PriceSnapshot(rating=rating, is_live=True))
             await upsert_price_tick(
                 self.session,
                 player_id=pid,

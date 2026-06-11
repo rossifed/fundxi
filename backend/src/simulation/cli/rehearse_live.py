@@ -36,8 +36,7 @@ from src.infrastructure.messaging.nats_publisher import NatsPublisher
 from src.simulation.domain.synthetic_rating import event_bump, next_rating
 from src.simulation.infrastructure.fixture_status_publisher import publish_fixture_status
 from src.simulation.infrastructure.replay_context import load_fixture_rosters, load_initial_price_state
-from src.valuation.pricing import PriceSnapshot
-from src.valuation.pricing import price as kernel_price
+from src.valuation.pricing import PriceSnapshot, price_from_carried
 
 log = structlog.get_logger(__name__)
 _DEFAULT_NATS = "nats://localhost:4222"
@@ -128,7 +127,10 @@ async def run(*, fixture_smk_id: int, interval: float, minutes: int, seed: int, 
                         continue
                     rating[pid] = next_rating(rating[pid], rng=rng, bump=bumps.get(pid, 0.0))
                     snap = PriceSnapshot(rating=rating[pid], is_live=True)
-                    result = kernel_price(base, 0.0, snap)
+                    # Same pricing entry point as the live poller — only the
+                    # rating (synthetic) and carried price (none in a fresh
+                    # rehearsal) differ.
+                    result = price_from_carried(base, None, snap)
                     await upsert_price_tick(
                         session,
                         player_id=pid,

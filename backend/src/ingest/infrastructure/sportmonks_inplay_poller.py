@@ -52,8 +52,8 @@ from src.infrastructure.valuation.db_or_synthetic_starting_price_provider import
 from src.ingest.application.commit_then_publish import commit_then_publish
 from src.ingest.domain.ports import NotificationPublisher
 from src.ingest.infrastructure.sportmonks_id_maps import SportmonksIdMaps
-from src.valuation.pricing import price as kernel_price
-from src.valuation.snapshot import build_snapshot, tournament_delta_from
+from src.valuation.pricing import price_from_carried
+from src.valuation.snapshot import build_snapshot
 
 log = structlog.get_logger(__name__)
 
@@ -333,14 +333,13 @@ class SportmonksInplayPoller:
                 # No real base value (un-seeded, unpriceable) → emit no tick.
                 continue
             carried = await self._carried_in_price(session, curr.player_id)
-            tournament_delta = tournament_delta_from(carried, base_value)
             snapshot = build_snapshot(
                 curr,
                 prev_by_player.get(curr.player_id),
                 pressure_factor=None,
                 is_live=True,
             )
-            result = kernel_price(base_value, tournament_delta, snapshot)
+            result = price_from_carried(base_value, carried, snapshot)
             new_price = round(result.price, 2)
             last = last_prices.get(curr.player_id)
             if last is not None and round(last, 2) == new_price:

@@ -3,8 +3,8 @@
 import pytest
 
 from src.domain.match.player_match_stat import PlayerMatchStat
-from src.valuation.pricing import price
-from src.valuation.snapshot import build_snapshot, tournament_delta_from
+from src.valuation.pricing import price, price_from_carried, tournament_delta_from
+from src.valuation.snapshot import build_snapshot
 
 
 def _stat(**kw: object) -> PlayerMatchStat:
@@ -50,3 +50,21 @@ def test_balance_plus_live_compose_coherently() -> None:
     assert r.tournament_delta == pytest.approx(0.10)
     assert r.price == pytest.approx(round(50.0 * (1.0 + 0.10 + r.live_delta), 2))
     assert r.price > 55.0  # live good play adds on top of the banked balance
+
+
+def test_price_from_carried_matches_manual_composition() -> None:
+    """The shared entry point both ingestion paths use must equal the
+    explicit ``tournament_delta_from`` + ``price`` composition."""
+    snap = build_snapshot(_stat(rating=7.2), None, pressure_factor=None, is_live=True)
+    via_helper = price_from_carried(50.0, 55.0, snap)
+    manual = price(50.0, tournament_delta_from(55.0, 50.0), snap)
+    assert via_helper == manual
+
+
+def test_price_from_carried_none_means_no_banked_balance() -> None:
+    """No carried-in price (tournament start / fresh rehearsal) ⇒ the
+    persistent component is 0 and only the live snapshot moves the price."""
+    snap = build_snapshot(_stat(rating=6.0), None, pressure_factor=None, is_live=True)
+    r = price_from_carried(50.0, None, snap)
+    assert r.tournament_delta == 0.0
+    assert r.price == pytest.approx(50.0, abs=0.01)
