@@ -569,7 +569,9 @@ function BracketView({
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: `repeat(${group_letters.length}, minmax(0, 1fr))`,
+              // Auto-fill so the 12 WC2026 groups wrap onto several rows with a
+              // readable column width, instead of being crushed into one row.
+              gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
               gap: 8,
             }}
           >
@@ -798,7 +800,7 @@ function MirroredBracket({
     );
 
   return (
-    <div>
+    <div style={{ overflowX: "auto", paddingBottom: 6 }}>
       <div
         style={{
           display: "grid",
@@ -806,6 +808,9 @@ function MirroredBracket({
           gap: 10,
           alignItems: "stretch",
           minHeight: 360,
+          // A 9-column mirrored tree needs room; keep columns readable and let
+          // the container scroll horizontally on narrower viewports.
+          minWidth: 1180,
         }}
       >
         {/* R32 left — 48-team format; renders an empty skeleton until the round exists */}
