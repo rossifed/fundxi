@@ -2,6 +2,7 @@ import type { Player } from "@fundxi/core/domain/player/player";
 import type { Holding } from "@fundxi/core/domain/portfolio/holding";
 import {
   compute_holding_metrics,
+  compute_portfolio_share,
   compute_portfolio_totals,
   type HoldingMetrics,
   type PortfolioTotals,
@@ -14,6 +15,9 @@ import { valuations_repository } from "@fundxi/core/infrastructure/repositories/
 
 export interface HoldingDetail extends HoldingMetrics {
   player: Player;
+  /** This position's market value as a % of total portfolio value (AUM).
+   *  Computed here (not in the UI) so every surface shows the same number. */
+  portfolio_pct: number;
 }
 
 function build_prices_index(): Map<number, number> {
@@ -31,6 +35,9 @@ export const portfolio_service = {
 
   get_my_holdings_with_metrics(): HoldingDetail[] {
     const holdings = portfolio_repository.find_my_holdings();
+    // Portfolio total (AUM) once, so each position's share is measured against
+    // the SAME denominator the totals card shows (COHERENCE-INVARIANT).
+    const total_value = this.get_my_totals().total_value;
     return holdings
       .map(h => {
         const player = players_repository.find_by_id(h.player_id);
@@ -42,7 +49,8 @@ export const portfolio_service = {
         const price =
           valuations_repository.find_by_player_id(h.player_id)?.current_price ?? h.average_buy_price;
         const metrics = compute_holding_metrics(h, price);
-        return { ...metrics, player };
+        const portfolio_pct = compute_portfolio_share(metrics.market_value, total_value);
+        return { ...metrics, player, portfolio_pct };
       })
       .filter((x): x is HoldingDetail => x !== null);
   },

@@ -426,6 +426,7 @@ function PositionRow({ h, opened, on_open }: { h: HoldingDetail; opened: string;
         <StripCell label="Avg buy" value={`€${h.average_buy_price}M`} />
         <StripCell label="Price" value={fmt_eur_m(h.current_price)} pulse={h.current_price} />
         <StripCell label="Value" value={fmt_eur_m(h.market_value)} pulse={h.market_value} />
+        <StripCell label="% Port" value={`${h.portfolio_pct.toFixed(1)}%`} />
       </ScrollView>
     </Pressable>
   );

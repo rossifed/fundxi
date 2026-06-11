@@ -536,7 +536,15 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
                     €{h.average_buy_price}M
                   </span>
                   <PulseValueCell value={h.current_price} display={fmt_eur_m(h.current_price)} />
-                  <PulseValueCell value={h.market_value} display={fmt_eur_m(h.market_value)} />
+                  <div
+                    className="mono"
+                    style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", lineHeight: 1.2 }}
+                  >
+                    <PulseValueCell value={h.market_value} display={fmt_eur_m(h.market_value)} />
+                    <span style={{ fontSize: 11, color: "rgba(255,255,255,.4)" }} title="Share of total portfolio value">
+                      {h.portfolio_pct.toFixed(1)}%
+                    </span>
+                  </div>
                   <div
                     className="mono"
                     style={{
