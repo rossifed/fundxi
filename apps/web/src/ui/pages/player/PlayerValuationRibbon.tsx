@@ -27,9 +27,11 @@ export function PlayerValuationRibbon({
   price_history,
   tournament_stats,
 }: PlayerValuationRibbonProps) {
-  const own_holding = portfolio_api.get_holding(player_id);
-  const own_shares = own_holding?.shares ?? 0;
-  const pnl = own_shares !== 0 ? own_shares * (current_price - (own_holding?.average_buy_price ?? 0)) : null;
+  // P&L from the single core source (get_holding_metrics) — same price
+  // resolution as the holdings list / AUM and the mobile ribbon, so this header
+  // P&L can't diverge across clients or contradict the Your-position card.
+  const metrics = portfolio_api.get_holding_metrics(player_id);
+  const pnl = metrics && metrics.shares !== 0 ? metrics.pnl : null;
 
   const ph = price_history ?? [];
   const since_start_pct = ph.length > 1 ? compute_period_return(ph.map(p => p.price)) : null;
