@@ -71,10 +71,39 @@ describe("build_bracket — full tournament", () => {
     const left = new Set(b.r16_left.map(id));
     expect(b.r16_right.every(f => !left.has(id(f)))).toBe(true);
   });
+
+  it("leaves the Round of 32 empty for a 32-team tournament (no R32 fixtures)", () => {
+    expect(b.r32_left).toEqual([null, null, null, null, null, null, null, null]);
+    expect(b.r32_right).toEqual([null, null, null, null, null, null, null, null]);
+  });
+});
+
+describe("build_bracket — 48-team format (Round of 32)", () => {
+  // 8 R32 matches feeding the 4 left-half R16 matches (2 each). The winner of
+  // each feeds the team it faces in R16, so the walk nests them under R16-left.
+  const R32 = "Round of 32";
+  const e1 = fx(101, R32, "L", "z1", "2026-06-25"); //   → RL1 (L)
+  const e2 = fx(102, R32, "la1", "z2", "2026-06-26"); // → RL1 (la1)
+  const e3 = fx(103, R32, "QLA", "z3", "2026-06-25"); // → RL2 (QLA)
+  const e4 = fx(104, R32, "la2", "z4", "2026-06-26"); // → RL2 (la2)
+  const e5 = fx(105, R32, "SLB", "z5", "2026-06-25"); // → RL3 (SLB)
+  const e6 = fx(106, R32, "la3", "z6", "2026-06-26"); // → RL3 (la3)
+  const e7 = fx(107, R32, "QLB", "z7", "2026-06-25"); // → RL4 (QLB)
+  const e8 = fx(108, R32, "la4", "z8", "2026-06-26"); // → RL4 (la4)
+  const b = build_bracket([...ALL, e8, e1, e5, e3, e7, e2, e6, e4]); // shuffled
+
+  it("nests each R32 pair under its R16 match, ordered by kickoff", () => {
+    expect(b.r32_left.map(id)).toEqual([101, 102, 103, 104, 105, 106, 107, 108]);
+  });
+
+  it("keeps fixed-size R32 sides; the unfed (right) side stays all-null", () => {
+    expect(b.r32_left).toHaveLength(8);
+    expect(b.r32_right).toEqual([null, null, null, null, null, null, null, null]);
+  });
 });
 
 describe("build_bracket — partial / empty inputs", () => {
-  it("returns an all-empty layout for no fixtures (no throw, padded with nulls)", () => {
+  it("returns an all-empty SKELETON for no fixtures (fixed-size rounds, padded with nulls)", () => {
     const b = build_bracket([]);
     expect(b.final).toBeNull();
     expect(b.third_place).toBeNull();
@@ -83,6 +112,9 @@ describe("build_bracket — partial / empty inputs", () => {
     expect(b.qf_left).toEqual([null, null]);
     expect(b.r16_left).toEqual([null, null, null, null]);
     expect(b.r16_right).toEqual([null, null, null, null]);
+    // 48-team format first round: 8 slots per side, all null (skeleton).
+    expect(b.r32_left).toEqual([null, null, null, null, null, null, null, null]);
+    expect(b.r32_right).toEqual([null, null, null, null, null, null, null, null]);
   });
 
   it("falls back to kickoff order for the semis when there is no final yet", () => {

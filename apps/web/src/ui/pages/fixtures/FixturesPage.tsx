@@ -802,12 +802,19 @@ function MirroredBracket({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "1fr 1fr 1fr 1.2fr 1fr 1fr 1fr",
+          gridTemplateColumns: "0.85fr 1fr 1fr 1fr 1.2fr 1fr 1fr 1fr 0.85fr",
           gap: 10,
           alignItems: "stretch",
           minHeight: 360,
         }}
       >
+        {/* R32 left — 48-team format; renders an empty skeleton until the round exists */}
+        <div style={col_style}>
+          {col_header("R32")}
+          <div style={cards_style(bracket.r32_left.length)}>
+            {bracket.r32_left.map((fx, i) => render_slot(fx, `r32l-${i}`))}
+          </div>
+        </div>
         {/* R16 left */}
         <div style={col_style}>
           {col_header(BRACKET_COL_LABELS[0].left)}
@@ -870,6 +877,13 @@ function MirroredBracket({
           {col_header(BRACKET_COL_LABELS[0].right)}
           <div style={cards_style(bracket.r16_right.length)}>
             {bracket.r16_right.map((fx, i) => render_slot(fx, `r16r-${i}`))}
+          </div>
+        </div>
+        {/* R32 right */}
+        <div style={col_style}>
+          {col_header("R32")}
+          <div style={cards_style(bracket.r32_right.length)}>
+            {bracket.r32_right.map((fx, i) => render_slot(fx, `r32r-${i}`))}
           </div>
         </div>
       </div>

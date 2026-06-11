@@ -279,6 +279,7 @@ function BracketView({ fixtures, on_open }: { fixtures: Fixture[]; on_open: (id:
   const bracket = build_bracket(fixtures);
 
   const ko_rounds: { label: string; fixtures: (Fixture | null)[] }[] = [
+    { label: "ROUND OF 32", fixtures: [...bracket.r32_left, ...bracket.r32_right] },
     { label: "ROUND OF 16", fixtures: [...bracket.r16_left, ...bracket.r16_right] },
     { label: "QUARTER-FINALS", fixtures: [...bracket.qf_left, ...bracket.qf_right] },
     { label: "SEMI-FINALS", fixtures: [bracket.sf_left, bracket.sf_right] },
@@ -311,19 +312,36 @@ function BracketView({ fixtures, on_open }: { fixtures: Fixture[]; on_open: (id:
       <View style={{ gap: 12 }}>
         <Divider label="KNOCKOUTS" />
         {ko_rounds.map(round => {
-          const present = round.fixtures.filter((f): f is Fixture => f !== null);
-          if (present.length === 0) return null;
-          if (round.label === "FINAL") return <FinalCard key="final" fixture={present[0]} on_open={on_open} />;
-          const single = present.length === 1;
+          // Render the full skeleton (TBD slots) even before any knockout
+          // fixture exists — slots fill in as the tournament resolves.
+          const single = round.fixtures.length === 1;
+          if (round.label === "FINAL") {
+            const f = round.fixtures[0];
+            return f ? (
+              <FinalCard key="final" fixture={f} on_open={on_open} />
+            ) : (
+              <View key="final" style={styles.bracket_panel}>
+                <View style={styles.bracket_chip}>
+                  <Text style={styles.bracket_chip_label}>FINAL</Text>
+                </View>
+                <View style={[styles.ko_cell, styles.ko_cell_full]}>
+                  <KoEmpty />
+                </View>
+              </View>
+            );
+          }
           return (
             <View key={round.label} style={styles.bracket_panel}>
               <View style={styles.bracket_chip}>
                 <Text style={styles.bracket_chip_label}>{round.label}</Text>
               </View>
               <View style={styles.ko_grid}>
-                {present.map(fx => (
-                  <View key={fx.id} style={[styles.ko_cell, single && styles.ko_cell_full]}>
-                    <CompactCell fixture={fx} on_open={on_open} />
+                {round.fixtures.map((fx, i) => (
+                  <View
+                    key={fx ? fx.id : `${round.label}-${i}`}
+                    style={[styles.ko_cell, single && styles.ko_cell_full]}
+                  >
+                    {fx ? <CompactCell fixture={fx} on_open={on_open} /> : <KoEmpty />}
                   </View>
                 ))}
               </View>
@@ -331,6 +349,15 @@ function BracketView({ fixtures, on_open }: { fixtures: Fixture[]; on_open: (id:
           );
         })}
       </View>
+    </View>
+  );
+}
+
+// Placeholder slot for a knockout match that doesn't exist yet (skeleton).
+function KoEmpty() {
+  return (
+    <View style={styles.ko_empty}>
+      <Text style={styles.ko_empty_txt}>TBD</Text>
     </View>
   );
 }
@@ -564,6 +591,8 @@ const styles = StyleSheet.create({
   ko_grid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   ko_cell: { flexGrow: 1, flexBasis: "47%" },
   ko_cell_full: { flexBasis: "100%" },
+  ko_empty: { minHeight: 52, borderWidth: 1, borderStyle: "dashed", borderColor: "rgba(255,255,255,0.10)", borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  ko_empty_txt: { color: "rgba(255,255,255,0.25)", fontSize: 11, fontWeight: "700", letterSpacing: 1 },
 
   cc: { backgroundColor: "rgba(255,255,255,0.04)", borderWidth: 1, borderColor: "rgba(255,255,255,0.10)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 7, gap: 4 },
   cc_today: { borderColor: "rgba(72,255,67,0.40)", borderLeftWidth: 3, borderLeftColor: palette.brandGreen },
