@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { color_for_sign } from "@/ui/helpers/format";
+import { color_for_sign, fmt_fixture_datetime } from "@/ui/helpers/format";
 import { compute_return_pct } from "@fundxi/core/domain/market/return";
 import { matches_api } from "@fundxi/core/api/matches_api";
 import { players_api } from "@fundxi/core/api/players_api";
@@ -139,7 +139,7 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match, on_op
                 }}
               >
                 <span style={{ fontSize: 11, color: "rgba(255,255,255,.45)", fontWeight: 600, letterSpacing: 0.3 }}>
-                  {fx.date} · 21:00
+                  {fmt_fixture_datetime(fx.date)}
                 </span>
                 <TeamLink
                   team_id={fx.home_team_id}
