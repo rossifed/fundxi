@@ -8,6 +8,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import Svg, { Defs, RadialGradient, Rect, Stop } from "react-native-svg";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import BottomSheet, {
@@ -38,7 +39,7 @@ import { TickValue } from "@/components/TickValue";
 import { TradeSheet } from "@/components/TradeSheet";
 import { useLiveRefetch, usePlayerLiveVersion } from "@/components/live";
 import { color_for_sign, fmt_eur_m, fmt_eur_m_signed, fmt_signed_pct } from "@/lib/format";
-import { mono, palette, text } from "@/theme/tokens";
+import { border, mono, palette, surface, text } from "@/theme/tokens";
 
 export interface PlayerSheetHandle {
   open(player: Player): void;
@@ -112,6 +113,7 @@ export const PlayerSheet = forwardRef<PlayerSheetHandle, object>(function Player
         backgroundStyle={styles.bg}
         handleIndicatorStyle={styles.handle}
       >
+        <SheetGlow />
         <BottomSheetScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           {player && <PlayerDetail player={player} on_open_team={open_team} trade_version={trade_version} />}
         </BottomSheetScrollView>
@@ -231,39 +233,45 @@ function Header({
   team_flag_url?: string;
   on_open_team: () => void;
 }) {
+  const position = player.detailed_position ?? POSITION_LABEL[player.position];
   return (
     <View style={styles.header}>
-      {player.image_path ? (
-        <Image source={{ uri: player.image_path }} style={styles.photo} resizeMode="contain" />
-      ) : (
-        <PlayerChip jersey_number={player.jersey_number} team_color={team_color} size={72} />
-      )}
-      <View style={styles.identity}>
-        <View style={styles.name_row}>
-          <Text style={styles.jersey}>{player.jersey_number}</Text>
-          <Text style={styles.name} numberOfLines={1}>
-            {player.full_name ?? player.name}
-          </Text>
+      <View style={styles.header_top}>
+        {player.image_path ? (
+          <Image source={{ uri: player.image_path }} style={styles.photo} resizeMode="contain" />
+        ) : (
+          <PlayerChip jersey_number={player.jersey_number} team_color={team_color} size={72} />
+        )}
+        <View style={styles.identity}>
+          <View style={styles.name_row}>
+            <Text style={styles.jersey}>{player.jersey_number}</Text>
+            <Text style={styles.name} numberOfLines={1}>
+              {player.full_name ?? player.name}
+            </Text>
+          </View>
+          <View style={styles.team_row}>
+            <Pressable style={styles.team_tap} onPress={on_open_team} hitSlop={6}>
+              {team_flag_url ? (
+                <Image source={{ uri: team_flag_url }} style={styles.team_flag_img} resizeMode="contain" />
+              ) : (
+                <Text style={styles.team_flag}>{team_flag}</Text>
+              )}
+              <Text style={styles.team_name} numberOfLines={1}>
+                {team_name}
+              </Text>
+            </Pressable>
+            <Text style={styles.team_sep}>·</Text>
+            <Text style={styles.team_pos} numberOfLines={1}>
+              {position}
+            </Text>
+          </View>
         </View>
-        <Pressable style={styles.team_row} onPress={on_open_team} hitSlop={6}>
-          {team_flag_url ? (
-            <Image source={{ uri: team_flag_url }} style={styles.team_flag_img} resizeMode="contain" />
-          ) : (
-            <Text style={styles.team_flag}>{team_flag}</Text>
-          )}
-          <Text style={styles.team_name}>{team_name}</Text>
-        </Pressable>
-        <Text style={styles.header_bio} numberOfLines={1}>
-          {[
-            player.detailed_position ?? POSITION_LABEL[player.position],
-            player.age != null ? `${player.age}y` : null,
-            player.height,
-            player.weight,
-            player.foot ? `${player.foot[0].toUpperCase()}${player.foot.slice(1)}` : null,
-          ]
-            .filter(Boolean)
-            .join("  ·  ")}
-        </Text>
+      </View>
+      <View style={styles.bio_grid}>
+        <BioStat label="Age" value={player.age != null ? String(player.age) : "—"} />
+        <BioStat label="Height" value={player.height ?? "—"} />
+        <BioStat label="Weight" value={player.weight ?? "—"} />
+        <BioStat label="Foot" value={player.foot ? `${player.foot[0].toUpperCase()}${player.foot.slice(1)}` : "—"} />
       </View>
     </View>
   );
@@ -534,6 +542,40 @@ function YourPosition({ player, current_price, refresh }: { player: Player; curr
   );
 }
 
+// Ambient blue glow on the sheet surface — a top-left radial echoing the app
+// background (same grad1/grad2 stops), so the card reads as part of the world
+// instead of a flat dark slab. Sits behind the scrolling content, clipped to
+// the sheet's rounded top. Decorative only → pointerEvents none.
+function SheetGlow() {
+  return (
+    <View style={styles.glow} pointerEvents="none">
+      <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
+        <Defs>
+          <RadialGradient id="sheet_glow" cx="0%" cy="0%" rx="95%" ry="55%">
+            <Stop offset="0" stopColor={palette.grad1} stopOpacity="0.5" />
+            <Stop offset="0.4" stopColor={palette.grad2} stopOpacity="0.3" />
+            <Stop offset="1" stopColor={palette.grad2} stopOpacity="0" />
+          </RadialGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100%" height="100%" fill="url(#sheet_glow)" />
+      </Svg>
+    </View>
+  );
+}
+
+// One bio cell (Age / Height / Weight / Foot) — equal-width column so the
+// header strip reads as a clean grid, not ragged content-sized chips.
+function BioStat({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.bio_cell}>
+      <Text style={styles.bio_value} numberOfLines={1}>
+        {value}
+      </Text>
+      <Text style={styles.bio_label}>{label}</Text>
+    </View>
+  );
+}
+
 // ── shared sheet primitives (mirror player_sheet_ui.tsx) ──────────────
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -569,6 +611,7 @@ function SmallKpi({
 
 const styles = StyleSheet.create({
   bg: { backgroundColor: palette.surfaceDeep },
+  glow: { ...StyleSheet.absoluteFillObject, borderTopLeftRadius: 16, borderTopRightRadius: 16, overflow: "hidden" },
   handle: { backgroundColor: "rgba(255,255,255,0.2)" },
   content: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 96 },
   footer: {
@@ -583,17 +626,33 @@ const styles = StyleSheet.create({
   },
   detail: { gap: 16 },
 
-  header: { flexDirection: "row", alignItems: "center", gap: 14, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.06)" },
+  header: { paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.06)" },
+  header_top: { flexDirection: "row", alignItems: "center", gap: 14 },
   photo: { width: 72, height: 72, borderRadius: 11, backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
   identity: { flex: 1, minWidth: 0 },
   name_row: { flexDirection: "row", alignItems: "baseline", gap: 10 },
   jersey: { fontFamily: mono, fontSize: 20, fontWeight: "800", color: "rgba(255,255,255,0.55)", letterSpacing: -0.5 },
   name: { fontSize: 20, fontWeight: "800", color: "#fff", letterSpacing: -0.5, flexShrink: 1 },
   team_row: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 },
+  team_tap: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1 },
   team_flag: { fontSize: 18 },
   team_flag_img: { width: 20, height: 20 },
-  team_name: { fontSize: 13, fontWeight: "700", color: "rgba(255,255,255,0.65)" },
-  header_bio: { fontSize: 11.5, color: text.tertiary, marginTop: 5 },
+  team_name: { fontSize: 13, fontWeight: "700", color: "rgba(255,255,255,0.65)", flexShrink: 1 },
+  team_sep: { fontSize: 13, color: text.muted },
+  team_pos: { fontSize: 13, fontWeight: "600", color: text.secondary, flexShrink: 1 },
+  bio_grid: { flexDirection: "row", gap: 6, marginTop: 12 },
+  bio_cell: {
+    flex: 1,
+    backgroundColor: surface.cardSoft,
+    borderWidth: 1,
+    borderColor: border,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    alignItems: "center",
+  },
+  bio_value: { fontFamily: mono, fontSize: 13, fontWeight: "800", color: text.primary, letterSpacing: -0.3 },
+  bio_label: { fontSize: 9, color: text.tertiary, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: "600", marginTop: 2 },
 
   section: { gap: 6 },
   section_title: { fontSize: 11, fontWeight: "700", color: "rgba(255,255,255,0.55)", letterSpacing: 0.5, textTransform: "uppercase" },
