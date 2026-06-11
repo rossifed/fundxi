@@ -11,6 +11,7 @@ const trade = (kind: "buy" | "sell", price: number): Trade => ({
   shares: 5,
   price,
   date: "2026-06-12",
+  time: "20:00",
   total: price * 5,
 });
 

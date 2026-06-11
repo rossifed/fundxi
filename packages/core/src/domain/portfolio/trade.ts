@@ -8,6 +8,7 @@ export interface Trade {
   team_id: string;
   shares: number;
   price: number; // €M per share
-  date: string;
+  date: string; // YYYY-MM-DD (execution day)
+  time: string; // HH:MM (execution time of day)
   total: number; // €M total amount
 }

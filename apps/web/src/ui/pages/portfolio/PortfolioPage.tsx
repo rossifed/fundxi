@@ -569,8 +569,8 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "280px 70px 90px 90px 110px 90px",
-                padding: "10px 18px",
+                gridTemplateColumns: "minmax(0, 1fr) 52px 74px 76px 92px 90px",
+                padding: "10px 14px",
                 borderBottom: "1px solid rgba(255,255,255,.04)",
                 fontSize: 10,
                 fontWeight: 700,
@@ -611,8 +611,8 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
                     key={t.id}
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "280px 70px 90px 90px 110px 90px",
-                      padding: "11px 18px",
+                      gridTemplateColumns: "minmax(0, 1fr) 52px 74px 76px 92px 90px",
+                      padding: "11px 14px",
                       borderBottom: "1px solid rgba(255,255,255,.025)",
                       alignItems: "center",
                       gap: 12,
@@ -666,7 +666,13 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
                     <span className="mono" style={{ textAlign: "right", fontWeight: 700 }}>
                       {fmt_eur_m(t.total)}
                     </span>
-                    <span style={{ textAlign: "right", color: "rgba(255,255,255,.35)", fontSize: 12 }}>{t.date}</span>
+                    <div
+                      className="mono"
+                      style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", lineHeight: 1.2 }}
+                    >
+                      <span style={{ color: "rgba(255,255,255,.55)", fontSize: 12 }}>{fmt_short_date(t.date)}</span>
+                      <span style={{ color: "rgba(255,255,255,.3)", fontSize: 11 }}>{t.time}</span>
+                    </div>
                   </div>
                 );
               })}

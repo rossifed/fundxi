@@ -28,6 +28,7 @@ function dto_to_domain(dto: TradeDTO): Trade {
     shares: dto.shares,
     price: dto.price,
     date: dto.executed_at.slice(0, 10),
+    time: dto.executed_at.slice(11, 16),
     total: dto.total,
   };
 }
