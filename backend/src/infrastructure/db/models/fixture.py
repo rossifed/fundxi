@@ -5,7 +5,7 @@ DDD role: Adapter. Domain ↔ ORM translation is the Repository's job.
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, String, Text
+from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.db.base import Base
@@ -17,7 +17,7 @@ class FixtureORM(Base, AuditMixin):
     __table_args__ = {"schema": "core"}
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    sportmonks_id: Mapped[int | None] = mapped_column(BigInteger, unique=True, index=True)
+    sportmonks_id: Mapped[int | None] = mapped_column(unique=True, index=True)
     # Sportmonks season id (native in every fixture payload). Scopes a
     # fixture to its tournament so the API shows one competition at a
     # time (WC2022 and WC2026 coexist in this table).

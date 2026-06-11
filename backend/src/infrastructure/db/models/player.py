@@ -6,7 +6,7 @@ DDD role: Adapter. Domain ↔ ORM translation is the Repository's job.
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, Date, ForeignKey, Numeric, String, Text
+from sqlalchemy import Date, ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.db.base import Base
@@ -18,7 +18,7 @@ class PlayerORM(Base, AuditMixin):
     __table_args__ = {"schema": "core"}
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    sportmonks_id: Mapped[int | None] = mapped_column(BigInteger, unique=True, index=True)
+    sportmonks_id: Mapped[int | None] = mapped_column(unique=True, index=True)
     name: Mapped[str] = mapped_column(String(128))
     jersey_number: Mapped[int]
     team_id: Mapped[str] = mapped_column(ForeignKey("core.team.id", ondelete="RESTRICT"), index=True)
