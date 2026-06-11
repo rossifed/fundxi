@@ -4,7 +4,7 @@ import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import { teams_api } from "@fundxi/core/api/teams_api";
 import type { Player, Position } from "@fundxi/core/domain/player/player";
 import { POSITION_LABEL } from "@fundxi/core/domain/player/player";
-import { PlayerChip } from "@/ui/components/PlayerChip";
+import { PlayerAvatar } from "@/ui/components/PlayerAvatar";
 import { PositionBadge } from "@/ui/components/PositionBadge";
 import { Spark } from "@/ui/components/Spark";
 import { TeamLink } from "@/ui/components/TeamLink";
@@ -638,23 +638,15 @@ function Row({
           minWidth: 0,
         }}
       >
-        {e.image_path ? (
-          <img
-            src={e.image_path}
-            alt={e.full_name ?? e.name}
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 8,
-              objectFit: "contain",
-              background: "rgba(255,255,255,.05)",
-              border: "1px solid rgba(255,255,255,.08)",
-              flexShrink: 0,
-            }}
-          />
-        ) : (
-          <PlayerChip jersey_number={e.jersey_number} team_color={team_color} size={36} />
-        )}
+        <PlayerAvatar
+          image_path={e.image_path}
+          jersey_number={e.jersey_number}
+          team_color={team_color}
+          size={36}
+          radius={8}
+          fit="contain"
+          alt={e.full_name ?? e.name}
+        />
         <div style={{ minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
             <span

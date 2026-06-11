@@ -24,7 +24,7 @@ import type { Fixture } from "@fundxi/core/domain/match/fixture";
 import { type Player, type Position } from "@fundxi/core/domain/player/player";
 
 import { KpiIcon, type KpiIconName } from "@/components/KpiIcon";
-import { PlayerChip } from "@/components/PlayerChip";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { PlayerSheet, type PlayerSheetHandle } from "@/components/PlayerSheet";
 import { TickValue } from "@/components/TickValue";
 import { useLiveRefetch, useMatchesLiveVersion, usePricesLiveVersion, useStandingsLiveVersion } from "@/components/live";
@@ -347,11 +347,13 @@ function SquadRow({
   return (
     <Pressable style={styles.row} onPress={on_open}>
       <View style={styles.row_avatar_wrap}>
-        {p.image_path ? (
-          <Image source={{ uri: p.image_path }} style={styles.row_avatar} resizeMode="cover" />
-        ) : (
-          <PlayerChip jersey_number={p.jersey_number} team_color={team_color} size={40} />
-        )}
+        <PlayerAvatar
+          image_path={p.image_path}
+          jersey_number={p.jersey_number}
+          team_color={team_color}
+          size={40}
+          style={styles.row_avatar}
+        />
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <View style={styles.row_name_line}>

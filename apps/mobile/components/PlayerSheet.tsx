@@ -32,7 +32,7 @@ import type { PlayerNewsEntry } from "@fundxi/core/infrastructure/repositories/p
 import type { PricePoint } from "@fundxi/core/infrastructure/repositories/valuations_repository";
 
 import { useAuth } from "@/components/AuthContext";
-import { PlayerChip } from "@/components/PlayerChip";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { PerformanceChart } from "@/components/PerformanceChart";
 import { TickValue } from "@/components/TickValue";
 import { TradeSheet } from "@/components/TradeSheet";
@@ -235,11 +235,14 @@ function Header({
   return (
     <View style={styles.header}>
       <View style={styles.header_top}>
-        {player.image_path ? (
-          <Image source={{ uri: player.image_path }} style={styles.photo} resizeMode="contain" />
-        ) : (
-          <PlayerChip jersey_number={player.jersey_number} team_color={team_color} size={72} />
-        )}
+        <PlayerAvatar
+          image_path={player.image_path}
+          jersey_number={player.jersey_number}
+          team_color={team_color}
+          size={72}
+          fit="contain"
+          style={styles.photo}
+        />
         <View style={styles.identity}>
           <View style={styles.name_row}>
             <Text style={styles.jersey}>{player.jersey_number}</Text>

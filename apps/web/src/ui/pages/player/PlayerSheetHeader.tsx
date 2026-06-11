@@ -6,7 +6,7 @@
 
 import type { Player } from "@fundxi/core/domain/player/player";
 import type { Team } from "@fundxi/core/domain/team/team";
-import { PlayerChip } from "@/ui/components/PlayerChip";
+import { PlayerAvatar } from "@/ui/components/PlayerAvatar";
 
 interface PlayerSheetHeaderProps {
   player: Player;
@@ -26,23 +26,15 @@ export function PlayerSheetHeader({
   return (
     <div style={{ padding: "16px 24px 12px", flexShrink: 0, borderBottom: "1px solid rgba(255,255,255,.06)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-        {player.image_path ? (
-          <img
-            src={player.image_path}
-            alt={player.full_name ?? player.name}
-            style={{
-              width: 72,
-              height: 72,
-              borderRadius: 10,
-              objectFit: "contain",
-              background: "rgba(255,255,255,.05)",
-              border: "1px solid rgba(255,255,255,.08)",
-              flexShrink: 0,
-            }}
-          />
-        ) : (
-          <PlayerChip jersey_number={player.jersey_number} team_color={team.color} size={72} />
-        )}
+        <PlayerAvatar
+          image_path={player.image_path}
+          jersey_number={player.jersey_number}
+          team_color={team.color}
+          size={72}
+          radius={10}
+          fit="contain"
+          alt={player.full_name ?? player.name}
+        />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
             <span

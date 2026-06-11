@@ -10,7 +10,7 @@ import type { HoldingMetrics } from "@fundxi/core/domain/portfolio/portfolio_met
 import type { Trade } from "@fundxi/core/domain/portfolio/trade";
 import { chart_category_ramp } from "@fundxi/core/design/palette";
 import { ClosePositionsDialog } from "@/ui/components/ClosePositionsDialog";
-import { PlayerChip } from "@/ui/components/PlayerChip";
+import { PlayerAvatar as PlayerAvatarBase } from "@/ui/components/PlayerAvatar";
 import { PerformanceChart } from "@/ui/components/PerformanceChart";
 import { Donut } from "@/ui/components/Donut";
 import { SortableHeader, type SortDir } from "@/ui/components/SortableHeader";
@@ -858,27 +858,21 @@ function BreakdownCard({
   );
 }
 
-/** Player avatar: Sportmonks photo when available, falls back to the
- * team-color jersey-number chip. Same pattern as the Screener. */
+/** Player avatar: Sportmonks photo with the team-color jersey-number chip as
+ * fallback (missing OR broken photo). Thin wrapper over the shared PlayerAvatar
+ * so the positions list keeps its `{ player }` call shape. */
 function PlayerAvatar({ player, team_color, size }: { player: Player; team_color: string; size: number }) {
-  if (player.image_path) {
-    return (
-      <img
-        src={player.image_path}
-        alt={player.full_name ?? player.name}
-        style={{
-          width: size,
-          height: size,
-          borderRadius: 8,
-          objectFit: "contain",
-          background: "rgba(255,255,255,.05)",
-          border: "1px solid rgba(255,255,255,.08)",
-          flexShrink: 0,
-        }}
-      />
-    );
-  }
-  return <PlayerChip jersey_number={player.jersey_number} team_color={team_color} size={size} />;
+  return (
+    <PlayerAvatarBase
+      image_path={player.image_path}
+      jersey_number={player.jersey_number}
+      team_color={team_color}
+      size={size}
+      radius={8}
+      fit="contain"
+      alt={player.full_name ?? player.name}
+    />
+  );
 }
 
 function SideBadge({ shares }: { shares: number }) {

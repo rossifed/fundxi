@@ -852,6 +852,7 @@ function RosterCard({
       <div style={{ position: "relative", width: 40, height: 40, flexShrink: 0 }}>
         <div
           style={{
+            position: "relative",
             width: 40,
             height: 40,
             borderRadius: "50%",
@@ -863,12 +864,20 @@ function RosterCard({
             justifyContent: "center",
           }}
         >
-          {photo ? (
-            <img src={photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-          ) : (
-            <span className="mono" style={{ fontSize: 12, fontWeight: 800, color: "rgba(255,255,255,.55)" }}>
-              {p.jersey_number}
-            </span>
+          {/* Jersey number sits behind; the photo covers it and, if it fails to
+              load, hides itself to reveal the number — no broken-image icon. */}
+          <span className="mono" style={{ fontSize: 12, fontWeight: 800, color: "rgba(255,255,255,.55)" }}>
+            {p.jersey_number}
+          </span>
+          {photo && (
+            <img
+              src={photo}
+              alt=""
+              onError={e => {
+                e.currentTarget.style.display = "none";
+              }}
+              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+            />
           )}
         </div>
         <span

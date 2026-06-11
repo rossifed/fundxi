@@ -10,7 +10,7 @@ import type { Player } from "@fundxi/core/domain/player/player";
 import type { PlayerWithValuation } from "@fundxi/core/domain/market/player_valuation";
 import { Logo } from "@/ui/shell/Logo";
 import { LiveBadge } from "@/ui/components/LiveBadge";
-import { PlayerChip } from "@/ui/components/PlayerChip";
+import { PlayerAvatar } from "@/ui/components/PlayerAvatar";
 import { SectionHeader } from "@/ui/components/SectionHeader";
 import { Spark } from "@/ui/components/Spark";
 import { TeamLink } from "@/ui/components/TeamLink";
@@ -418,23 +418,15 @@ function MoversColumn({
             onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.025)")}
             onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
           >
-            {p.image_path ? (
-              <img
-                src={p.image_path}
-                alt={p.full_name ?? p.name}
-                style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: 7,
-                  objectFit: "contain",
-                  background: "rgba(255,255,255,.05)",
-                  border: "1px solid rgba(255,255,255,.08)",
-                  flexShrink: 0,
-                }}
-              />
-            ) : (
-              <PlayerChip jersey_number={p.jersey_number} team_color={team?.color ?? "#666"} size={34} />
-            )}
+            <PlayerAvatar
+              image_path={p.image_path}
+              jersey_number={p.jersey_number}
+              team_color={team?.color ?? "#666"}
+              size={34}
+              radius={7}
+              fit="contain"
+              alt={p.full_name ?? p.name}
+            />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0 }}>
                 <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,.4)", flexShrink: 0 }}>

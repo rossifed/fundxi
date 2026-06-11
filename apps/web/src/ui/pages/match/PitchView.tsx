@@ -493,6 +493,7 @@ function PlayerToken({
       >
         <span
           style={{
+            position: "relative",
             width: 54,
             height: 54,
             borderRadius: "50%",
@@ -505,16 +506,22 @@ function PlayerToken({
             justifyContent: "center",
           }}
         >
-          {photo ? (
+          {/* Number behind; the photo covers it. If the photo fails to load it
+              hides itself and paints the team color back in, so we get the
+              number-on-color jersey look instead of a broken image. */}
+          <span className="mono" style={{ fontSize: 20, fontWeight: 800, color: "#fff" }}>
+            {p.jersey_number}
+          </span>
+          {photo && (
             <img
               src={photo}
               alt=""
-              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+              onError={e => {
+                e.currentTarget.style.display = "none";
+                if (e.currentTarget.parentElement) e.currentTarget.parentElement.style.background = color;
+              }}
+              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }}
             />
-          ) : (
-            <span className="mono" style={{ fontSize: 20, fontWeight: 800, color: "#fff" }}>
-              {p.jersey_number}
-            </span>
           )}
         </span>
         {/* Jersey corner badge — only when we have a photo, otherwise it

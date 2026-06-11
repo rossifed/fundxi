@@ -26,7 +26,7 @@ import { chart_category_ramp } from "@fundxi/core/design/palette";
 import { Donut } from "@/components/Donut";
 import { KpiIcon, type KpiIconName } from "@/components/KpiIcon";
 import { PerformanceChart, type PerfPoint } from "@/components/PerformanceChart";
-import { PlayerChip } from "@/components/PlayerChip";
+import { PlayerAvatar as PlayerAvatarBase } from "@/components/PlayerAvatar";
 import { TickValue } from "@/components/TickValue";
 import { PlayerSheet, type PlayerSheetHandle } from "@/components/PlayerSheet";
 import { useLiveRefetch, usePricesLiveVersion } from "@/components/live";
@@ -383,10 +383,16 @@ export default function PortfolioScreen() {
 
 function PlayerAvatar({ player, size }: { player: Player; size: number }) {
   const team = teams_api.get(player.team_id);
-  if (player.image_path) {
-    return <Image source={{ uri: player.image_path }} style={[styles.avatar, { width: size, height: size }]} resizeMode="contain" />;
-  }
-  return <PlayerChip jersey_number={player.jersey_number} team_color={team?.color ?? "#666"} size={size} />;
+  return (
+    <PlayerAvatarBase
+      image_path={player.image_path}
+      jersey_number={player.jersey_number}
+      team_color={team?.color ?? "#666"}
+      size={size}
+      fit="contain"
+      style={[styles.avatar, { width: size, height: size }]}
+    />
+  );
 }
 
 function PositionRow({ h, opened, on_open }: { h: HoldingDetail; opened: string; on_open: () => void }) {

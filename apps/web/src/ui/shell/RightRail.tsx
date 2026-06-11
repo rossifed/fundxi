@@ -3,7 +3,7 @@ import { teams_api } from "@fundxi/core/api/teams_api";
 import { valuations_api } from "@fundxi/core/api/valuations_api";
 import type { Match } from "@fundxi/core/domain/match/match";
 import type { Player } from "@fundxi/core/domain/player/player";
-import { PlayerChip } from "@/ui/components/PlayerChip";
+import { PlayerAvatar } from "@/ui/components/PlayerAvatar";
 import { SectionHeader } from "@/ui/components/SectionHeader";
 import { TeamLink } from "@/ui/components/TeamLink";
 import { TickValue } from "@/ui/components/TickValue";
@@ -116,23 +116,15 @@ export function RightRail({ watchlist, on_open_player, on_open_match, on_open_te
                   onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.025)")}
                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                 >
-                  {p.image_path ? (
-                    <img
-                      src={p.image_path}
-                      alt={p.full_name ?? p.name}
-                      style={{
-                        width: 30,
-                        height: 30,
-                        borderRadius: 6,
-                        objectFit: "contain",
-                        background: "rgba(255,255,255,.05)",
-                        border: "1px solid rgba(255,255,255,.08)",
-                        flexShrink: 0,
-                      }}
-                    />
-                  ) : (
-                    <PlayerChip jersey_number={p.jersey_number} team_color={team?.color ?? "#666"} size={30} />
-                  )}
+                  <PlayerAvatar
+                    image_path={p.image_path}
+                    jersey_number={p.jersey_number}
+                    team_color={team?.color ?? "#666"}
+                    size={30}
+                    radius={6}
+                    fit="contain"
+                    alt={p.full_name ?? p.name}
+                  />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0 }}>
                       <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,.4)", flexShrink: 0 }}>
