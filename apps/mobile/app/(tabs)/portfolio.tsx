@@ -4,16 +4,17 @@
 // Mobile single-column flow: two hero stat cards (Total value | P&L) → value
 // chart with a period selector → secondary KPI grid (3×2, iconised) →
 // Positions/Trades → Analytics (Exposure / Win-Loss / Allocation). Same data,
-// same live sync as the web 2-column desktop board. The multi-select
-// bulk-close bar is omitted (it drives trading, gated until mobile auth lands);
-// positions still open the player sheet.
+// same live sync as the web 2-column desktop board. Positions open the player
+// sheet; a "Close all" button flattens the whole book at market price (native
+// Alert confirm). The web's multi-select "Close selected" is not yet ported.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { players_api } from "@fundxi/core/api/players_api";
 import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import { teams_api } from "@fundxi/core/api/teams_api";
+import { trades_api } from "@fundxi/core/api/trades_api";
 import { valuations_api } from "@fundxi/core/api/valuations_api";
 import { compute_period_return } from "@fundxi/core/domain/market/return";
 import { POSITION_ABBR, type Player } from "@fundxi/core/domain/player/player";
@@ -84,6 +85,7 @@ export default function PortfolioScreen() {
   // Allocation shows one breakdown at a time via its own sub-tabs.
   const [alloc_tab, set_alloc_tab] = useState<AllocTab>("team");
   const [data_version, set_data_version] = useState(0);
+  const [closing, set_closing] = useState(false);
 
   // /api/portfolio is auth-gated and mobile has no auth yet (401) — swallow
   // the failure so it doesn't surface as an unhandled rejection; the screen
@@ -103,6 +105,38 @@ export default function PortfolioScreen() {
 
   const holdings = useMemo(() => portfolio_api.get_holdings(), [data_version]);
   const trades = useMemo(() => portfolio_api.list_trades(), [data_version]);
+
+  // Bulk-close: flatten every open position to zero at its current market
+  // price. Longs are sold, shorts are bought back to cover — direction is
+  // derived per position by the shared close_positions use case. Native Alert
+  // confirm (mobile parity with the web ClosePositionsDialog's confirm step).
+  const close_all = () => {
+    if (closing || holdings.length === 0) return;
+    const n = holdings.length;
+    Alert.alert("Close all positions?", `This flattens ${n} position${n > 1 ? "s" : ""} at market price.`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Close all",
+        style: "destructive",
+        onPress: () => {
+          set_closing(true);
+          trades_api
+            .close_positions(holdings.map(h => ({ player_id: h.player_id, shares: h.shares, price: h.current_price })))
+            .then(outcome => {
+              set_data_version(v => v + 1);
+              Alert.alert(
+                "Positions closed",
+                outcome.failed.length === 0
+                  ? `Closed ${outcome.closed.length} position${outcome.closed.length > 1 ? "s" : ""}.`
+                  : `Closed ${outcome.closed.length}, ${outcome.failed.length} failed.`,
+              );
+            })
+            .catch((e: unknown) => Alert.alert("Close failed", e instanceof Error ? e.message : String(e)))
+            .finally(() => set_closing(false));
+        },
+      },
+    ]);
+  };
   const totals = useMemo(() => portfolio_api.get_totals(), [data_version]);
   const total_value = totals.total_value;
   // Allocation slices + win-rate: single source shared with web
@@ -304,9 +338,21 @@ export default function PortfolioScreen() {
                 holdings.length === 0 ? (
                   <Text style={styles.list_empty}>No open positions.</Text>
                 ) : (
-                  sorted_holdings.map(h => (
-                    <PositionRow key={h.player_id} h={h} opened={fmt_short_date(opened_by_player.get(h.player_id))} on_open={() => sheet_ref.current?.open(h.player)} />
-                  ))
+                  <>
+                    <View style={styles.close_all_row}>
+                      <Pressable
+                        onPress={close_all}
+                        disabled={closing}
+                        style={({ pressed }) => [styles.close_all_btn, pressed && styles.close_all_pressed, closing && styles.close_all_disabled]}
+                        accessibilityRole="button"
+                      >
+                        <Text style={styles.close_all_text}>{closing ? "Closing…" : "Close all"}</Text>
+                      </Pressable>
+                    </View>
+                    {sorted_holdings.map(h => (
+                      <PositionRow key={h.player_id} h={h} opened={fmt_short_date(opened_by_player.get(h.player_id))} on_open={() => sheet_ref.current?.open(h.player)} />
+                    ))}
+                  </>
                 )
               ) : positions_tab === "trades" ? (
                 trades.length === 0 ? (
@@ -669,6 +715,11 @@ const styles = StyleSheet.create({
   list_box: { height: LIST_HEIGHT },
   list_scroll: { paddingBottom: 4 },
   list_empty: { padding: 24, textAlign: "center", color: text.muted, fontSize: 13 },
+  close_all_row: { flexDirection: "row", justifyContent: "flex-end", paddingBottom: 8 },
+  close_all_btn: { paddingVertical: 7, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1, borderColor: palette.negative },
+  close_all_pressed: { opacity: 0.6 },
+  close_all_disabled: { opacity: 0.5 },
+  close_all_text: { fontFamily: mono, fontSize: 12, fontWeight: "800", color: palette.negative },
 
   row: {
     backgroundColor: "rgba(255,255,255,0.03)",
