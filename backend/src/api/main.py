@@ -76,6 +76,14 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+# Public privacy policy (App Store / TestFlight require a reachable URL). Served by
+# the API so it is live at https://<host>/privacy regardless of the SPA — declared
+# BEFORE the SPA catch-all below so it is not swallowed by index.html.
+@app.get("/privacy", include_in_schema=False)
+async def privacy_policy() -> FileResponse:
+    return FileResponse(Path(__file__).parent / "legal" / "privacy.html")
+
+
 # --- Static web (production) -------------------------------------------------
 # When WEB_DIST_DIR points at a built SPA (the prod Docker image copies
 # apps/web/dist there), this app serves the frontend too — same origin as the
