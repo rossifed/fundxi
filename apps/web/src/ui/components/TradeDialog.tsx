@@ -394,18 +394,20 @@ export function TradeDialog({
                 </button>
               ))
             : (() => {
-                const max = is_buy
-                  ? Math.floor(preview.cash_before / safe_price)
-                  : Math.max(held_shares, Math.floor(preview.cash_before / safe_price));
-                const vals =
+                // Quantize to the 0.1-share increment the trade engine uses
+                // (trade_calc SHARES_QUANTUM). Computing shortcuts on a floored
+                // INTEGER affordability produced "0" buttons for any expensive
+                // player (max < 5 ⇒ round(max*0.1)=0) — useless and confusing.
+                const q = (x: number) => Math.floor(x * 10) / 10;
+                const max_aff = is_buy
+                  ? preview.cash_before / safe_price
+                  : Math.max(held_shares, preview.cash_before / safe_price);
+                const raw =
                   !is_buy && held_shares > 0
-                    ? [
-                        Math.round(held_shares * 0.25),
-                        Math.round(held_shares * 0.5),
-                        Math.round(held_shares * 0.75),
-                        held_shares,
-                      ]
-                    : [Math.round(max * 0.1), Math.round(max * 0.25), Math.round(max * 0.5), max];
+                    ? [held_shares * 0.25, held_shares * 0.5, held_shares * 0.75, held_shares]
+                    : [max_aff * 0.1, max_aff * 0.25, max_aff * 0.5, max_aff];
+                // Drop zeros and duplicates so we never render a dead "0" chip.
+                const vals = [...new Set(raw.map(q).filter(v => v > 0))];
                 return vals.map(v => (
                   <button
                     key={v}
@@ -422,7 +424,7 @@ export function TradeDialog({
                       fontFamily: "inherit",
                     }}
                   >
-                    {v}
+                    {fmt_shares(v)}
                   </button>
                 ));
               })()}
