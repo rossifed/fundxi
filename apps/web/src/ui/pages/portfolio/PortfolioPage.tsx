@@ -327,7 +327,14 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
                 {fmt_signed_pct(period_return, 1)}
               </span>
             </div>
-            <PerformanceChart data={performance_data} height={280} format_axis={v => `${Math.round(v)}M`} show_axes show_last_value />
+            <PerformanceChart
+              data={performance_data}
+              height={280}
+              format_axis={v => `€${v.toFixed(1)}M`}
+              min_span_pct={5}
+              show_axes
+              show_last_value
+            />
           </div>
 
           {/* Positions / Trade history — flex-grows to fill remaining

@@ -52,6 +52,12 @@ interface PerformanceChartProps {
   /** Y-axis tick label. The chart stays unit-agnostic — the caller owns the
    *  unit (defaults to a plain rounded number). */
   format_axis?: (value: number) => string;
+  /** Minimum vertical span as a % of the mid value. 0 (default) auto-scales
+   *  tight to the data (good for price charts where the move IS the story).
+   *  Set it for value charts (e.g. the portfolio) so a near-flat series shows
+   *  as near-flat instead of a tight auto-scale amplifying a <1% wiggle into a
+   *  full-height cliff. The data range still wins when it exceeds the floor. */
+  min_span_pct?: number;
 }
 
 // Last-value pill rendered at the right end of the reference line. Recharts
@@ -134,6 +140,7 @@ export function PerformanceChart({
   show_axes = false,
   show_last_value = false,
   format_axis = v => String(Math.round(v)),
+  min_span_pct = 0,
 }: PerformanceChartProps) {
   if (!data.length) return null;
 
@@ -170,6 +177,18 @@ export function PerformanceChart({
     ? Array.from(new Set(Array.from({ length: 4 }, (_, k) => Math.round((k / 3) * (points.length - 1)))))
     : undefined;
 
+  // Y-axis domain. Default: tight auto-scale. With min_span_pct, enforce a
+  // floor on the visible span so a flat value series doesn't read as a cliff.
+  let y_domain: [number, number] | [string, string] = ["dataMin", "dataMax"];
+  if (min_span_pct > 0) {
+    const vs = points.map(p => p.v);
+    const vmin = Math.min(...vs);
+    const vmax = Math.max(...vs);
+    const mid = (vmin + vmax) / 2;
+    const span = Math.max(vmax - vmin, Math.abs(mid) * (min_span_pct / 100));
+    y_domain = [mid - span / 2, mid + span / 2];
+  }
+
   const tick = { fontSize: 9, fill: colors.text.tertiary, fontFamily: '"JetBrains Mono", monospace' } as const;
   const margin = show_axes ? { top: 8, right: 8, bottom: 4, left: 0 } : { top: 8, right: 12, bottom: 0, left: 0 };
 
@@ -199,7 +218,7 @@ export function PerformanceChart({
         {show_axes && (
           <YAxis
             orientation="right"
-            domain={["dataMin", "dataMax"]}
+            domain={y_domain}
             tickCount={5}
             tickFormatter={format_axis}
             tick={tick}
