@@ -103,6 +103,37 @@ def test_project_fixture_live() -> None:
     assert fixture.minute == 67
 
 
+def test_project_fixture_minute_from_ticking_period() -> None:
+    """Sportmonks v3 has no top-level fixture minute during live play; the clock
+    is the ticking period's `minutes` (include=periods). The non-ticking period
+    (1st half, ended) must be ignored."""
+    payload = {
+        "id": 1,
+        "starting_at": "2026-06-11 19:00:00",
+        "state": {"state": "INPLAY_2ND_HALF"},
+        "participants": _participants(),
+        "periods": [
+            {"description": "1st-half", "ticking": False, "minutes": 45},
+            {"description": "2nd-half", "ticking": True, "minutes": 58},
+        ],
+    }
+    fixture, _ = project_fixture(payload, group="A", team_id_by_sportmonks=_TEAM_MAP)
+    assert fixture.status is FixtureStatus.LIVE
+    assert fixture.minute == 58
+
+
+def test_project_fixture_no_ticking_period_yields_none() -> None:
+    payload = {
+        "id": 1,
+        "starting_at": "2026-06-11 19:00:00",
+        "state": {"state": "HT"},
+        "participants": _participants(),
+        "periods": [{"description": "1st-half", "ticking": False, "minutes": 45}],
+    }
+    fixture, _ = project_fixture(payload, group="A", team_id_by_sportmonks=_TEAM_MAP)
+    assert fixture.minute is None
+
+
 def test_project_fixture_finished() -> None:
     payload = {
         "id": 2,

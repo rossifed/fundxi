@@ -13,7 +13,7 @@ Assumed payload shape (Sportmonks v3 /fixtures?include=participants;scores;state
   # NOTE: home/away are resolved by participant.id (stable Sportmonks team id),
   # NOT short_code — see _team_id_from_participants for why.
   "scores": [ ... ],
-  "minute": int | null
+  "periods": [ { "ticking": bool, "minutes": int, ... } ]   # live clock
 }
 
 Group attribution (A..L) is not natively in /fixtures and is added by an
@@ -134,6 +134,28 @@ def _team_id_from_participants(
     raise ValueError(f"No participant with meta.location={location!r}")
 
 
+def _live_minute(payload: dict[str, Any]) -> int | None:
+    """The running match minute.
+
+    Sportmonks v3 has NO top-level ``minute`` on a fixture during live play —
+    the clock lives on the period whose ``ticking`` flag is true (its
+    ``minutes`` field). Requires ``include=periods`` (the inplay poller asks
+    for it; the static bootstrap does not, so upcoming fixtures simply yield
+    ``None``). Falls back to an explicit top-level ``minute`` when present
+    (some payloads / test fixtures), else ``None``.
+    """
+    periods = payload.get("periods")
+    items = periods.get("data") if isinstance(periods, dict) else periods
+    if isinstance(items, list):
+        for period in items:
+            if isinstance(period, dict) and period.get("ticking") is True:
+                minutes = period.get("minutes")
+                if isinstance(minutes, int):
+                    return minutes
+    minute_raw = payload.get("minute")
+    return minute_raw if isinstance(minute_raw, int) else None
+
+
 def _parse_kickoff(value: object) -> datetime | None:
     if not isinstance(value, str) or not value:
         return None
@@ -162,8 +184,7 @@ def project_fixture(
 
     status = _project_status(payload.get("state"))
 
-    minute_raw = payload.get("minute")
-    minute = minute_raw if isinstance(minute_raw, int) else None
+    minute = _live_minute(payload)
 
     scores_payload = payload.get("scores")
     home_score = _final_score(scores_payload, "home")

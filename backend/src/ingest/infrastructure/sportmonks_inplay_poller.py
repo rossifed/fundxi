@@ -67,7 +67,9 @@ log = structlog.get_logger(__name__)
 # State + scores + participants come back by default with /fixtures/{id}
 # in v3, but listing them explicitly makes the contract self-documenting
 # and lets us add fields without ambiguity later.
-_INPLAY_INCLUDE = "state;participants;scores;events.type;comments;lineups.position;lineups.details;statistics.type"
+_INPLAY_INCLUDE = (
+    "state;participants;scores;periods;events.type;comments;lineups.position;lineups.details;statistics.type"
+)
 
 # Subject prefix every per-player price tick is published under (live, settlement,
 # suspension, lineup-drop — all share it). Used both to build the live ticks'
