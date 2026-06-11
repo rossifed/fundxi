@@ -58,6 +58,10 @@ class PlaceTradeCommand:
     player_id: int
     kind: str  # validated here against TradeKind
     shares: float
+    # Optional client idempotency token (``Idempotency-Key`` header). When set,
+    # a duplicate submission carrying the same key replays the recorded trade
+    # instead of executing a second one. ``None`` keeps the legacy behaviour.
+    idempotency_key: str | None = None
 
 
 async def place_trade(
@@ -84,6 +88,23 @@ async def place_trade(
     portfolio = await portfolio_repo.get_by_user_id_for_update(user.id)
     if portfolio is None:
         raise PortfolioNotFoundError(user.id)
+
+    # Idempotency replay. Checked AFTER taking the portfolio lock so two
+    # identical submissions racing in parallel serialize: the second blocks on
+    # the lock, then finds the trade the first committed and replays it instead
+    # of executing again. The DB unique (portfolio_id, idempotency_key) is the
+    # backstop. The replay returns the stored trade with the portfolio's CURRENT
+    # state (intervening trades are honestly reflected); the guarantee is that
+    # the side effect happened exactly once.
+    if command.idempotency_key is not None:
+        existing = await trade_repo.get_by_idempotency_key(
+            portfolio_id=portfolio.id, idempotency_key=command.idempotency_key
+        )
+        if existing is not None:
+            holding = await portfolio_repo.get_holding(
+                portfolio_id=portfolio.id, player_id=existing.player_id
+            )
+            return TradeOutcome(trade=existing, portfolio=portfolio, holding=holding)
 
     try:
         kind = TradeKind(command.kind)
@@ -124,6 +145,7 @@ async def place_trade(
             kind=kind,
             shares=command.shares,
             price=server_price,
+            idempotency_key=command.idempotency_key,
         ),
         portfolio=portfolio,
         portfolio_repo=portfolio_repo,

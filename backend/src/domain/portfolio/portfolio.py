@@ -35,6 +35,11 @@ class Trade:
     price: float
     total: float
     executed_at: datetime
+    # Client-supplied idempotency token (UUID). ``None`` for the legacy,
+    # non-idempotent path (clients that don't send the header). Unique per
+    # portfolio: a retry carrying the same key replays the stored trade
+    # instead of executing a second one.
+    idempotency_key: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,3 +76,9 @@ class TradeRepository(Protocol):
     async def append(self, trade: Trade) -> Trade: ...
 
     async def list_by_portfolio(self, portfolio_id: int, *, limit: int = 200) -> list[Trade]: ...
+
+    async def get_by_idempotency_key(self, *, portfolio_id: int, idempotency_key: str) -> Trade | None:
+        """The trade previously recorded under this key for the portfolio, or
+        ``None`` if the key is unseen. Used to replay a duplicate submission
+        without executing it twice."""
+        ...

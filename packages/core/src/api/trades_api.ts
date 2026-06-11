@@ -40,13 +40,28 @@ export interface ExecuteTradeInput {
   price: number;
 }
 
+/** Fresh idempotency token for one trade submission. Sent as the
+ * ``Idempotency-Key`` header so a duplicate delivery of the SAME request
+ * (proxy/network retry) dedupes server-side instead of double-trading.
+ * Prefers the platform CSPRNG; falls back to a time+random token (collision
+ * risk is negligible and keys are namespaced per portfolio server-side). */
+function new_idempotency_key(): string {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  if (c?.randomUUID) return c.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function idempotency_header(): Record<string, string> {
+  return { "Idempotency-Key": new_idempotency_key() };
+}
+
 export const trades_api = {
   list(): Trade[] {
     return trades_repository.find_all();
   },
   /** Execute a buy/sell, refresh local caches. Throws on backend error. */
   async execute(input: ExecuteTradeInput): Promise<TradeOutcomeDTO> {
-    const outcome = await api_post<TradeOutcomeDTO>("/api/trades", input);
+    const outcome = await api_post<TradeOutcomeDTO>("/api/trades", input, idempotency_header());
     _set_from_outcome(outcome.portfolio);
     await refresh_trades();
     // refresh_portfolio is implicit through _set_from_outcome's listener
@@ -62,12 +77,16 @@ export const trades_api = {
   async close_positions(positions: PositionToClose[]): Promise<CloseOutcome> {
     const outcome = await run_close_positions(positions, async pos => {
       const { kind, shares } = closing_trade(pos);
-      await api_post<TradeOutcomeDTO>("/api/trades", {
-        player_id: pos.player_id,
-        kind,
-        shares,
-        price: pos.price,
-      });
+      await api_post<TradeOutcomeDTO>(
+        "/api/trades",
+        {
+          player_id: pos.player_id,
+          kind,
+          shares,
+          price: pos.price,
+        },
+        idempotency_header(),
+      );
     });
     if (outcome.closed.length > 0) {
       await refresh_trades();

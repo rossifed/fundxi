@@ -31,6 +31,9 @@ class TradeRequest:
     kind: TradeKind
     shares: float
     price: float
+    # Carried onto the persisted Trade so a retry with the same key can be
+    # detected and replayed. ``None`` = legacy non-idempotent path.
+    idempotency_key: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,6 +159,7 @@ async def execute_trade(
         price=request.price,
         total=total,
         executed_at=datetime.now(UTC),
+        idempotency_key=request.idempotency_key,
     )
     saved_trade = await trade_repo.append(trade_record)
 

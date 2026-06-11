@@ -28,17 +28,20 @@ Properties:
 - Pure-ish: I/O delegated to repository ports; the price/cash math
   is local to keep the unit tests fast and fake-friendly.
 
-Pricing edge case: a portfolio may hold a player that has never
-ticked. ``LatestPriceProvider.get_many`` returns ``None`` for that
-player; we then fall back to the holding's ``average_buy_price``
-(its only known price) so the snapshot never silently underestimates
-holdings_value. This is the "no harm, no surprise" choice — the
-moment a real tick lands the snapshot self-corrects.
+Pricing ladder: each position is marked at ``tick ?? base ?? cost-basis``.
+The wired ``price_provider`` (``SqlAlchemyCurrentPriceProvider``) already
+resolves an un-ticked player to its starting price (``base_value``) — the
+SAME ``tick ?? base`` rule the frontend's valuation surface uses — so the
+snapshot marks each holding at the exact price the UI shows. The pure
+helper's final fall back to ``average_buy_price`` is a last-resort safety
+net (a price provider that returns nothing for a player), unreachable for a
+tradeable player but kept so the snapshot never silently drops a position.
+The moment a real tick lands the snapshot self-corrects.
 """
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Protocol
 
 from src.domain.portfolio.portfolio import Holding, PortfolioRepository
@@ -164,8 +167,8 @@ class PortfolioSnapshotService:
             SqlAlchemyPortfolioSnapshotRepository,
         )
         from src.infrastructure.db.repositories.portfolio_snapshot_adapters import (
+            SqlAlchemyCurrentPriceProvider,
             SqlAlchemyDirtyPortfolioResolver,
-            SqlAlchemyLatestPriceProvider,
             SqlAlchemyPortfolioReader,
         )
 
@@ -173,7 +176,9 @@ class PortfolioSnapshotService:
             portfolio_repo=SqlAlchemyPortfolioRepository(session),
             snapshot_repo=SqlAlchemyPortfolioSnapshotRepository(session),
             dirty_resolver=SqlAlchemyDirtyPortfolioResolver(session),
-            price_provider=SqlAlchemyLatestPriceProvider(session),
+            # tick ?? base — marks positions at the same price the UI shows, so
+            # the value snapshot aligns with the frontend totals by construction.
+            price_provider=SqlAlchemyCurrentPriceProvider(session, as_of=datetime.now(UTC)),
             portfolio_reader=SqlAlchemyPortfolioReader(session),
         )
 

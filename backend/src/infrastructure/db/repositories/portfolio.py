@@ -37,6 +37,7 @@ def _trade_to_domain(orm: TradeORM) -> Trade:
         price=float(orm.price),
         total=float(orm.total),
         executed_at=orm.executed_at,
+        idempotency_key=orm.idempotency_key,
     )
 
 
@@ -117,6 +118,7 @@ class SqlAlchemyTradeRepository:
             shares=trade.shares,
             price=trade.price,
             total=trade.total,
+            idempotency_key=trade.idempotency_key,
         )
         self._session.add(orm)
         await self._session.flush()
@@ -131,3 +133,13 @@ class SqlAlchemyTradeRepository:
             .limit(limit)
         )
         return [_trade_to_domain(row) for row in result.scalars().all()]
+
+    async def get_by_idempotency_key(self, *, portfolio_id: int, idempotency_key: str) -> Trade | None:
+        result = await self._session.execute(
+            select(TradeORM).where(
+                TradeORM.portfolio_id == portfolio_id,
+                TradeORM.idempotency_key == idempotency_key,
+            )
+        )
+        row = result.scalar_one_or_none()
+        return _trade_to_domain(row) if row else None

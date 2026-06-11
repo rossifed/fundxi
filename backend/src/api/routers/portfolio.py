@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_current_user_id, get_session
@@ -37,6 +37,7 @@ from src.infrastructure.db.repositories.portfolio_snapshot import (
     SqlAlchemyPortfolioSnapshotRepository,
 )
 from src.infrastructure.db.repositories.portfolio_snapshot_adapters import (
+    SqlAlchemyCurrentPriceProvider,
     SqlAlchemyLatestPriceProvider,
     SqlAlchemyPortfolioReader,
 )
@@ -104,12 +105,17 @@ async def post_trade(
     body: TradeRequestBody,
     user_id: int = Depends(get_current_user_id),
     session: AsyncSession = Depends(get_session),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> TradeOutcomeResponse:
     portfolio_repo = SqlAlchemyPortfolioRepository(session)
     try:
         outcome = await place_trade(
             command=PlaceTradeCommand(
-                user_id=user_id, player_id=body.player_id, kind=body.kind, shares=body.shares
+                user_id=user_id,
+                player_id=body.player_id,
+                kind=body.kind,
+                shares=body.shares,
+                idempotency_key=idempotency_key,
             ),
             user_repo=SqlAlchemyUserRepository(session),
             portfolio_repo=portfolio_repo,
@@ -172,7 +178,9 @@ async def get_portfolio_history(
     service = PortfolioHistoryService(
         portfolio_repo=SqlAlchemyPortfolioRepository(session),
         snapshot_repo=SqlAlchemyPortfolioSnapshotRepository(session),
-        price_provider=SqlAlchemyLatestPriceProvider(session),
+        # tick ?? base — the live tail marks holdings at the same price the
+        # frontend totals use, so the chart's rightmost point matches the KPI.
+        price_provider=SqlAlchemyCurrentPriceProvider(session, as_of=datetime.now(UTC)),
         portfolio_reader=SqlAlchemyPortfolioReader(session),
     )
     snapshots = await service.read(portfolio_id=portfolio.id, range_=range_)

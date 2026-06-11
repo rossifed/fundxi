@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, PrimaryKeyConstraint, String, func
+from sqlalchemy import DateTime, ForeignKey, Numeric, PrimaryKeyConstraint, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.db.base import Base
@@ -39,7 +39,13 @@ class HoldingORM(Base):
 
 class TradeORM(Base):
     __tablename__ = "trade"
-    __table_args__ = {"schema": "app"}
+    # Idempotency: at most one trade per (portfolio, key). NULL keys are exempt
+    # (Postgres treats NULLs as distinct), so the legacy no-key path keeps
+    # appending freely while keyed submissions dedupe.
+    __table_args__ = (
+        UniqueConstraint("portfolio_id", "idempotency_key", name="uq_trade_portfolio_idempotency_key"),
+        {"schema": "app"},
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     portfolio_id: Mapped[int] = mapped_column(ForeignKey("app.portfolio.id", ondelete="CASCADE"), index=True)
@@ -51,3 +57,4 @@ class TradeORM(Base):
     executed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )
+    idempotency_key: Mapped[str | None] = mapped_column(String(64), nullable=True)

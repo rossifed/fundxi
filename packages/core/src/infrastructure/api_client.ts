@@ -51,12 +51,16 @@ export async function api_get<T>(
   return (await r.json()) as T;
 }
 
-export async function api_post<T>(path: string, body?: unknown): Promise<T> {
+export async function api_post<T>(
+  path: string,
+  body?: unknown,
+  headers?: Record<string, string>,
+): Promise<T> {
   const url = `${_api_base}${path}`;
   const r = await fetch(url, {
     method: "POST",
     credentials: "include",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!r.ok) {

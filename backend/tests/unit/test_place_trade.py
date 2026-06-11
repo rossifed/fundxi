@@ -87,6 +87,16 @@ class _FakeTradeRepo:
     async def list_by_portfolio(self, portfolio_id: int, *, limit: int = 200) -> list[Trade]:  # pragma: no cover
         return list(self.trades)
 
+    async def get_by_idempotency_key(self, *, portfolio_id: int, idempotency_key: str) -> Trade | None:
+        return next(
+            (
+                t
+                for t in self.trades
+                if t.portfolio_id == portfolio_id and t.idempotency_key == idempotency_key
+            ),
+            None,
+        )
+
 
 @dataclass(slots=True)
 class _FakePriceProvider:
@@ -191,6 +201,61 @@ def test_short_beyond_equity_is_rejected_by_margin() -> None:
     # Nothing was written: no trade appended, no short opened.
     assert trade_repo.trades == []
     assert portfolio_repo.holdings == {}
+
+
+def test_duplicate_idempotency_key_replays_without_re_executing() -> None:
+    # Same key submitted twice (a retry): the side effect must happen ONCE.
+    user_repo, portfolio_repo, trade_repo, price_provider = _setup(cash=1000.0, prices={7: 12.0})
+    starting = _FakeStartingPriceProvider({})
+
+    def submit():  # type: ignore[no-untyped-def]
+        return _run(
+            place_trade(
+                command=PlaceTradeCommand(
+                    user_id=1, player_id=7, kind="buy", shares=2.0, idempotency_key="key-abc"
+                ),
+                user_repo=user_repo,
+                portfolio_repo=portfolio_repo,
+                trade_repo=trade_repo,
+                price_provider=price_provider,
+                starting_price_provider=starting,
+                max_leverage=1.0,
+            )
+        )
+
+    first = submit()
+    second = submit()
+
+    # Exactly one trade recorded; cash debited once (1000 - 24, not - 48).
+    assert len(trade_repo.trades) == 1
+    assert portfolio_repo.portfolio.cash == 1000.0 - 24.0
+    # The replay echoes the original trade.
+    assert second.trade.id == first.trade.id
+    assert second.trade.idempotency_key == "key-abc"
+    # The holding reflects a single buy of 2 shares, not 4.
+    assert portfolio_repo.holdings[7].shares == 2.0
+
+
+def test_distinct_idempotency_keys_execute_independently() -> None:
+    # Two different keys = two distinct user actions → two trades.
+    user_repo, portfolio_repo, trade_repo, price_provider = _setup(cash=1000.0, prices={7: 12.0})
+    starting = _FakeStartingPriceProvider({})
+    for key in ("key-1", "key-2"):
+        _run(
+            place_trade(
+                command=PlaceTradeCommand(
+                    user_id=1, player_id=7, kind="buy", shares=1.0, idempotency_key=key
+                ),
+                user_repo=user_repo,
+                portfolio_repo=portfolio_repo,
+                trade_repo=trade_repo,
+                price_provider=price_provider,
+                starting_price_provider=starting,
+                max_leverage=1.0,
+            )
+        )
+    assert len(trade_repo.trades) == 2
+    assert portfolio_repo.holdings[7].shares == 2.0
 
 
 def test_short_within_equity_is_allowed() -> None:
