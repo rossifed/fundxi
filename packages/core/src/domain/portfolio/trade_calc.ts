@@ -8,34 +8,44 @@
  * Conventions:
  *   - Prices are in €M per share.
  *   - Shares are quantized to a 0.1 increment (fractional shares).
- *   - Amounts are integer €M (consistent with the legacy mock data;
- *     keeps numbers stable across the prototype).
+ *   - ``amount`` is the trade's ACTUAL cost/proceeds = shares × price,
+ *     rounded to the cent (2 decimals) — the SAME value the backend debits
+ *     (``total = round(shares × price, 2)``). So the preview's cash math
+ *     reconciles with execution (no integer-€M rounding skew at the margin).
  */
 
 import type { TradeKind } from "./trade";
 
 const SHARES_QUANTUM = 10; // shares are floored to 0.1 (1/10) increments
 
+/** Round a €M money value to the cent — mirrors the backend's
+ * ``round(value, 2)`` so the preview and the executed trade agree. */
+function round_money(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 /** Compute (amount, shares) when the user sizes a trade by a % of
- * portfolio. Shares are floor-rounded to the 0.1 increment so we never
- * over-commit cash on a buy. */
+ * portfolio. The percentage sets a spend BUDGET; shares are floor-rounded
+ * to the 0.1 increment so the cost never exceeds that budget (and a buy
+ * never over-commits). ``amount`` is the resulting actual cost
+ * (shares × price), not the gross budget — what the backend will debit. */
 export function compute_quantity_from_pct(
   portfolio_value: number,
   pct: number,
   current_price: number,
 ): { amount: number; shares: number } {
-  const amount = Math.round((portfolio_value * pct) / 100);
-  const shares = current_price === 0 ? 0 : Math.floor((amount / current_price) * SHARES_QUANTUM) / SHARES_QUANTUM;
-  return { amount, shares };
+  const budget = (portfolio_value * pct) / 100;
+  const shares = current_price === 0 ? 0 : Math.floor((budget / current_price) * SHARES_QUANTUM) / SHARES_QUANTUM;
+  return { amount: round_money(shares * current_price), shares };
 }
 
 /** Compute (amount, shares) when the user sizes a trade by an explicit
- * share count. Amount rounds to integer €M. */
+ * share count. ``amount`` = shares × price rounded to the cent. */
 export function compute_quantity_from_shares(
   shares: number,
   current_price: number,
 ): { amount: number; shares: number } {
-  return { amount: Math.round(shares * current_price), shares };
+  return { amount: round_money(shares * current_price), shares };
 }
 
 /** Percentage of the portfolio represented by the trade amount.

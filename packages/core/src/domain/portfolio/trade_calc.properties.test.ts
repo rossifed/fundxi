@@ -28,13 +28,13 @@ const f_shares = fc.double({ min: 0.1, max: 100, noNaN: true, noDefaultInfinity:
 const f_pct = fc.double({ min: 0, max: 100, noNaN: true, noDefaultInfinity: true });
 
 describe("trade_calc — property-based invariants", () => {
-  it("compute_quantity_from_pct: amount is exactly round(portfolio_value * pct / 100), always integer M€", () => {
+  it("compute_quantity_from_pct: amount is the floored shares' actual cost, rounded to the cent", () => {
     fc.assert(
       fc.property(f_amount, f_pct, f_price, (portfolio_value, pct, price) => {
-        const { amount } = compute_quantity_from_pct(portfolio_value, pct, price);
-        // amount is the integer M€ rounding of portfolio_value * pct / 100,
-        // independent of price. Catches a price-mistakenly-folded-into-amount bug.
-        expect(amount).toBe(Math.round((portfolio_value * pct) / 100));
+        const { amount, shares } = compute_quantity_from_pct(portfolio_value, pct, price);
+        // amount = shares × price to the cent — exactly what the backend debits.
+        // Catches a regression that displays the gross budget instead of the cost.
+        expect(amount).toBe(Math.round(shares * price * 100) / 100);
       }),
     );
   });
@@ -51,21 +51,23 @@ describe("trade_calc — property-based invariants", () => {
     );
   });
 
-  it("compute_quantity_from_pct: a BUY never over-commits cash (floor protects against over-spend)", () => {
+  it("compute_quantity_from_pct: a BUY never over-commits the budget (floored cost ≤ budget)", () => {
     fc.assert(
       fc.property(f_amount, f_pct, f_price, (portfolio_value, pct, price) => {
-        const { amount, shares } = compute_quantity_from_pct(portfolio_value, pct, price);
-        // shares * price <= amount (within €1M because amount itself is rounded
-        // to nearest M€ and shares are floored to 0.1, so cost <= amount + 0.5).
-        if (price > 0) expect(shares * price).toBeLessThanOrEqual(amount + 0.5 + 1e-9);
+        const { shares } = compute_quantity_from_pct(portfolio_value, pct, price);
+        // Flooring shares to 0.1 guarantees the actual cost never exceeds the
+        // gross budget — the real over-spend protection (now invariant of any
+        // amount-rounding choice).
+        const budget = (portfolio_value * pct) / 100;
+        if (price > 0) expect(shares * price).toBeLessThanOrEqual(budget + 1e-9);
       }),
     );
   });
 
-  it("compute_quantity_from_shares: amount == round(shares * price) — no other variable matters", () => {
+  it("compute_quantity_from_shares: amount == round-to-cent(shares * price) — no other variable matters", () => {
     fc.assert(
       fc.property(f_shares, f_price, (shares, price) => {
-        expect(compute_quantity_from_shares(shares, price).amount).toBe(Math.round(shares * price));
+        expect(compute_quantity_from_shares(shares, price).amount).toBe(Math.round(shares * price * 100) / 100);
       }),
     );
   });

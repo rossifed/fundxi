@@ -11,15 +11,19 @@ import {
 } from "./trade_calc";
 
 describe("compute_quantity_from_pct", () => {
-  it("derives amount = portfolio_value × pct, shares = floor(amount/price * 10) / 10", () => {
+  it("budget sizes shares (floored to 0.1); amount = actual cost (shares × price)", () => {
     const { amount, shares } = compute_quantity_from_pct(1000, 25, 7);
-    expect(amount).toBe(250);
-    expect(shares).toBe(35.7); // floor(250/7 * 10)/10 = floor(357.14)/10 = 35.7
+    // budget = 250; shares = floor(250/7 * 10)/10 = floor(357.14)/10 = 35.7
+    expect(shares).toBe(35.7);
+    // amount is the cost the backend debits, NOT the gross budget: 35.7 × 7 = 249.9
+    expect(amount).toBe(249.9);
   });
 
-  it("rounds the amount to the nearest €M", () => {
-    const { amount } = compute_quantity_from_pct(101, 50, 10);
-    expect(amount).toBe(51); // round(50.5)
+  it("amount rounds to the cent, capped by the floored share count", () => {
+    // budget = 50.5 → shares = floor(50.5/10 * 10)/10 = floor(5.05*10)/10 = 5.0
+    const { amount, shares } = compute_quantity_from_pct(101, 50, 10);
+    expect(shares).toBe(5);
+    expect(amount).toBe(50); // 5 × 10 (cost), not the 50.5 budget
   });
 
   it("zero current_price → zero shares (avoids div/0, no NaN)", () => {
@@ -29,9 +33,9 @@ describe("compute_quantity_from_pct", () => {
 });
 
 describe("compute_quantity_from_shares", () => {
-  it("amount = shares × price rounded to integer €M", () => {
+  it("amount = shares × price rounded to the cent", () => {
     expect(compute_quantity_from_shares(3, 7)).toEqual({ amount: 21, shares: 3 });
-    expect(compute_quantity_from_shares(2.5, 7)).toEqual({ amount: 18, shares: 2.5 }); // 17.5 → 18
+    expect(compute_quantity_from_shares(2.5, 7)).toEqual({ amount: 17.5, shares: 2.5 });
   });
 });
 
