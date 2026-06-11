@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     # times this factor. 1.0 = no leverage (the total size of all positions can
     # never exceed the portfolio's own money); shorting stays allowed but bounded
     # by capital. See domain/portfolio/margin.py.
+    # NOTE: this headroom applies to SHORTS only. Longs are cash-only by design —
+    # a buy beyond free cash is rejected in execute_trade regardless of this
+    # factor (no margin borrowing on longs). Setting > 1 enlarges short capacity,
+    # not long capacity.
     max_gross_leverage: float = Field(default=1.0)
 
     @property

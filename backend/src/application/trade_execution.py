@@ -119,6 +119,13 @@ async def execute_trade(
     prev_avg = held.average_buy_price if held else 0.0
 
     if request.kind is TradeKind.BUY:
+        # Longs are cash-only by design: a buy must be fully funded by free cash,
+        # never on margin. This is intentional and asymmetric with shorts — the
+        # leverage headroom (``max_gross_leverage`` in the margin rule) bounds how
+        # far a SHORT can grow gross exposure, but it never lets a long borrow
+        # cash. So even with max_gross_leverage > 1 a buy beyond cash is rejected
+        # here; relax this check (not the margin rule) if leveraged longs are ever
+        # wanted. See domain/portfolio/margin.py and config.max_gross_leverage.
         if portfolio.cash < total:
             raise TradeError(f"insufficient cash: need €{total:.2f}M, have €{portfolio.cash:.2f}M")
         new_shares = prev_shares + request.shares
