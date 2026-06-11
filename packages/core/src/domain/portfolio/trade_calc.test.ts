@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   compute_buy_shortfall,
   compute_cash_after,
+  compute_min_lot_cost,
   compute_quantity_from_pct,
   compute_quantity_from_shares,
   compute_realized_pnl,
   compute_shares_after,
   compute_short_quantity,
   compute_trade_share,
+  MIN_LOT_SHARES,
 } from "./trade_calc";
 
 describe("compute_quantity_from_pct", () => {
@@ -29,6 +31,22 @@ describe("compute_quantity_from_pct", () => {
   it("zero current_price → zero shares (avoids div/0, no NaN)", () => {
     const { shares } = compute_quantity_from_pct(1000, 25, 0);
     expect(shares).toBe(0);
+  });
+
+  it("an expensive player can round a small % to zero shares (min-lot floor)", () => {
+    // Yamal-style: €200M/share, €100M book. 10% budget = €10M < one 0.1 lot
+    // (€20M) ⇒ 0 shares. Drives the below_min_lot UI hint.
+    expect(compute_quantity_from_pct(100, 10, 200).shares).toBe(0);
+    // 20% budget = €20M = exactly one 0.1 lot ⇒ buyable.
+    expect(compute_quantity_from_pct(100, 20, 200).shares).toBe(0.1);
+  });
+});
+
+describe("compute_min_lot_cost", () => {
+  it("is the quantum lot times price (€M)", () => {
+    expect(MIN_LOT_SHARES).toBe(0.1);
+    expect(compute_min_lot_cost(200)).toBe(20); // 0.1 × €200M
+    expect(compute_min_lot_cost(7)).toBe(0.7);
   });
 });
 

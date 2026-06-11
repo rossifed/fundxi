@@ -509,6 +509,27 @@ export function TradeDialog({
           </div>
         )}
 
+        {/* Min-lot notice: a very expensive player can't be bought below one
+            0.1-share lot, so a small % rounds to 0 shares. Explain it instead
+            of silently disabling Confirm. */}
+        {preview.below_min_lot && (
+          <div
+            style={{
+              background: "rgba(255,255,255,.03)",
+              border: "1px solid rgba(255,255,255,.08)",
+              borderRadius: 10,
+              padding: "10px 12px",
+              fontSize: 12,
+              lineHeight: 1.4,
+              color: "rgba(255,255,255,.7)",
+            }}
+          >
+            Minimum lot is {fmt_shares(preview.min_lot_shares)} share = {fmt_eur_m(preview.min_lot_cost)} (~
+            {preview.min_lot_pct}% of your portfolio) at €{current_price}M/share. Raise the amount to at least{" "}
+            {preview.min_lot_pct}%.
+          </div>
+        )}
+
         {/* Trade Preview (Summary + Impact unified) */}
         <div
           style={{

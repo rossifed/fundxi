@@ -3,12 +3,14 @@ import type { TradeKind } from "@fundxi/core/domain/portfolio/trade";
 import {
   compute_buy_shortfall,
   compute_cash_after,
+  compute_min_lot_cost,
   compute_quantity_from_pct,
   compute_quantity_from_shares,
   compute_realized_pnl,
   compute_shares_after,
   compute_short_quantity,
   compute_trade_share,
+  MIN_LOT_SHARES,
 } from "@fundxi/core/domain/portfolio/trade_calc";
 import { portfolio_service } from "./portfolio_service";
 import { valuation_service } from "./valuation_service";
@@ -46,6 +48,14 @@ export interface TradePreview {
   shortfall: number;
 
   realized_pnl: number;
+
+  // Minimum-lot context — lets the UI explain why a small percentage buys
+  // nothing for a very expensive player (e.g. 0.1 share of a €200M player is
+  // €20M = 20% of a €100M book, so anything under 20% rounds to 0 shares).
+  min_lot_shares: number; // the share quantum (smallest tradeable lot)
+  min_lot_cost: number; // €M cost of that lot at the current price
+  min_lot_pct: number; // that lot as a % of the portfolio
+  below_min_lot: boolean; // sized to a positive budget but rounded to 0 shares
 }
 
 /** Pure orchestration: pulls the live state (portfolio, holding, price)
@@ -67,6 +77,12 @@ export function simulate_trade(input: TradePreviewInput): TradePreview {
   const short_quantity = compute_short_quantity(input.kind, shares, held_shares);
   const { insufficient, shortfall } = compute_buy_shortfall(input.kind, amount, cash_before);
 
+  const min_lot_cost = compute_min_lot_cost(current_price);
+  // The user asked for a positive budget but it rounds to zero shares because
+  // the smallest lot is larger than that budget (very expensive player).
+  const requested_budget = input.mode === "percentage" ? (input.percentage ?? 0) > 0 : (input.shares ?? 0) > 0;
+  const below_min_lot = shares === 0 && current_price > 0 && requested_budget;
+
   return {
     player_id: input.player.id,
     kind: input.kind,
@@ -82,5 +98,9 @@ export function simulate_trade(input: TradePreviewInput): TradePreview {
     insufficient_capital: insufficient,
     shortfall,
     realized_pnl: compute_realized_pnl(input.kind, shares, current_price, avg_buy, held_shares),
+    min_lot_shares: MIN_LOT_SHARES,
+    min_lot_cost,
+    min_lot_pct: compute_trade_share(min_lot_cost, totals.total_value),
+    below_min_lot,
   };
 }

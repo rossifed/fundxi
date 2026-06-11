@@ -18,6 +18,17 @@ import type { TradeKind } from "./trade";
 
 const SHARES_QUANTUM = 10; // shares are floored to 0.1 (1/10) increments
 
+/** Smallest tradeable share lot (the quantum). A trade can never be smaller
+ * than this, so for a very expensive player the min lot can already be a large
+ * € amount (e.g. 0.1 × €200M = €20M) — the UI uses it to explain why a small
+ * percentage rounds to zero shares. */
+export const MIN_LOT_SHARES = 1 / SHARES_QUANTUM;
+
+/** Cost (€M) of the smallest tradeable lot at the given price. */
+export function compute_min_lot_cost(current_price: number): number {
+  return round_money(MIN_LOT_SHARES * current_price);
+}
+
 /** Round a €M money value to the cent — mirrors the backend's
  * ``round(value, 2)`` so the preview and the executed trade agree. */
 function round_money(value: number): number {

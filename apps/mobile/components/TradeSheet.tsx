@@ -200,6 +200,13 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
                 )}
               </View>
 
+              {preview.below_min_lot && (
+                <Text style={styles.hint}>
+                  Minimum lot is {fmt_shares(preview.min_lot_shares)} share = {fmt_eur_m(preview.min_lot_cost)} (~
+                  {preview.min_lot_pct}% of your portfolio) at this price. Raise the amount to at least{" "}
+                  {preview.min_lot_pct}%.
+                </Text>
+              )}
               {preview.insufficient_capital && (
                 <Text style={styles.error}>Insufficient cash — short by {fmt_eur_m(preview.shortfall)}.</Text>
               )}
@@ -298,6 +305,14 @@ const styles = StyleSheet.create({
   preview_label: { color: text.tertiary, fontSize: 12, fontWeight: "600" },
   preview_value: { color: "#fff", fontSize: 13, fontWeight: "800" },
   error: { color: palette.negative, fontSize: 13, fontWeight: "600" },
+  hint: {
+    color: text.secondary,
+    fontSize: 12,
+    lineHeight: 17,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderRadius: 8,
+    padding: 10,
+  },
   confirm: { borderRadius: 10, paddingVertical: 14, alignItems: "center", marginTop: 2 },
   confirm_disabled: { opacity: 0.4 },
   confirm_label: { color: "#04140a", fontSize: 15, fontWeight: "800" },
