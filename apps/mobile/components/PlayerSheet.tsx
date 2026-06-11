@@ -142,7 +142,6 @@ function PlayerDetail({
 }) {
   const team = teams_api.get(player.team_id);
   const valuation = valuations_api.get_for_player(player.id);
-  const current_price = valuation?.current_price ?? 0;
 
   const [price_history, set_price_history] = useState<PricePoint[] | null>(null);
   const [stats, set_stats] = useState<PlayerTournamentStat | null | undefined>(undefined);
