@@ -31,6 +31,7 @@ from src.infrastructure.sportmonks.client import SportmonksClient
 from src.infrastructure.sportmonks.projectors.standing import project_standing
 from src.ingest.application.commit_then_publish import commit_then_publish
 from src.ingest.domain.ports import NotificationPublisher
+from src.valuation.coefficients import current_coefficients
 
 log = structlog.get_logger(__name__)
 
@@ -106,7 +107,7 @@ class StandingsPoller:
         # is rewarded once. Idempotent, so running it every tick is safe — it is
         # a no-op until knockout fixtures with real participants exist.
         qualification_notifs = await apply_qualifications(
-            session, season_id=self.season_id, ts=datetime.now(UTC)
+            session, season_id=self.season_id, ts=datetime.now(UTC), coefficients=current_coefficients()
         )
         notifications.extend(qualification_notifs)
         await commit_then_publish(session=session, publisher=self.publisher, notifications=notifications)

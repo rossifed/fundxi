@@ -17,6 +17,10 @@ import tomllib
 from dataclasses import dataclass, fields
 from pathlib import Path
 
+import structlog
+
+log = structlog.get_logger(__name__)
+
 
 @dataclass(frozen=True, slots=True)
 class PricingCoefficients:
@@ -102,3 +106,34 @@ def load_coefficients(path: Path = _PRICING_TOML_PATH) -> PricingCoefficients:
 
 
 DEFAULT_COEFFICIENTS = load_coefficients()
+
+# Hot-reload cache: (mtime, coefficients) of the last successful TOML parse.
+_hot_cache: tuple[float, PricingCoefficients] = (-1.0, DEFAULT_COEFFICIENTS)
+
+
+def current_coefficients(path: Path = _PRICING_TOML_PATH) -> PricingCoefficients:
+    """The live coefficients, re-read from the TOML whenever the file's mtime
+    changes — so the worker picks up a calibration edit on the NEXT poll, no
+    restart. Cheap: a single ``stat()`` per call, re-parsing only on a real edit.
+
+    Safe under live editing, unlike the startup ``DEFAULT_COEFFICIENTS`` (which
+    fails loudly on a bad file): a mid-tournament typo or a transient read error
+    is logged and the LAST GOOD values are kept, never crashing the price feed."""
+    global _hot_cache
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return _hot_cache[1]  # file briefly unavailable → keep last good
+    if mtime == _hot_cache[0]:
+        return _hot_cache[1]
+    try:
+        coefficients = load_coefficients(path)
+    except ValueError as exc:
+        # Typo / bad value saved during live calibration: ignore, keep last good.
+        log.warning("pricing.coefficients.reload_rejected", error=str(exc))
+        _hot_cache = (mtime, _hot_cache[1])  # don't re-warn until the file changes again
+        return _hot_cache[1]
+    if coefficients != _hot_cache[1]:
+        log.info("pricing.coefficients.reloaded", path=str(path))
+    _hot_cache = (mtime, coefficients)
+    return coefficients

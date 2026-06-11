@@ -1,10 +1,12 @@
 """Unit tests for the pricing-coefficients TOML loader."""
 
+import os
 from pathlib import Path
 
 import pytest
 
-from src.valuation.coefficients import PricingCoefficients, load_coefficients
+import src.valuation.coefficients as cf
+from src.valuation.coefficients import PricingCoefficients, current_coefficients, load_coefficients
 
 
 def _write(tmp_path: Path, body: str) -> Path:
@@ -62,3 +64,39 @@ def test_shipped_config_matches_the_dataclass_fields() -> None:
     assert repo_toml.is_file(), "config/pricing.toml is missing"
     coeffs = load_coefficients(repo_toml)
     assert isinstance(coeffs, PricingCoefficients)
+
+
+# --- hot reload (live calibration without restart) -----------------------
+
+
+def test_current_coefficients_hot_reloads_on_mtime_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    p = tmp_path / "pricing.toml"
+    # Deterministic start: reset the module's hot-reload cache.
+    monkeypatch.setattr(cf, "_hot_cache", (-1.0, PricingCoefficients()))
+
+    p.write_text("w_suspension_frac = -0.20\n", encoding="utf-8")
+    os.utime(p, (1000, 1000))
+    assert current_coefficients(p).w_suspension_frac == -0.20
+
+    # An edit (new mtime) is picked up on the next call — no restart.
+    p.write_text("w_suspension_frac = -0.05\n", encoding="utf-8")
+    os.utime(p, (2000, 2000))
+    assert current_coefficients(p).w_suspension_frac == -0.05
+
+
+def test_current_coefficients_keeps_last_good_on_a_bad_live_edit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    p = tmp_path / "pricing.toml"
+    monkeypatch.setattr(cf, "_hot_cache", (-1.0, PricingCoefficients()))
+
+    p.write_text("w_suspension_frac = -0.07\n", encoding="utf-8")
+    os.utime(p, (1000, 1000))
+    assert current_coefficients(p).w_suspension_frac == -0.07
+
+    # A typo saved mid-tournament must NOT crash the price feed: keep last good.
+    p.write_text("w_suspension_frc = -0.99\n", encoding="utf-8")  # missing 'a'
+    os.utime(p, (2000, 2000))
+    assert current_coefficients(p).w_suspension_frac == -0.07  # unchanged, no raise

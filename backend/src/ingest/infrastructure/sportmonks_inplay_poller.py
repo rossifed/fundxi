@@ -57,6 +57,7 @@ from src.infrastructure.valuation.db_or_synthetic_starting_price_provider import
 from src.ingest.application.commit_then_publish import commit_then_publish
 from src.ingest.domain.ports import NotificationPublisher
 from src.ingest.infrastructure.sportmonks_id_maps import SportmonksIdMaps
+from src.valuation.coefficients import PricingCoefficients, current_coefficients
 from src.valuation.pricing import price_from_carried
 from src.valuation.snapshot import build_snapshot
 from src.valuation.tournament import Side
@@ -175,14 +176,19 @@ class SportmonksInplayPoller:
         player_stats_count, curr_stats, prev_by_player = await self._project_player_match_stats(
             session=session, lineups_payload=lineups_payload
         )
-        lineup_drop_notifs = await self._apply_lineup_drops_if_published(session=session, fixture=fixture)
+        # Hot-reloadable calibration: re-read once per poll so a pricing.toml
+        # edit takes effect on the next tick without restarting the worker.
+        coefficients = current_coefficients()
+        lineup_drop_notifs = await self._apply_lineup_drops_if_published(
+            session=session, fixture=fixture, coefficients=coefficients
+        )
         price_notifs = await self._price_players(
-            session=session, curr_stats=curr_stats, prev_by_player=prev_by_player
+            session=session, curr_stats=curr_stats, prev_by_player=prev_by_player, coefficients=coefficients
         )
         # Full-time settlement runs AFTER live pricing so it reads each player's
         # final in-match price and applies the result event on top of it.
         settlement_notifs = await self._settle_if_finished(
-            session=session, fixture=fixture, scores_payload=data.get("scores")
+            session=session, fixture=fixture, scores_payload=data.get("scores"), coefficients=coefficients
         )
         team_stats_count = await self._project_team_match_stats(
             session=session, stats_payload=_array(data.get("statistics"))
@@ -262,7 +268,12 @@ class SportmonksInplayPoller:
         return fixture
 
     async def _settle_if_finished(
-        self, *, session: AsyncSession, fixture: Fixture | None, scores_payload: Any
+        self,
+        *,
+        session: AsyncSession,
+        fixture: Fixture | None,
+        scores_payload: Any,
+        coefficients: PricingCoefficients,
     ) -> list[tuple[str, bytes]]:
         """At the full-time transition, settle the fixture's result ONCE: bank
         the collective win / qualification / elimination impact on top of each
@@ -277,10 +288,18 @@ class SportmonksInplayPoller:
         pen_winner = penalty_shootout_winner(scores_payload)
         winner_override = Side(pen_winner) if pen_winner is not None else None
         notifications = await settle_fixture(
-            session, fixture_id=self.fixture_internal_id, ts=ts, winner_override=winner_override
+            session,
+            fixture_id=self.fixture_internal_id,
+            ts=ts,
+            winner_override=winner_override,
+            coefficients=coefficients,
         )
-        notifications += await apply_suspensions(session, fixture_id=self.fixture_internal_id, ts=ts)
-        notifications += await apply_did_not_play(session, fixture_id=self.fixture_internal_id, ts=ts)
+        notifications += await apply_suspensions(
+            session, fixture_id=self.fixture_internal_id, ts=ts, coefficients=coefficients
+        )
+        notifications += await apply_did_not_play(
+            session, fixture_id=self.fixture_internal_id, ts=ts, coefficients=coefficients
+        )
         # Mark settled even when nothing was produced (knockout winner
         # undetermined, group draw, no cards, everyone featured): a retry next
         # poll would only re-log.
@@ -288,7 +307,7 @@ class SportmonksInplayPoller:
         return notifications
 
     async def _apply_lineup_drops_if_published(
-        self, *, session: AsyncSession, fixture: Fixture | None
+        self, *, session: AsyncSession, fixture: Fixture | None, coefficients: PricingCoefficients
     ) -> list[tuple[str, bytes]]:
         """Once the starting XI is out, penalise dropped expected-starters (-2%).
         Recomputed each poll only until the decision is final — the first time it
@@ -297,7 +316,7 @@ class SportmonksInplayPoller:
         if self._lineup_processed:
             return []
         notifications = await apply_lineup_drops(
-            session, fixture_id=self.fixture_internal_id, ts=datetime.now(UTC)
+            session, fixture_id=self.fixture_internal_id, ts=datetime.now(UTC), coefficients=coefficients
         )
         if notifications or (fixture is not None and fixture.status is not FixtureStatus.UPCOMING):
             self._lineup_processed = True
@@ -400,6 +419,7 @@ class SportmonksInplayPoller:
         session: AsyncSession,
         curr_stats: list[PlayerMatchStat],
         prev_by_player: dict[int, PlayerMatchStat],
+        coefficients: PricingCoefficients,
     ) -> list[tuple[str, bytes]]:
         """Run the canonical kernel for every player priced this poll. The
         kernel is the SAME pure function the spec defines and the replay
@@ -436,7 +456,7 @@ class SportmonksInplayPoller:
                 pressure_factor=None,
                 is_live=True,
             )
-            result = price_from_carried(base_value, carried, snapshot)
+            result = price_from_carried(base_value, carried, snapshot, coefficients)
             new_price = round(result.price, 2)
             last = last_prices.get(curr.player_id)
             if last is not None and round(last, 2) == new_price:
