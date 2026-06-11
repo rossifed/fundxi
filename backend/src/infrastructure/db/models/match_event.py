@@ -1,6 +1,6 @@
 """MatchEventORM — persistence Adapter for structured per-player events."""
 
-from sqlalchemy import ForeignKey, Index, String
+from sqlalchemy import BigInteger, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.db.base import Base
@@ -16,7 +16,7 @@ class MatchEventORM(Base, AuditMixin):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    sportmonks_id: Mapped[int] = mapped_column(unique=True, index=True)
+    sportmonks_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
     fixture_id: Mapped[int] = mapped_column(ForeignKey("core.fixture.id", ondelete="CASCADE"), index=True)
     minute: Mapped[int]
     extra_minute: Mapped[int | None]

@@ -4,7 +4,7 @@ DDD role: Adapter (Repository implementation detail), not a domain entity.
 Translation to/from `domain.team.Team` happens in the Repository.
 """
 
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import BigInteger, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.db.base import Base
@@ -16,7 +16,7 @@ class TeamORM(Base, AuditMixin):
     __table_args__ = {"schema": "core"}
 
     id: Mapped[str] = mapped_column(String(8), primary_key=True)
-    sportmonks_id: Mapped[int | None] = mapped_column(unique=True, index=True)
+    sportmonks_id: Mapped[int | None] = mapped_column(BigInteger, unique=True, index=True)
     name: Mapped[str] = mapped_column(String(128))
     # Sportmonks returns image URLs (~70 chars) for `flag`; emoji-only mode
     # is a frontend display concern (ISO code → emoji is a 2-line transform).

@@ -1,6 +1,6 @@
 """LineupORM — persistence Adapter for Lineup."""
 
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import BigInteger, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.db.base import Base
@@ -12,7 +12,7 @@ class LineupORM(Base, AuditMixin):
     __table_args__ = {"schema": "core"}
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    sportmonks_id: Mapped[int] = mapped_column(unique=True, index=True)
+    sportmonks_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
     fixture_id: Mapped[int] = mapped_column(ForeignKey("core.fixture.id", ondelete="CASCADE"), index=True)
     player_id: Mapped[int] = mapped_column(ForeignKey("core.player.id", ondelete="CASCADE"), index=True)
     team_id: Mapped[str] = mapped_column(ForeignKey("core.team.id", ondelete="RESTRICT"), index=True)
