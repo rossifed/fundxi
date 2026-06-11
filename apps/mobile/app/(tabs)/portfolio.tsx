@@ -315,7 +315,7 @@ export default function PortfolioScreen() {
                 )
               ) : positions_tab === "stats" ? (
                 <View style={styles.stats_stack}>
-                  <ExposureCard total_value={total_value} />
+                  <ExposureCard long_value={totals.long_value} short_value={totals.short_value} />
                   <WinLossCard holdings={holdings} />
                 </View>
               ) : (
@@ -426,9 +426,8 @@ function TradeRow({ trade: t }: { trade: import("@fundxi/core/domain/portfolio/t
   );
 }
 
-function ExposureCard({ total_value }: { total_value: number }) {
-  const long_value = total_value;
-  const short_value = 0;
+function ExposureCard({ long_value, short_value }: { long_value: number; short_value: number }) {
+  // Gross long vs gross short market value (single source: compute_portfolio_totals).
   const total = long_value + short_value || 1;
   const long_pct = (long_value / total) * 100;
   const short_pct = (short_value / total) * 100;

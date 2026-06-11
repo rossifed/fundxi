@@ -2,7 +2,9 @@ import type { Holding } from "./holding";
 
 export interface PortfolioTotals {
   cash: number; // €M, free cash
-  market_value: number; // €M, sum(price × shares)
+  market_value: number; // €M, sum(price × shares) — net (long − short)
+  long_value: number; // €M, gross long market value (positions with shares > 0)
+  short_value: number; // €M, gross short market value, as a POSITIVE magnitude
   total_value: number; // €M, AUM = cash + market_value
   total_cost: number; // €M, sum(avg_buy × shares) — nets long vs short
   pnl: number; // €M
@@ -47,6 +49,8 @@ export function compute_portfolio_totals(
   cash: number,
 ): PortfolioTotals {
   let market_value = 0;
+  let long_value = 0;
+  let short_value = 0;
   let total_cost = 0;
   for (const h of holdings) {
     // Price comes from the valuation surface (tick ?? base) — the SAME rule the
@@ -56,7 +60,10 @@ export function compute_portfolio_totals(
     // resort for a holding with no valuation entry at all (never for a tradeable
     // player), keeping its line flat (P&L 0) rather than dropping it.
     const price = prices_by_player_id.get(h.player_id) ?? h.average_buy_price;
-    market_value += price * h.shares;
+    const mv = price * h.shares; // negative for a short (shares < 0)
+    market_value += mv;
+    if (mv >= 0) long_value += mv;
+    else short_value += -mv;
     total_cost += h.average_buy_price * h.shares;
   }
   const pnl = market_value - total_cost;
@@ -72,6 +79,8 @@ export function compute_portfolio_totals(
   return {
     cash,
     market_value,
+    long_value,
+    short_value,
     total_value: cash + market_value,
     total_cost,
     pnl,

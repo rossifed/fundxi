@@ -670,7 +670,7 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
 
         {/* Right rail — full analytics stack */}
         <aside style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <ExposureCard total_value={total_value} />
+          <ExposureCard long_value={totals.long_value} short_value={totals.short_value} />
           <WinLossCard holdings={holdings} />
           <BreakdownCard title="By team" items={team_items} chart="bars" on_open_team={on_open_team} />
           <BreakdownCard title="By position" items={position_items} chart="pie" />
@@ -1040,7 +1040,7 @@ function WinLossCard({ holdings }: { holdings: HoldingMetrics[] }) {
   );
 }
 
-function ExposureCard({ total_value }: { total_value: number }) {
+function ExposureCard({ long_value, short_value }: { long_value: number; short_value: number }) {
   return (
     <div
       style={{
@@ -1064,17 +1064,15 @@ function ExposureCard({ total_value }: { total_value: number }) {
         Position Long / Short
       </div>
       <div style={{ padding: "12px 14px" }}>
-        <ExposureView total_value={total_value} />
+        <ExposureView long_value={long_value} short_value={short_value} />
       </div>
     </div>
   );
 }
 
-function ExposureView({ total_value }: { total_value: number }) {
-  // v0: long-only book. Shorts will land when the trade engine supports
-  // them; until then the exposure card reflects the actual portfolio.
-  const long_value = total_value;
-  const short_value = 0;
+function ExposureView({ long_value, short_value }: { long_value: number; short_value: number }) {
+  // Gross long vs gross short market value (single source: compute_portfolio_totals).
+  // The bar splits the GROSS exposure (long + short); Net = long − short.
   const total_exposure = long_value + short_value || 1;
   const long_pct = ((long_value / total_exposure) * 100).toFixed(1);
   const short_pct = ((short_value / total_exposure) * 100).toFixed(1);

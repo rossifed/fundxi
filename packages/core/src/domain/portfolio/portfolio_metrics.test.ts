@@ -71,6 +71,10 @@ describe("compute_portfolio_totals", () => {
     expect(totals.pnl).toBeCloseTo(4, 6);
     expect(totals.return_pct).toBeCloseTo((4 / 100) * 100, 6); // ~4%, not hundreds
     expect(Math.abs(totals.return_pct)).toBeLessThan(100);
+    // Gross exposure split: long ≈ 102, short ≈ 98 (positive magnitude), net = market_value
+    expect(totals.long_value).toBeCloseTo(102, 6);
+    expect(totals.short_value).toBeCloseTo(98, 6);
+    expect(totals.long_value - totals.short_value).toBeCloseTo(totals.market_value, 6);
   });
 
   it("marks holdings with no price quote at cost basis (flat, P&L 0) — not dropped", () => {
