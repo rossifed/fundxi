@@ -10,6 +10,8 @@ Assumed payload shape (Sportmonks v3 /fixtures?include=participants;scores;state
   "participants": [
     { "id": int, "name": str, "short_code": "FRA", "meta": { "location": "home" | "away" } }
   ],
+  # NOTE: home/away are resolved by participant.id (stable Sportmonks team id),
+  # NOT short_code — see _team_id_from_participants for why.
   "scores": [ ... ],
   "minute": int | null
 }
@@ -18,6 +20,7 @@ Group attribution (A..L) is not natively in /fixtures and is added by an
 enrichment overlay (WC2026 group stage mapping).
 """
 
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Any, cast
 
@@ -96,7 +99,24 @@ def penalty_shootout_winner(scores_payload: object) -> str | None:
     return None
 
 
-def _team_id_from_participants(participants: list[dict[str, Any]], location: str) -> str:
+def _team_id_from_participants(
+    participants: list[dict[str, Any]],
+    location: str,
+    team_id_by_sportmonks: Mapping[int, str],
+) -> str:
+    """Resolve the internal team id for the home/away participant.
+
+    The join key is the Sportmonks **team id** (the integer ``participant.id``),
+    NOT ``short_code``: Sportmonks' ``short_code`` drifts across endpoints for
+    the same team (e.g. South Africa is ``ZAF`` on ``/teams`` but ``RSA`` in a
+    fixture's ``participants`` block), which would break the ``team`` FK. The
+    numeric team id is stable everywhere, so we map it through the same
+    ``sportmonks_id → internal_id`` table the rest of the ingest uses.
+
+    Raises ``ValueError`` when the participant is missing, has no integer id, or
+    its id is unmapped — e.g. a knockout placeholder ("Winner Quarter-final 1")
+    that is not a real team. Callers treat that as "skip this fixture".
+    """
     for p in participants:
         meta = p.get("meta")
         if not isinstance(meta, dict):
@@ -104,9 +124,13 @@ def _team_id_from_participants(participants: list[dict[str, Any]], location: str
         meta_typed = cast(dict[str, Any], meta)
         if meta_typed.get("location") != location:
             continue
-        short_code = p.get("short_code")
-        if isinstance(short_code, str) and short_code:
-            return short_code.upper()
+        sportmonks_team_id = p.get("id")
+        if not isinstance(sportmonks_team_id, int):
+            raise ValueError(f"participant for location={location!r} has no integer id")
+        internal_id = team_id_by_sportmonks.get(sportmonks_team_id)
+        if internal_id is None:
+            raise ValueError(f"unmapped sportmonks team id={sportmonks_team_id} (location={location!r})")
+        return internal_id
     raise ValueError(f"No participant with meta.location={location!r}")
 
 
@@ -121,7 +145,9 @@ def _parse_kickoff(value: object) -> datetime | None:
     return None
 
 
-def project_fixture(payload: dict[str, Any], *, group: str) -> tuple[Fixture, int]:
+def project_fixture(
+    payload: dict[str, Any], *, group: str, team_id_by_sportmonks: Mapping[int, str]
+) -> tuple[Fixture, int]:
     sportmonks_id = payload["id"]
     if not isinstance(sportmonks_id, int):
         raise TypeError(f"fixture.id must be int, got {type(sportmonks_id).__name__}")
@@ -131,8 +157,8 @@ def project_fixture(payload: dict[str, Any], *, group: str) -> tuple[Fixture, in
         raise ValueError(f"fixture payload missing two participants: {payload!r}")
     participants = cast(list[dict[str, Any]], raw_participants)
 
-    home_team_id = _team_id_from_participants(participants, "home")
-    away_team_id = _team_id_from_participants(participants, "away")
+    home_team_id = _team_id_from_participants(participants, "home", team_id_by_sportmonks)
+    away_team_id = _team_id_from_participants(participants, "away", team_id_by_sportmonks)
 
     status = _project_status(payload.get("state"))
 

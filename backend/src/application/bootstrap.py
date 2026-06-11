@@ -162,6 +162,7 @@ async def bootstrap_fixtures(
     client: SportmonksClient,
     raw_archive: RawEventArchive,
     fixture_repo: FixtureRepository,
+    teams: list[tuple[int, str]],
     season_id: int,
 ) -> int:
     # Sportmonks v3 has no /fixtures/seasons/{id} path; we filter the global
@@ -171,6 +172,8 @@ async def bootstrap_fixtures(
         "filters": f"fixtureSeasons:{season_id}",
         "include": "participants;state;scores",
     }
+    # Resolve home/away by Sportmonks team id (stable) rather than short_code.
+    team_id_by_sportmonks = {sportmonks_id: internal_id for sportmonks_id, internal_id in teams}
     count = 0
     skipped = 0
     async for params, envelope in _paginate_pages(client, endpoint, base_params=base_params):
@@ -178,11 +181,11 @@ async def bootstrap_fixtures(
         for item in _data_items(envelope):
             # Group A..L is not natively in /fixtures; enrichment overlay applied later.
             # Knockout fixtures of a future tournament have TBD placeholder
-            # participants (no short_code) until qualification resolves —
+            # participants (unmapped team ids) until qualification resolves —
             # unprojectable, skip them. Real group-stage fixtures (qualified
             # nations) project fine. Idempotent re-runs fill knockouts later.
             try:
-                fixture, sportmonks_id = project_fixture(item, group="")
+                fixture, sportmonks_id = project_fixture(item, group="", team_id_by_sportmonks=team_id_by_sportmonks)
             except (ValueError, TypeError) as exc:
                 log.debug("bootstrap.fixtures.skip", reason=str(exc))
                 skipped += 1
@@ -417,7 +420,7 @@ async def bootstrap_for_season(
         season_id=season_id,
     )
     fixtures = await bootstrap_fixtures(
-        client=client, raw_archive=raw_archive, fixture_repo=fixture_repo, season_id=season_id
+        client=client, raw_archive=raw_archive, fixture_repo=fixture_repo, teams=teams, season_id=season_id
     )
     players = await bootstrap_squads(
         client=client,

@@ -87,6 +87,7 @@ class ReferenceRefresher:
             client=self.client,
             raw_archive=raw_archive,
             fixture_repo=SqlAlchemyFixtureRepository(session),
+            teams=team_pairs,
             season_id=self.season_id,
         )
         await bootstrap_squads(

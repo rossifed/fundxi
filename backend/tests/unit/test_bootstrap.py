@@ -350,8 +350,8 @@ async def test_bootstrap_fixtures_passes_includes() -> None:
                             "starting_at": "2026-06-12 20:00:00",
                             "state": {"state": "NS"},
                             "participants": [
-                                {"short_code": "FRA", "meta": {"location": "home"}},
-                                {"short_code": "BRA", "meta": {"location": "away"}},
+                                {"id": 18, "short_code": "FRA", "meta": {"location": "home"}},
+                                {"id": 17, "short_code": "BRA", "meta": {"location": "away"}},
                             ],
                         }
                     ],
@@ -367,6 +367,7 @@ async def test_bootstrap_fixtures_passes_includes() -> None:
         client=client,
         raw_archive=raw_archive,
         fixture_repo=fixture_repo,
+        teams=[(18, "FRA"), (17, "BRA")],
         season_id=100,
     )
 
@@ -520,9 +521,12 @@ async def test_bootstrap_for_season_orchestrates_three_steps() -> None:
                         {
                             "id": 1,
                             "starting_at": "2026-06-12 20:00:00",
+                            # Only one team is mocked in this orchestration test; both
+                            # participants reference it so the fixture's team ids resolve
+                            # via the id map. Realism isn't the point here — wiring is.
                             "participants": [
-                                {"short_code": "BRA", "meta": {"location": "home"}},
-                                {"short_code": "FRA", "meta": {"location": "away"}},
+                                {"id": 17, "short_code": "BRA", "meta": {"location": "home"}},
+                                {"id": 17, "short_code": "BRA", "meta": {"location": "away"}},
                             ],
                         }
                     ],

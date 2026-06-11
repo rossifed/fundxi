@@ -260,7 +260,9 @@ class SportmonksInplayPoller:
             log.debug("ingest.inplay.fixture_skip", reason="no group in id_maps")
             return None
         try:
-            fixture, smk_id = project_fixture(fixture_payload, group=group)
+            fixture, smk_id = project_fixture(
+                fixture_payload, group=group, team_id_by_sportmonks=self.id_maps.team_id_by_sportmonks
+            )
         except (ValueError, TypeError, KeyError) as exc:
             log.debug("ingest.inplay.fixture_skip", reason=str(exc))
             return None

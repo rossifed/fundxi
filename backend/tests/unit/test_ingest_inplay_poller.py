@@ -114,8 +114,8 @@ def _envelope_with(
             {
                 "state": {"state": "INPLAY_1ST_HALF"},
                 "participants": [
-                    {"meta": {"location": "home"}, "short_code": "FRA"},
-                    {"meta": {"location": "away"}, "short_code": "ARG"},
+                    {"id": 200, "meta": {"location": "home"}, "short_code": "FRA"},
+                    {"id": 201, "meta": {"location": "away"}, "short_code": "ARG"},
                 ],
                 "scores": [
                     {"description": "CURRENT", "score": {"participant": "home", "goals": 1}},
