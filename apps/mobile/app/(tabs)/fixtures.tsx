@@ -372,8 +372,8 @@ function CompactCell({ fixture, on_open }: { fixture: Fixture; on_open: (id: num
   const time = format_kickoff_time(fixture.date);
   return (
     <Pressable style={[styles.cc, is_today && styles.cc_today, is_live && styles.cc_live]} onPress={() => on_open(fixture.id)}>
-      <CellTeamRow flag={home?.flag} code={fixture.home_team_id} score={fixture.home_score} played={played} />
-      <CellTeamRow flag={away?.flag} code={fixture.away_team_id} score={fixture.away_score} played={played} />
+      <CellTeamRow flag={home?.flag} code={home?.name ?? fixture.home_team_id} score={fixture.home_score} played={played} />
+      <CellTeamRow flag={away?.flag} code={away?.name ?? fixture.away_team_id} score={fixture.away_score} played={played} />
       <View style={styles.cc_foot}>
         {is_live ? (
           <>
@@ -424,7 +424,7 @@ function FinalCard({ fixture, on_open }: { fixture: Fixture; on_open: (id: numbe
       </View>
       <View style={styles.final_body}>
         <View style={styles.final_side}>
-          <Text style={[styles.final_code, home_win && styles.final_code_win]} numberOfLines={1}>{fixture.home_team_id}</Text>
+          <Text style={[styles.final_code, home_win && styles.final_code_win]} numberOfLines={1}>{home.name}</Text>
           <Text style={styles.final_flag}>{home.flag}</Text>
         </View>
         <View style={styles.final_center}>
@@ -436,7 +436,7 @@ function FinalCard({ fixture, on_open }: { fixture: Fixture; on_open: (id: numbe
         </View>
         <View style={styles.final_side_r}>
           <Text style={styles.final_flag}>{away.flag}</Text>
-          <Text style={[styles.final_code, away_win && styles.final_code_win]} numberOfLines={1}>{fixture.away_team_id}</Text>
+          <Text style={[styles.final_code, away_win && styles.final_code_win]} numberOfLines={1}>{away.name}</Text>
         </View>
       </View>
       {winner ? (

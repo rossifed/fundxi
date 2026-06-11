@@ -651,7 +651,7 @@ function CompactMatchCell({
     >
       <CellTeamRow
         flag={home?.flag}
-        code={fixture.home_team_id}
+        code={home?.name ?? fixture.home_team_id}
         team_id={fixture.home_team_id}
         score={fixture.home_score}
         is_played={is_played}
@@ -659,7 +659,7 @@ function CompactMatchCell({
       />
       <CellTeamRow
         flag={away?.flag}
-        code={fixture.away_team_id}
+        code={away?.name ?? fixture.away_team_id}
         team_id={fixture.away_team_id}
         score={fixture.away_score}
         is_played={is_played}
