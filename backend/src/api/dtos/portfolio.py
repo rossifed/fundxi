@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class UserResponse(BaseModel):
@@ -38,7 +38,11 @@ class TradeResponse(BaseModel):
 class TradeRequestBody(BaseModel):
     player_id: int
     kind: str  # buy | sell
-    shares: float
+    # Must be strictly positive: the share quantity carries the size, the kind
+    # carries the direction. Rejected here with a clean 422 (defense in depth;
+    # execute_trade also guards it). No upper bound — the margin rule caps size
+    # economically.
+    shares: float = Field(gt=0)
     # Advisory only (client's displayed price). The server executes at its
     # own authoritative latest tick — this value is NOT trusted. Optional so
     # clients may stop sending it.
