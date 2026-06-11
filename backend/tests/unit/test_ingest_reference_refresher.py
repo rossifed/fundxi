@@ -61,12 +61,16 @@ def _patch_bootstrap(monkeypatch: pytest.MonkeyPatch, *, teams_fail: bool = Fals
     async def _bootstrap_squads(**_: Any) -> int:
         return 50
 
+    async def _bootstrap_player_stats(**_: Any) -> int:
+        return 50
+
     async def _load_maps(_session: Any) -> SportmonksIdMaps:
         return _NEW_MAPS
 
     monkeypatch.setattr(f"{mod}.bootstrap_teams", _bootstrap_teams)
     monkeypatch.setattr(f"{mod}.bootstrap_fixtures", _bootstrap_fixtures)
     monkeypatch.setattr(f"{mod}.bootstrap_squads", _bootstrap_squads)
+    monkeypatch.setattr(f"{mod}.bootstrap_player_stats", _bootstrap_player_stats)
     monkeypatch.setattr(f"{mod}.load_sportmonks_id_maps", _load_maps)
     # The repo constructors used inside are harmless with a MagicMock session,
     # but stub them to be safe.

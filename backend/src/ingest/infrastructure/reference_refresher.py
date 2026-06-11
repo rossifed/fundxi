@@ -30,10 +30,11 @@ from datetime import UTC, datetime
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.bootstrap import bootstrap_fixtures, bootstrap_squads, bootstrap_teams
+from src.application.bootstrap import bootstrap_fixtures, bootstrap_player_stats, bootstrap_squads, bootstrap_teams
 from src.infrastructure.db.repositories.coach import SqlAlchemyCoachRepository
 from src.infrastructure.db.repositories.fixture import SqlAlchemyFixtureRepository
 from src.infrastructure.db.repositories.player import SqlAlchemyPlayerRepository
+from src.infrastructure.db.repositories.player_tournament_stat import SqlAlchemyPlayerTournamentStatRepository
 from src.infrastructure.db.repositories.raw_sportmonks_event import SqlAlchemyRawSportmonksEventRepository
 from src.infrastructure.db.repositories.team import SqlAlchemyTeamRepository
 from src.infrastructure.sportmonks.client import SportmonksClient
@@ -97,6 +98,19 @@ class ReferenceRefresher:
             teams=team_pairs,
             season_id=self.season_id,
             today=datetime.now(UTC).date(),
+        )
+        # Tournament player stats (appearances, goals, cards, …) — Sportmonks
+        # only fills these once matches are played, so the daily refresh must
+        # re-pull them (the one-shot initial bootstrap ran before kickoff and
+        # left core.player_tournament_stat empty; that's why the PlayerSheet
+        # Statistics panel showed nothing).
+        await bootstrap_player_stats(
+            client=self.client,
+            raw_archive=raw_archive,
+            player_repo=SqlAlchemyPlayerRepository(session),
+            stat_repo=SqlAlchemyPlayerTournamentStatRepository(session),
+            teams=team_pairs,
+            season_id=self.season_id,
         )
         # Reads see the session's pending writes (autoflush) — the maps
         # are consistent with what we are about to commit.
