@@ -66,6 +66,9 @@ def _fake_session_factory(write_log: list[tuple[str, Any]]) -> Any:
         result_mock = MagicMock()
         result_mock.scalar_one_or_none = MagicMock(return_value=None)
         result_mock.scalar = MagicMock(return_value=None)
+        # Fixture get_by_id (settlement / lineup-drop reads) uses one_or_none();
+        # None → those persistent-event use cases no-op cleanly in this fake.
+        result_mock.one_or_none = MagicMock(return_value=None)
         # Latest-price lookup (skip-unchanged guard in _price_players) reads
         # result.all(); no prior ticks in the fake → every price is "new".
         result_mock.all = MagicMock(return_value=[])

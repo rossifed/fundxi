@@ -29,6 +29,10 @@ import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.apply_lineup_drops import apply_lineup_drops
+from src.application.apply_suspensions import apply_suspensions
+from src.application.settle_fixture import settle_fixture
+from src.domain.match.fixture import Fixture, FixtureStatus
 from src.domain.match.player_match_stat import PlayerMatchStat
 from src.infrastructure.db.price_tick_writer import upsert_price_tick
 from src.infrastructure.db.repositories.fixture import SqlAlchemyFixtureRepository
@@ -72,6 +76,15 @@ class SportmonksInplayPoller:
     publisher: NotificationPublisher
     session_factory: Callable[[], AsyncSession]
     id_maps: SportmonksIdMaps
+    # Set once the fixture's full-time result has been settled, so the result
+    # event (win / qualif / elimination) is applied exactly once even though the
+    # poller keeps ticking through the post-FT window. The DB guard in
+    # ``settle_fixture`` backs this up across a poller restart.
+    _settled: bool = False
+    # Set once the starting XI has been judged for drops (after the first
+    # complete-XI poll, or once the match is no longer upcoming): stops the
+    # pre-kickoff lineup-drop check from recomputing every poll.
+    _lineup_processed: bool = False
 
     async def run(self) -> None:
         log.info(
@@ -128,7 +141,8 @@ class SportmonksInplayPoller:
             return
 
         lineups_payload = _array(data.get("lineups"))
-        fixture_updated = await self._project_fixture(session=session, fixture_payload=data)
+        fixture = await self._project_fixture(session=session, fixture_payload=data)
+        fixture_updated = fixture is not None
         events_count = await self._project_events(
             session=session,
             events_payload=_array(data.get("events")),
@@ -141,9 +155,13 @@ class SportmonksInplayPoller:
         player_stats_count, curr_stats, prev_by_player = await self._project_player_match_stats(
             session=session, lineups_payload=lineups_payload
         )
+        lineup_drop_notifs = await self._apply_lineup_drops_if_published(session=session, fixture=fixture)
         price_notifs = await self._price_players(
             session=session, curr_stats=curr_stats, prev_by_player=prev_by_player
         )
+        # Full-time settlement runs AFTER live pricing so it reads each player's
+        # final in-match price and applies the result event on top of it.
+        settlement_notifs = await self._settle_if_finished(session=session, fixture=fixture)
         team_stats_count = await self._project_team_match_stats(
             session=session, stats_payload=_array(data.get("statistics"))
         )
@@ -164,7 +182,11 @@ class SportmonksInplayPoller:
         # PlayerSheet subscribed to ``player:<player_id>`` actually receives
         # them; the global ``prices`` feed fans out too. (A fixture-keyed
         # subject would only reach ``player:<fixture_id>`` — i.e. nobody.)
+        # Lineup-drop ticks (pre-kickoff) are per-player price ticks too.
+        notifications.extend(lineup_drop_notifs)
         notifications.extend(price_notifs)
+        # Settlement ticks are per-player price ticks too — same subject scheme.
+        notifications.extend(settlement_notifs)
         if team_stats_count > 0:
             notifications.append(self._notif("team_match_stat", {"fixture_id": fix_id, "count": team_stats_count}))
 
@@ -179,6 +201,8 @@ class SportmonksInplayPoller:
             lineups=lineups_count,
             player_stats=player_stats_count,
             price_ticks=len(price_notifs),
+            settlements=len(settlement_notifs),
+            lineup_drops=len(lineup_drop_notifs),
             team_stats=team_stats_count,
         )
 
@@ -189,22 +213,53 @@ class SportmonksInplayPoller:
             json.dumps({"kind": kind, **body}).encode(),
         )
 
-    async def _project_fixture(self, *, session: AsyncSession, fixture_payload: dict[str, Any]) -> bool:
+    async def _project_fixture(self, *, session: AsyncSession, fixture_payload: dict[str, Any]) -> Fixture | None:
         """UPSERT the fixture itself (status, score, minute).
 
-        Returns True if the row was touched, False if the payload was
+        Returns the projected ``Fixture`` (the caller reads its ``status`` to
+        detect the full-time transition), or ``None`` if the payload was
         unprojectable (missing participants etc.) and was skipped."""
         group = self.id_maps.fixture_group_for(self.fixture_internal_id)
         if group is None:
             log.debug("ingest.inplay.fixture_skip", reason="no group in id_maps")
-            return False
+            return None
         try:
             fixture, smk_id = project_fixture(fixture_payload, group=group)
         except (ValueError, TypeError, KeyError) as exc:
             log.debug("ingest.inplay.fixture_skip", reason=str(exc))
-            return False
+            return None
         await SqlAlchemyFixtureRepository(session).upsert_by_sportmonks_id(fixture, sportmonks_id=smk_id)
-        return True
+        return fixture
+
+    async def _settle_if_finished(self, *, session: AsyncSession, fixture: Fixture | None) -> list[tuple[str, bytes]]:
+        """At the full-time transition, settle the fixture's result ONCE: bank
+        the collective win / qualification / elimination impact on top of each
+        player's last live price. No-op until FT, and only the first time."""
+        if self._settled or fixture is None or fixture.status is not FixtureStatus.FINISHED:
+            return []
+        ts = datetime.now(UTC)
+        notifications = await settle_fixture(session, fixture_id=self.fixture_internal_id, ts=ts)
+        notifications += await apply_suspensions(session, fixture_id=self.fixture_internal_id, ts=ts)
+        # Mark settled even when nothing was produced (knockout winner
+        # undetermined, group draw, no cards): a retry next poll would only re-log.
+        self._settled = True
+        return notifications
+
+    async def _apply_lineup_drops_if_published(
+        self, *, session: AsyncSession, fixture: Fixture | None
+    ) -> list[tuple[str, bytes]]:
+        """Once the starting XI is out, penalise dropped expected-starters (-2%).
+        Recomputed each poll only until the decision is final — the first time it
+        produces ticks, or as soon as the match is no longer upcoming (the XI is
+        then locked)."""
+        if self._lineup_processed:
+            return []
+        notifications = await apply_lineup_drops(
+            session, fixture_id=self.fixture_internal_id, ts=datetime.now(UTC)
+        )
+        if notifications or (fixture is not None and fixture.status is not FixtureStatus.UPCOMING):
+            self._lineup_processed = True
+        return notifications
 
     async def _project_events(self, *, session: AsyncSession, events_payload: list[dict[str, Any]]) -> int:
         repo = SqlAlchemyMatchEventRepository(session)

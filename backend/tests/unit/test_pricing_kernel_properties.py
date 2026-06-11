@@ -20,7 +20,7 @@ from hypothesis import strategies as st
 
 from src.valuation.pricing import (
     PriceSnapshot,
-    apply_tournament_event,
+    apply_result_event,
     live_delta,
     multiplier,
     price,
@@ -71,13 +71,14 @@ def test_settle_is_pure_addition(td: float, ld: float) -> None:
     assert settle(td, ld) == td + ld
 
 
-# 5. Tournament events commute — applying A then B equals B then A
-# (float associativity tolerated; the property is mathematical sum).
-@given(td=_td, a=_td, b=_td)
-def test_tournament_events_commute(td: float, a: float, b: float) -> None:
-    left = apply_tournament_event(apply_tournament_event(td, a), b)
-    right = apply_tournament_event(apply_tournament_event(td, b), a)
-    assert math.isclose(left, right, rel_tol=1e-9, abs_tol=1e-12)
+# 5. Result events stay strictly positive and respect the base floor — no
+# impact (however catastrophic) can drive a price to zero (spec Q3), and the
+# floor is base * multiplier_floor.
+@given(base=_base, last=st.floats(min_value=0.01, max_value=900.0, allow_nan=False), impact=_td)
+def test_result_event_floored_and_positive(base: float, last: float, impact: float) -> None:
+    result = apply_result_event(last, impact, base_value=base)
+    assert result > 0.0
+    assert result >= round(base * 0.05, 2) - 1e-9  # never below the base floor
 
 
 # 6. Off-match flat — when the match is not live, the price reflects

@@ -51,3 +51,20 @@ def test_missing_base_falls_back_to_first_tick_price() -> None:
     # that first tick contributes 0% and only later moves count.
     rows = [(1, 100, 100.0), (1, 100, 110.0)]
     assert per_match_changes_from_prices(rows, base_by_player={}) == {1: (10.0, 10.0)}
+
+
+def test_elimination_settlement_folds_into_its_fixture_and_total() -> None:
+    # Coherence guard for the persistent-event layer: a -40% elimination
+    # settlement tick is just the last fixtured tick of the knockout match, so
+    # it folds into THAT match's % and into the total — all read from the one
+    # price series, no parallel formula. base 100; group fixture 100 closes +10%
+    # (110); knockout fixture 200 runs up to 120, then the elimination tick
+    # lands at 72.0 (120 * 0.60).
+    rows = [(1, 100, 110.0), (1, 200, 115.0), (1, 200, 120.0), (1, 200, 72.0)]
+    avg, last = per_match_changes_from_prices(rows, base_by_player={1: 100.0})[1]
+    # Knockout fixture's net = 72 / 110 - 1 (pre = previous fixture's close).
+    expected_last = round((72.0 / 110.0 - 1.0) * 100.0, 2)
+    assert last == expected_last
+    assert avg == round((10.0 + expected_last) / 2.0, 2)
+    # And the total reconciles with the same series: 72 / 100 - 1 = -28%.
+    assert round((72.0 / 100.0 - 1.0) * 100.0, 2) == -28.0

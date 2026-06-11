@@ -18,11 +18,13 @@ import asyncio
 import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.apply_qualifications import apply_qualifications
 from src.infrastructure.db.repositories.raw_sportmonks_event import SqlAlchemyRawSportmonksEventRepository
 from src.infrastructure.db.repositories.standings import SqlAlchemyStandingRepository
 from src.infrastructure.sportmonks.client import SportmonksClient
@@ -100,5 +102,17 @@ class StandingsPoller:
         notifications: list[tuple[str, bytes]] = []
         if upserted > 0:
             notifications.append(("fundxi.standings", json.dumps({"kind": "standings", "count": upserted}).encode()))
+        # Group qualification (+5%): a team that has reached the knockout bracket
+        # is rewarded once. Idempotent, so running it every tick is safe — it is
+        # a no-op until knockout fixtures with real participants exist.
+        qualification_notifs = await apply_qualifications(
+            session, season_id=self.season_id, ts=datetime.now(UTC)
+        )
+        notifications.extend(qualification_notifs)
         await commit_then_publish(session=session, publisher=self.publisher, notifications=notifications)
-        log.info("ingest.standings.tick", season_id=self.season_id, upserted=upserted)
+        log.info(
+            "ingest.standings.tick",
+            season_id=self.season_id,
+            upserted=upserted,
+            qualifications=len(qualification_notifs),
+        )

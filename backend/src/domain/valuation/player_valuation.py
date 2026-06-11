@@ -13,6 +13,10 @@ class ValuationSource(StrEnum):
     SYNTHETIC = "synthetic"  # M3 placeholder: deterministic pseudo-random
     ENGINE = "engine"  # M5+: output of XGBasedStrategyV0
     REHEARSAL = "rehearsal"  # synthetic-rating UI/UX rehearsal — NEVER real data
+    SETTLEMENT = "settlement"  # full-time tournament RESULT event (win / elimination)
+    QUALIFICATION = "qualification"  # group qualification (team reaches the knockout bracket)
+    SUSPENSION = "suspension"  # banned for the next match (red / 2-yellow accumulation)
+    LINEUP_DROP = "lineup_drop"  # dropped from the XI (started last match, benched this one)
 
 
 @dataclass(frozen=True, slots=True)

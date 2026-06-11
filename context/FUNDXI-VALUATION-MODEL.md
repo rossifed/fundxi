@@ -287,6 +287,15 @@ For the MVP, recommend option 1 supplemented by **manual editorial input** — a
 
 ## 6. The price computation pipeline
 
+> **Implemented (June 2026).** This section's pseudocode now mirrors the real
+> Python kernel — `backend/src/valuation/pricing.py` (`price_from_carried`,
+> `apply_result_event`) and `backend/src/valuation/tournament.py`. Two
+> corrections vs the original draft: the live part is a rating **level**
+> recomputed each poll (not an accumulated rating *delta*), and **result events
+> are multiplicative on the current price and NOT volatility-scaled** (a result
+> is a collective fate — the whole squad moves by the same fraction). The
+> additive `multiplier += impact` model below was the retired events-v0 design.
+
 ### 6.1. Data flow
 
 ```
@@ -304,21 +313,23 @@ For the MVP, recommend option 1 supplemented by **manual editorial input** — a
                     └───────────┬────────────┘
                                 │
                     ┌───────────▼────────────┐
-                    │  Impact Calculator     │
-                    │  base × volatility ×   │
-                    │  confidence            │
+                    │  LIVE part (every poll) │
+                    │  liveDelta = clamp(     │
+                    │   (rating−6)·k + stat)  │
+                    │   · vol(base) · press   │
                     └───────────┬────────────┘
                                 │
                     ┌───────────▼────────────┐
-                    │  Multiplier Update     │
-                    │  player.multiplier +=  │
-                    │  final_impact / 100    │
+                    │  RESULT part (at FT)    │
+                    │  price ×= (1 + impact)  │
+                    │  (multiplicative, not   │
+                    │   volatility-scaled)    │
                     └───────────┬────────────┘
                                 │
                     ┌───────────▼────────────┐
-                    │  Price Recompute       │
-                    │  price = base ×        │
-                    │  multiplier            │
+                    │  Price = base ×         │
+                    │  (1+tournΔ+liveΔ),      │
+                    │  floored > 0            │
                     └───────────┬────────────┘
                                 │
                     ┌───────────▼────────────┐
@@ -330,43 +341,32 @@ For the MVP, recommend option 1 supplemented by **manual editorial input** — a
 ### 6.2. Pseudocode — live tick handler
 
 ```javascript
-// Called every minute for each live match
+// Called every poll for each player in a live match. The price has two parts:
+// a PERSISTENT tournament balance carried in from prior matches, and a
+// TRANSIENT live part recomputed from the CURRENT rating every poll — so the
+// price falls when the rating falls (reversible by construction).
 async function onLiveTick(matchId) {
-  const fixture = await sportmonks.getFixture(matchId, {
-    include: 'events,players.statistics'
-  });
-
+  const fixture = await sportmonks.getFixture(matchId, { include: 'players.statistics' });
   for (const player of fixture.players) {
-    const rating = player.statistics.find(s => s.type === 'rating')?.value;
-    if (!rating) continue;
-
-    // Rating delta since last tick
-    const lastRating = player.lastTickRating ?? 6.0;
-    const ratingDelta = rating - lastRating;
-
-    // Convert rating delta to price impact
-    const impact = ratingDelta * 4;  // 4% per rating point
-    applyImpact(player.id, impact);
-
-    player.lastTickRating = rating;
-  }
-
-  // Process discrete events (goals, cards) since last tick
-  const newEvents = fixture.events.filter(e => e.id > lastProcessedEventId);
-  for (const event of newEvents) {
-    const impact = mapEventToImpact(event);
-    if (impact) applyImpact(event.player_id, impact);
+    priceLive(player, ratingOf(player) ?? 6.0);   // null rating → neutral 6.0
   }
 }
 
-function applyImpact(playerId, baseImpact) {
-  const player = db.players.get(playerId);
-  const vol = Math.pow(50 / player.baseValue, 0.4);
-  const finalImpact = baseImpact * vol;
+function priceLive(player, rating) {
+  // tournamentDelta is NOT stored — it is read back from the price the player
+  // carried INTO this match: carriedPrice / base − 1.
+  const tournamentDelta = player.carriedPrice / player.baseValue - 1;
 
-  player.multiplier += finalImpact / 100;
-  player.price = player.baseValue * player.multiplier;
+  // liveDelta is a LEVEL recomputed from the CURRENT rating (not an accumulated
+  // delta), bounded, then volatility- and pressure-scaled. There is NO separate
+  // per-event %: a goal/card moves the price ONLY through the rating Sportmonks
+  // raises/lowers (no double-count).
+  const ratingLevel = (rating - 6.0) * 0.04;                 // +4% per point above 6
+  const core = clamp(ratingLevel + statBonus(player), -0.30, +0.40);
+  const liveDelta = core * volatility(player.baseValue) * pressureMod(player);
 
+  const multiplier = Math.max(0.05, 1 + tournamentDelta + liveDelta);
+  player.price = round2(player.baseValue * multiplier);
   pushToClients(player);
 }
 ```
@@ -374,29 +374,32 @@ function applyImpact(playerId, baseImpact) {
 ### 6.3. Pseudocode — match end handler
 
 ```javascript
+// At full-time the in-match performance is ALREADY banked: the last live tick
+// is base × (1 + tournamentDelta + liveDelta), and it becomes the carried-in
+// price for the next match. We then apply the RESULT once — multiplicatively on
+// the player's current price, NOT volatility-scaled (a result is collective: the
+// whole squad moves by the same fraction, regardless of base value).
 async function onMatchEnd(matchId) {
-  const fixture = await sportmonks.getFixture(matchId, {
-    include: 'players.statistics,participants'
-  });
+  const fixture = await sportmonks.getFixture(matchId, { include: 'participants,scores' });
+  const winner = decisiveWinner(fixture);        // null on a level knockout (penalties) → skip, never crash the wrong team
+  const isKnockout = !isGroupStage(fixture.stage);
 
-  const homeWon = fixture.scores.home > fixture.scores.away;
-  const awayWon = fixture.scores.away > fixture.scores.home;
-  const isKnockout = fixture.stage.is_knockout;
-
-  for (const player of fixture.players) {
-    const team = player.team_id;
-    const playerWon = (team === fixture.home_team_id && homeWon) ||
-                      (team === fixture.away_team_id && awayWon);
-
-    if (isKnockout) {
-      applyImpact(player.id, playerWon ? +5 : -40);
-    } else {
-      // Group stage
-      if (playerWon) applyImpact(player.id, +2);
-      // Group qualification handled separately when group is complete
-    }
+  for (const player of fixture.players) {         // both squads, incl. unused subs
+    const impact = resultImpact(player.team_id, winner, isKnockout);
+    //   group win → +2%   |   knockout win → +5%   |   knockout loss → −40% (elimination)
+    if (impact !== 0) applyResultEvent(player, impact);   // one settlement tick
   }
 }
+
+function applyResultEvent(player, impact) {
+  const floor = player.baseValue * 0.05;          // price stays strictly positive (spec Q3)
+  player.price = Math.max(floor, round2(player.price * (1 + impact)));
+  pushToClients(player);
+}
+
+// The other PERSISTENT events use the identical multiplicative rule, each once:
+//   qualification +5% (team reaches the knockout bracket) · suspension −15%
+//   (red / 2-yellow accumulation) · lineup-drop −2% (expected starter benched).
 ```
 
 ### 6.4. Caching and rate limits

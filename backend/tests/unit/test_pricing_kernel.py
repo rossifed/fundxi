@@ -13,11 +13,12 @@ import pytest
 
 from src.valuation.pricing import (
     PriceSnapshot,
-    apply_tournament_event,
+    apply_result_event,
     live_delta,
     price,
     rating_level,
     settle,
+    tournament_delta_from,
 )
 from src.valuation.strategies.layered_v1 import StatSnapshot
 
@@ -163,7 +164,7 @@ def test_accumulation_no_decay() -> None:
     td = 0.0
     td = settle(td, 0.05)  # match 1 settled +5%
     td = settle(td, -0.02)  # match 2 settled -2%
-    td = apply_tournament_event(td, 0.05)  # qualified +5%
+    td = settle(td, 0.05)  # a further +5% banked
     assert td == pytest.approx(0.08)
     # no time argument exists anywhere → decay is structurally impossible
     flat = price(BASE, td, _snap(None, is_live=False))
@@ -179,13 +180,17 @@ def test_metric_coherence_literal_end_to_end() -> None:
     assert (r.price / BASE) - 1.0 == pytest.approx(0.07)
 
 
-# 10. Tournament events persist. Literal: elim -0.40, then live rating 7
-# (ld 0.04) ⇒ price = 50 * (1 - 0.40 + 0.04) = 50 * 0.64 = 32.00.
-def test_tournament_event_persists() -> None:
-    td = apply_tournament_event(0.0, -0.40)
-    assert td == -0.40  # pure sum
+# 10. A tournament RESULT event persists. Elimination is multiplicative on the
+# current price (-40%); the drop is read back as a persistent tournament_delta
+# that never decays. Literal: 50 → 30 (settled), then live rating 7 (ld 0.04)
+# ⇒ price = 50 * (1 - 0.40 + 0.04) = 50 * 0.64 = 32.00.
+def test_result_event_persists() -> None:
+    eliminated_price = apply_result_event(BASE, -0.40, base_value=BASE)
+    assert eliminated_price == 30.00  # 50 * 0.60, multiplicative
+    td = tournament_delta_from(eliminated_price, BASE)
+    assert td == pytest.approx(-0.40)
     live = price(BASE, td, _snap(7.0))
-    assert live.tournament_delta == -0.40
+    assert live.tournament_delta == pytest.approx(-0.40)
     assert live.price == 32.00  # literal end-to-end
 
 

@@ -156,8 +156,19 @@ def settle(tournament_delta: float, live_delta_at_ft: float) -> float:
     return tournament_delta + live_delta_at_ft
 
 
-def apply_tournament_event(tournament_delta: float, impact_frac: float) -> float:
-    """Discrete persistent impact (qualif/elim/news/suspension).
-    ``impact_frac`` is already volatility- and confidence-scaled by the
-    caller per spec §4.3. No decay — it persists."""
-    return tournament_delta + impact_frac
+def apply_result_event(
+    current_price: float,
+    impact_frac: float,
+    *,
+    base_value: float,
+    coefficients: PricingCoefficients = DEFAULT_COEFFICIENTS,
+) -> float:
+    """A discrete, persistent tournament RESULT applied MULTIPLICATIVELY on the
+    player's CURRENT price: a -40% elimination is -40% of what he is worth NOW,
+    not of his base. This is what makes an eliminated team's price crash
+    brutally and consistently (-40% regardless of how high the run had taken
+    him). Floored at ``multiplier_floor`` of the base so the price stays
+    strictly positive (spec Q3). Not volatility-scaled — a result is a
+    collective fate, applied equally to the whole squad by the caller."""
+    floor = base_value * coefficients.multiplier_floor
+    return round(max(floor, current_price * (1.0 + impact_frac)), 2)
