@@ -192,8 +192,8 @@ const hint_style: React.CSSProperties = {
 
 const error_style: React.CSSProperties = {
   padding: "10px 12px",
-  background: "rgba(255,40,93,.1)",
-  border: "1px solid rgba(255,40,93,.35)",
+  background: "color-mix(in srgb, var(--color-negative) 10%, transparent)",
+  border: "1px solid color-mix(in srgb, var(--color-negative) 35%, transparent)",
   borderRadius: 8,
   color: "var(--color-negative)",
   fontSize: 13,

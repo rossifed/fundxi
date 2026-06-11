@@ -22,7 +22,7 @@ import { PlayerSheet, type PlayerSheetHandle } from "@/components/PlayerSheet";
 import { Logo } from "@/components/Logo";
 import { useAuth } from "@/components/AuthContext";
 import { useWatchlist } from "@/lib/watchlist";
-import { mono, surface, text } from "@/theme/tokens";
+import { mono, surface, text, with_alpha } from "@/theme/tokens";
 
 const palette = themes.dark;
 
@@ -410,9 +410,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     padding: 14,
     borderRadius: 12,
-    backgroundColor: "rgba(72,255,67,0.05)",
+    backgroundColor: with_alpha(palette.positive, 0.05),
     borderWidth: 1,
-    borderColor: "rgba(72,255,67,0.12)",
+    borderColor: with_alpha(palette.positive, 0.12),
     gap: 10,
   },
   live_card_badge_row: { flexDirection: "row", alignItems: "center", gap: 6 },

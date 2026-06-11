@@ -20,7 +20,7 @@ import { Avatar } from "@/components/Avatar";
 import { useLiveRefetch, usePricesLiveVersion } from "@/components/live";
 import { useRefresh } from "@/components/use_refresh";
 import { color_for_sign, fmt_eur_m, fmt_eur_m_signed, fmt_signed_pct } from "@/lib/format";
-import { mono, palette, text } from "@/theme/tokens";
+import { mono, palette, text, with_alpha } from "@/theme/tokens";
 
 type View_ = "board" | "create" | "join";
 
@@ -480,7 +480,7 @@ const styles = StyleSheet.create({
 
   lb_medal: { width: 36, fontSize: 15, textAlign: "left" },
 
-  climb: { backgroundColor: "rgba(47,107,255,0.08)", borderWidth: 1, borderColor: "rgba(47,107,255,0.2)", borderRadius: 12, padding: 14, gap: 4 },
+  climb: { backgroundColor: with_alpha(palette.accentBlue, 0.08), borderWidth: 1, borderColor: with_alpha(palette.accentBlue, 0.2), borderRadius: 12, padding: 14, gap: 4 },
   climb_title: { fontSize: 12, fontWeight: "800", color: "#fff" },
   climb_body: { fontSize: 12, color: text.secondary, lineHeight: 18 },
 
@@ -503,7 +503,7 @@ const styles = StyleSheet.create({
 
   lb_row: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.025)" },
   lb_header_row: { paddingVertical: 8, borderBottomColor: "rgba(255,255,255,0.04)" },
-  lb_row_me: { backgroundColor: "rgba(55,255,99,0.04)" },
+  lb_row_me: { backgroundColor: with_alpha(palette.positive, 0.04) },
   lb_h: { fontSize: 10, fontWeight: "700", color: text.tertiary, letterSpacing: 0.5, textTransform: "uppercase" },
   lb_rank: { fontFamily: mono, width: 36, fontSize: 12, fontWeight: "700", color: text.tertiary },
   lb_trader: { flex: 1 },
@@ -525,11 +525,11 @@ const styles = StyleSheet.create({
   back: { color: text.tertiary, fontSize: 12, fontWeight: "600" },
   created_title: { fontSize: 18, fontWeight: "800", color: "#fff", textAlign: "center", marginTop: 18 },
   created_sub: { fontSize: 12, color: text.tertiary, textAlign: "center", marginTop: 4, marginBottom: 16 },
-  code_box: { backgroundColor: "rgba(55,255,99,0.08)", borderWidth: 1, borderColor: "rgba(55,255,99,0.18)", borderRadius: 12, padding: 16, alignItems: "center", marginBottom: 16 },
+  code_box: { backgroundColor: with_alpha(palette.positive, 0.08), borderWidth: 1, borderColor: with_alpha(palette.positive, 0.18), borderRadius: 12, padding: 16, alignItems: "center", marginBottom: 16 },
   code_label: { fontSize: 11, color: text.tertiary, letterSpacing: 0.5, marginBottom: 4 },
   code_value: { fontFamily: mono, fontSize: 28, fontWeight: "800", color: palette.positive, letterSpacing: 3 },
 
-  error: { padding: 12, backgroundColor: "rgba(255,40,93,0.1)", borderWidth: 1, borderColor: "rgba(255,40,93,0.35)", borderRadius: 8, marginBottom: 12 },
+  error: { padding: 12, backgroundColor: with_alpha(palette.negative, 0.1), borderWidth: 1, borderColor: with_alpha(palette.negative, 0.35), borderRadius: 8, marginBottom: 12 },
   error_label: { color: palette.negative, fontSize: 13, fontWeight: "600" },
 
   btn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, alignItems: "center", justifyContent: "center" },
@@ -544,7 +544,7 @@ const styles = StyleSheet.create({
 
   empty_actions: { flexDirection: "row", gap: 10, justifyContent: "center", marginTop: 16 },
   empty_shell: { marginTop: 60, marginHorizontal: 16, padding: 28, alignItems: "center", backgroundColor: "rgba(255,255,255,0.02)", borderWidth: 1, borderColor: "rgba(255,255,255,0.05)", borderRadius: 16 },
-  empty_icon: { width: 48, height: 48, borderRadius: 14, backgroundColor: "rgba(55,255,99,0.08)", borderWidth: 1, borderColor: "rgba(55,255,99,0.18)", alignItems: "center", justifyContent: "center", marginBottom: 14 },
+  empty_icon: { width: 48, height: 48, borderRadius: 14, backgroundColor: with_alpha(palette.positive, 0.08), borderWidth: 1, borderColor: with_alpha(palette.positive, 0.18), alignItems: "center", justifyContent: "center", marginBottom: 14 },
   empty_icon_label: { color: palette.positive, fontSize: 22, fontWeight: "800" },
   empty_title: { fontSize: 18, fontWeight: "800", color: "#fff", marginBottom: 8, textAlign: "center" },
   empty_body: { fontSize: 13, color: text.secondary, lineHeight: 20, textAlign: "center" },

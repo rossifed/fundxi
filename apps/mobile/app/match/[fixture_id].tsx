@@ -26,7 +26,7 @@ import { PlayerSheet, type PlayerSheetHandle } from "@/components/PlayerSheet";
 import { TickValue } from "@/components/TickValue";
 import { useFixtureLiveVersion, useLiveRefetch, usePricesLiveVersion } from "@/components/live";
 import { color_for_sign, fmt_signed_pct } from "@/lib/format";
-import { mono, palette, text } from "@/theme/tokens";
+import { mono, palette, text, with_alpha } from "@/theme/tokens";
 
 type Tab = "compos" | "stats" | "events";
 const TABS: { key: Tab; label: string }[] = [
@@ -647,7 +647,7 @@ const styles = StyleSheet.create({
   rc_delta: { fontFamily: mono, fontSize: 10, fontWeight: "700" },
 
   cm: { flexDirection: "row", gap: 10, padding: 10, borderRadius: 8, marginBottom: 4, borderWidth: 1, borderColor: "rgba(255,255,255,0.03)" },
-  cm_goal: { backgroundColor: "rgba(55,255,99,0.05)", borderColor: "rgba(55,255,99,0.1)" },
+  cm_goal: { backgroundColor: with_alpha(palette.positive, 0.05), borderColor: with_alpha(palette.positive, 0.1) },
   cm_min_col: { alignItems: "center", minWidth: 36, gap: 1 },
   cm_min: { fontFamily: mono, fontSize: 11, fontWeight: "800" },
   cm_ball: { fontSize: 13 },

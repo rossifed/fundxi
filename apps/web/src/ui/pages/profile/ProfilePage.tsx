@@ -57,7 +57,7 @@ export function ProfilePage({ on_navigate_tab }: ProfilePageProps) {
             fontSize: 22,
             fontWeight: 800,
             color: "#fff",
-            border: "2px solid rgba(55,255,99,.3)",
+            border: "2px solid color-mix(in srgb, var(--color-positive) 30%, transparent)",
             flexShrink: 0,
           }}
         >
@@ -89,9 +89,9 @@ export function ProfilePage({ on_navigate_tab }: ProfilePageProps) {
             fontSize: 13,
             fontWeight: 700,
             borderRadius: 12,
-            background: "rgba(55,255,99,.08)",
+            background: "color-mix(in srgb, var(--color-positive) 8%, transparent)",
             color: "var(--color-positive)",
-            border: "1px solid rgba(55,255,99,.12)",
+            border: "1px solid color-mix(in srgb, var(--color-positive) 12%, transparent)",
             cursor: "pointer",
             fontFamily: "inherit",
           }}
@@ -123,9 +123,9 @@ export function ProfilePage({ on_navigate_tab }: ProfilePageProps) {
             fontSize: 13,
             fontWeight: 700,
             borderRadius: 12,
-            background: "rgba(255,40,93,.08)",
+            background: "color-mix(in srgb, var(--color-negative) 8%, transparent)",
             color: "var(--color-negative)",
-            border: "1px solid rgba(255,40,93,.16)",
+            border: "1px solid color-mix(in srgb, var(--color-negative) 16%, transparent)",
             cursor: "pointer",
             fontFamily: "inherit",
           }}

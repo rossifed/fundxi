@@ -57,15 +57,15 @@ export type Palette = {
 const dark: Palette = {
   actionBuy: "#5CF26C",
   actionSell: "#F41258",
-  positive: "#00805d",
-  negative: "#E41541",
+  positive: "#5CF26C", // aligned → green canonical (was #00805d)
+  negative: "#F41258", // aligned → red canonical (was #E41541)
   cardYellow: "#E0A800",
-  chartPrimary: "#183C82",
+  chartPrimary: "#2F6BFF", // aligned → blue canonical (was #183C82)
   chartNegative: "#F41258",
-  accent: "#9CA0DD",
-  brandGreen: "#48ff43",
-  brandBlue: "#5058f8",
-  brandBlueSoft: "rgba(80, 88, 248, 0.16)",
+  accent: "#2F6BFF", // aligned → blue canonical (was #9CA0DD lavender)
+  brandGreen: "#5CF26C", // aligned → green canonical (was #48ff43)
+  brandBlue: "#2F6BFF", // aligned → blue canonical (was #5058f8, logo)
+  brandBlueSoft: "rgba(47, 107, 255, 0.16)", // aligned (was 80,88,248)
   accentBlue: "#2F6BFF",
   accentBlueSoft: "rgba(47, 107, 255, 0.18)",
   bg: "#020406",
@@ -73,8 +73,8 @@ const dark: Palette = {
   surfaceDeep: "#0d1419",
   surfaceDeeper: "#0b0f14",
   neutralTeam: "#3b4049",
-  grad1: "#393690",
-  grad2: "#11377E",
+  grad1: "#2F6BFF", // aligned → blue canonical (was #393690 violet)
+  grad2: "#2F6BFF", // aligned → blue canonical (was #11377E)
   grad3: "#07081D",
   grad4: "#020109",
 };
@@ -107,6 +107,24 @@ export const chart_category_ramp: readonly string[] = [
   "#343BB0",
   "#282E88",
   "#1C2063",
+] as const;
+
+// Avatar background ramp — deterministic identity colours (hashed seed → one
+// colour, so the same entity always gets the same hue). Categorical, NOT
+// semantic: a 10-hue spread kept wide so adjacent avatars stay distinguishable.
+// Centralised here (not inline in avatar.ts) so every colour in the app lives
+// in the palette module. Consumed by domain/identity/avatar.ts.
+export const avatar_ramp: readonly string[] = [
+  "#3B82F6",
+  "#10B981",
+  "#F59E0B",
+  "#EF4444",
+  "#8B5CF6",
+  "#EC4899",
+  "#14B8A6",
+  "#F97316",
+  "#6366F1",
+  "#A855F7",
 ] as const;
 
 // camelCase → kebab-case: `actionBuy` → `action-buy`.

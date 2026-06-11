@@ -306,7 +306,7 @@ export function LeaguesPage({ initial_join_code }: LeaguesPageProps = {}) {
                   alignItems: "center",
                   gap: 8,
                   fontSize: 13,
-                  background: entry.is_me ? "rgba(55,255,99,.04)" : "transparent",
+                  background: entry.is_me ? "color-mix(in srgb, var(--color-positive) 4%, transparent)" : "transparent",
                 }}
               >
                 {entry.rank <= 3 ? (
@@ -348,7 +348,7 @@ export function LeaguesPage({ initial_join_code }: LeaguesPageProps = {}) {
 
       {/* Keep climbing — same motivational nudge as mobile. */}
       {me && (
-        <div style={{ background: "var(--color-accent-blue-soft)", border: "1px solid rgba(47,107,255,.2)", borderRadius: 12, padding: 14 }}>
+        <div style={{ background: "var(--color-accent-blue-soft)", border: "1px solid color-mix(in srgb, var(--color-accent-blue) 20%, transparent)", borderRadius: 12, padding: 14 }}>
           <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 4 }}>📈  Keep climbing</div>
           <div style={{ fontSize: 12, color: "rgba(255,255,255,.55)", lineHeight: 1.5 }}>
             {me.rank === 1
@@ -425,8 +425,8 @@ function CreateLeagueView({
           </div>
           <div
             style={{
-              background: "rgba(55,255,99,.08)",
-              border: "1px solid rgba(55,255,99,.18)",
+              background: "color-mix(in srgb, var(--color-positive) 8%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--color-positive) 18%, transparent)",
               borderRadius: 12,
               padding: 16,
               marginBottom: 16,
@@ -575,9 +575,9 @@ function CopyButton({
         fontSize: 12,
         fontWeight: 700,
         borderRadius: 10,
-        background: copied ? "rgba(55,255,99,.14)" : "rgba(255,255,255,.05)",
+        background: copied ? "color-mix(in srgb, var(--color-positive) 14%, transparent)" : "rgba(255,255,255,.05)",
         color: copied ? "var(--color-positive)" : "rgba(255,255,255,.7)",
-        border: copied ? "1px solid rgba(55,255,99,.3)" : "1px solid rgba(255,255,255,.08)",
+        border: copied ? "1px solid color-mix(in srgb, var(--color-positive) 30%, transparent)" : "1px solid rgba(255,255,255,.08)",
         cursor: "pointer",
         fontFamily: "inherit",
         transition: "background .12s, color .12s",
@@ -616,8 +616,8 @@ function ErrorBanner({ message }: { message: string }) {
       role="alert"
       style={{
         padding: "10px 12px",
-        background: "rgba(255,40,93,.1)",
-        border: "1px solid rgba(255,40,93,.35)",
+        background: "color-mix(in srgb, var(--color-negative) 10%, transparent)",
+        border: "1px solid color-mix(in srgb, var(--color-negative) 35%, transparent)",
         borderRadius: 8,
         color: "var(--color-negative)",
         fontSize: 13,
@@ -709,8 +709,8 @@ function EmptyShell({ title, body }: EmptyShellProps) {
           width: 48,
           height: 48,
           borderRadius: 14,
-          background: "rgba(55,255,99,.08)",
-          border: "1px solid rgba(55,255,99,.18)",
+          background: "color-mix(in srgb, var(--color-positive) 8%, transparent)",
+          border: "1px solid color-mix(in srgb, var(--color-positive) 18%, transparent)",
           color: "var(--color-positive)",
           display: "flex",
           alignItems: "center",

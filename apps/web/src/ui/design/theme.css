@@ -34,23 +34,23 @@
   --color-action-sell: #F41258;
 
   /* Positive / negative semantic colors (P&L, percentages, winners). */
-  --color-positive: #00805d;
-  --color-negative: #E41541;
+  --color-positive: #5CF26C; /* aligned → green canonical (was #00805d) */
+  --color-negative: #F41258; /* aligned → red canonical (was #E41541) */
 
   /* Discipline — yellow-card booking colour (red card reuses --color-negative). */
   --color-card-yellow: #E0A800;
 
   /* Chart primaries. */
-  --color-chart-primary: #183C82;
+  --color-chart-primary: #2F6BFF; /* aligned → blue canonical (was #183C82) */
   --color-chart-negative: #F41258;
 
   /* Accents (hero title, decorative). */
-  --color-accent: #9CA0DD;
-  --color-brand-green: #48ff43;
+  --color-accent: #2F6BFF; /* aligned → blue canonical (was #9CA0DD lavender) */
+  --color-brand-green: #5CF26C; /* aligned → green canonical (was #48ff43) */
   /* Brand wordmark blue — fundXI logo ONLY (not UI elements). */
-  --color-brand-blue: #5058f8;
+  --color-brand-blue: #2F6BFF; /* aligned → blue canonical (was #5058f8) */
   /* Translucent brand blue — active-state surfaces (selected tabs, etc.). */
-  --color-brand-blue-soft: rgba(80, 88, 248, 0.16);
+  --color-brand-blue-soft: rgba(47, 107, 255, 0.16); /* aligned (was 80,88,248) */
 
   /* Interactive accent blue — selected/primary UI states (active chips,
      primary buttons, active filter). Clean azure, distinct from the
@@ -65,8 +65,8 @@
   --color-surface-deeper: #0b0f14;
 
   /* Ambient gradient stops (radial bg on the App shell). */
-  --color-grad-1: #393690;
-  --color-grad-2: #11377E;
+  --color-grad-1: #2F6BFF; /* aligned → blue canonical (was #393690 violet) */
+  --color-grad-2: #2F6BFF; /* aligned → blue canonical (was #11377E) */
   --color-grad-3: #07081D;
   --color-grad-4: #020109;
 }

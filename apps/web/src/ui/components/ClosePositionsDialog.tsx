@@ -106,8 +106,8 @@ export function ClosePositionsDialog({ open, positions, on_close }: ClosePositio
               <div
                 key={f.player_id}
                 style={{
-                  background: "rgba(255,40,93,.08)",
-                  border: "1px solid rgba(255,40,93,.25)",
+                  background: "color-mix(in srgb, var(--color-negative) 8%, transparent)",
+                  border: "1px solid color-mix(in srgb, var(--color-negative) 25%, transparent)",
                   borderRadius: 8,
                   padding: "8px 12px",
                   fontSize: 12,
@@ -201,8 +201,8 @@ export function ClosePositionsDialog({ open, positions, on_close }: ClosePositio
         {error && (
           <div
             style={{
-              background: "rgba(255,40,93,.08)",
-              border: "1px solid rgba(255,40,93,.25)",
+              background: "color-mix(in srgb, var(--color-negative) 8%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--color-negative) 25%, transparent)",
               borderRadius: 8,
               padding: "10px 14px",
               fontSize: 12,

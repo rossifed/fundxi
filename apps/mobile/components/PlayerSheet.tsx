@@ -39,7 +39,7 @@ import { TickValue } from "@/components/TickValue";
 import { TradeSheet } from "@/components/TradeSheet";
 import { useLiveRefetch, usePlayerLiveVersion } from "@/components/live";
 import { color_for_sign, fmt_eur_m, fmt_eur_m_signed, fmt_signed_pct } from "@/lib/format";
-import { border, mono, palette, surface, text } from "@/theme/tokens";
+import { border, mono, palette, surface, text, with_alpha } from "@/theme/tokens";
 
 export interface PlayerSheetHandle {
   open(player: Player): void;
@@ -522,7 +522,7 @@ function YourPosition({ player, current_price, refresh }: { player: Player; curr
         <View
           style={[
             styles.position_badge,
-            { backgroundColor: is_long ? "rgba(55,255,99,0.1)" : "rgba(255,40,93,0.1)" },
+            { backgroundColor: is_long ? with_alpha(palette.positive, 0.1) : with_alpha(palette.negative, 0.1) },
           ]}
         >
           <Text style={[styles.position_badge_label, { color: is_long ? palette.positive : palette.negative }]}>
@@ -705,7 +705,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.05)",
   },
-  ml_row_live: { backgroundColor: "rgba(244,18,88,0.08)", borderColor: "rgba(244,18,88,0.25)" },
+  ml_row_live: { backgroundColor: with_alpha(palette.negative, 0.08), borderColor: with_alpha(palette.negative, 0.25) },
   ml_status: { width: 34, alignItems: "flex-start" },
   ml_live: { backgroundColor: palette.actionSell, borderRadius: 3, paddingHorizontal: 5, paddingVertical: 2 },
   ml_live_label: { fontSize: 9, fontWeight: "800", color: "#fff", letterSpacing: 0.6 },

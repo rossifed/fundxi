@@ -281,7 +281,7 @@ export function PlayerSheet({
                   border: "none",
                   cursor: "pointer",
                   fontFamily: "inherit",
-                  boxShadow: "0 4px 16px rgba(92,242,108,.25)",
+                  boxShadow: "0 4px 16px color-mix(in srgb, var(--color-positive) 25%, transparent)",
                 }}
               >
                 Buy
@@ -299,7 +299,7 @@ export function PlayerSheet({
                   border: "none",
                   cursor: "pointer",
                   fontFamily: "inherit",
-                  boxShadow: "0 4px 16px rgba(244,18,88,.25)",
+                  boxShadow: "0 4px 16px color-mix(in srgb, var(--color-negative) 25%, transparent)",
                 }}
               >
                 Sell

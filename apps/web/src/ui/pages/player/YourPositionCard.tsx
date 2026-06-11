@@ -97,7 +97,7 @@ export function YourPositionCard({ player, current_price }: { player: Player; cu
       {header(
         is_long ? "LONG" : "SHORT",
         is_long ? "var(--color-positive)" : "var(--color-negative)",
-        is_long ? "rgba(55,255,99,.1)" : "rgba(255,40,93,.1)",
+        is_long ? "color-mix(in srgb, var(--color-positive) 10%, transparent)" : "color-mix(in srgb, var(--color-negative) 10%, transparent)",
       )}
       <div
         style={{

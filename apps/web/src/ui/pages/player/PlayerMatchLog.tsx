@@ -167,11 +167,11 @@ export function PlayerMatchLog({ player_id, on_open_match }: PlayerMatchLogProps
                     padding: "8px 10px",
                     borderRadius: 6,
                     background: is_live
-                      ? "rgba(244,18,88,.08)"
+                      ? "color-mix(in srgb, var(--color-negative) 8%, transparent)"
                       : is_upcoming
                         ? "rgba(255,255,255,.015)"
                         : "rgba(255,255,255,.025)",
-                    border: `1px solid ${is_live ? "rgba(244,18,88,.25)" : "rgba(255,255,255,.05)"}`,
+                    border: `1px solid ${is_live ? "color-mix(in srgb, var(--color-negative) 25%, transparent)" : "rgba(255,255,255,.05)"}`,
                     cursor: on_open_match ? "pointer" : "default",
                   }}
                 >

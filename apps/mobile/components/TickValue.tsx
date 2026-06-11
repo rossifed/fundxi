@@ -7,7 +7,7 @@
 import type { ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { palette } from "@/theme/tokens";
+import { palette, with_alpha } from "@/theme/tokens";
 import { usePulse } from "@/components/use_pulse";
 
 interface TickValueProps {
@@ -22,7 +22,7 @@ export function TickValue({ value, children, caret = true }: TickValueProps) {
     pulse === "up"
       ? "rgba(0,128,93,0.18)"
       : pulse === "down"
-        ? "rgba(228,21,65,0.18)"
+        ? with_alpha(palette.negative, 0.18)
         : "transparent";
 
   return (

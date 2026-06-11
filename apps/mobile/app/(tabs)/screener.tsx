@@ -46,7 +46,7 @@ import { useRefresh } from "@/components/use_refresh";
 import { color_for_sign, fmt_signed_pct } from "@/lib/format";
 import { toggle_set } from "@/lib/state";
 import { useWatchlist, watchlist } from "@/lib/watchlist";
-import { mono, palette, position_color, text } from "@/theme/tokens";
+import { mono, palette, position_color, text, with_alpha } from "@/theme/tokens";
 
 type Tab = "valuation" | "statistics" | "personal";
 type SortDir = "asc" | "desc";
@@ -1309,9 +1309,9 @@ const styles = StyleSheet.create({
   num_prefix: { fontFamily: mono, fontSize: 12, fontWeight: "700", color: "rgba(255,255,255,0.7)" },
   name: { fontSize: 15, fontWeight: "700", color: "#fff", flexShrink: 1 },
   held: {
-    backgroundColor: "rgba(72,255,67,0.14)",
+    backgroundColor: with_alpha(palette.positive, 0.14),
     borderWidth: 1,
-    borderColor: "rgba(72,255,67,0.35)",
+    borderColor: with_alpha(palette.positive, 0.35),
     borderRadius: 3,
     paddingHorizontal: 5,
     paddingVertical: 1,

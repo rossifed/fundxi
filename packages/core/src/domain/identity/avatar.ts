@@ -9,18 +9,7 @@
  * Pure, deterministic, zero I/O. The UI ``<Avatar>`` component just
  * renders the precomputed { initials, bg_color }. */
 
-const PALETTE = [
-  "#3B82F6",
-  "#10B981",
-  "#F59E0B",
-  "#EF4444",
-  "#8B5CF6",
-  "#EC4899",
-  "#14B8A6",
-  "#F97316",
-  "#6366F1",
-  "#A855F7",
-];
+import { avatar_ramp } from "../../design/palette";
 
 export interface AvatarPresentation {
   initials: string;
@@ -45,6 +34,6 @@ function hash_seed(seed: string): number {
 export function compute_avatar(seed: string, name: string): AvatarPresentation {
   return {
     initials: compute_initials(name),
-    bg_color: PALETTE[hash_seed(seed) % PALETTE.length]!,
+    bg_color: avatar_ramp[hash_seed(seed) % avatar_ramp.length]!,
   };
 }

@@ -275,8 +275,8 @@ export function FixturesPage({ on_open_match, on_open_team }: FixturesPageProps)
             key={day.day_key}
             ref={day.is_today ? today_ref : undefined}
             style={{
-              background: day.is_today ? "rgba(72,255,67,.04)" : "rgba(255,255,255,.025)",
-              border: `1px solid ${day.is_today ? "rgba(72,255,67,.30)" : "rgba(255,255,255,.07)"}`,
+              background: day.is_today ? "color-mix(in srgb, var(--color-positive) 4%, transparent)" : "rgba(255,255,255,.025)",
+              border: `1px solid ${day.is_today ? "color-mix(in srgb, var(--color-positive) 30%, transparent)" : "rgba(255,255,255,.07)"}`,
               borderRadius: 10,
               overflow: "hidden",
               scrollMarginTop: 8,
@@ -290,8 +290,8 @@ export function FixturesPage({ on_open_match, on_open_team }: FixturesPageProps)
                 alignItems: "baseline",
                 gap: 10,
                 padding: "9px 14px",
-                background: day.is_today ? "rgba(72,255,67,.07)" : "rgba(255,255,255,.03)",
-                borderBottom: `1px solid ${day.is_today ? "rgba(72,255,67,.20)" : "rgba(255,255,255,.05)"}`,
+                background: day.is_today ? "color-mix(in srgb, var(--color-positive) 7%, transparent)" : "rgba(255,255,255,.03)",
+                borderBottom: `1px solid ${day.is_today ? "color-mix(in srgb, var(--color-positive) 20%, transparent)" : "rgba(255,255,255,.05)"}`,
               }}
             >
               <span
@@ -623,8 +623,8 @@ function CompactMatchCell({
   const is_today = fixture.date ? fixture.date.slice(0, 10) === today_key() : false;
   const time = format_kickoff_time(fixture.date);
 
-  const accent_bg = is_today ? "rgba(72,255,67,.10)" : is_live ? "rgba(255,255,255,.07)" : "rgba(255,255,255,.05)";
-  const accent_border = is_today ? "rgba(72,255,67,.40)" : is_live ? "rgba(255,255,255,.16)" : "rgba(255,255,255,.11)";
+  const accent_bg = is_today ? "color-mix(in srgb, var(--color-positive) 10%, transparent)" : is_live ? "rgba(255,255,255,.07)" : "rgba(255,255,255,.05)";
+  const accent_border = is_today ? "color-mix(in srgb, var(--color-positive) 40%, transparent)" : is_live ? "rgba(255,255,255,.16)" : "rgba(255,255,255,.11)";
   const tooltip = [
     format_short_date(fixture.date),
     time,
@@ -903,7 +903,7 @@ function TrophyImage() {
   const [failed, set_failed] = useState(false);
   if (failed) {
     return (
-      <span style={{ fontSize: 64, lineHeight: 1, filter: "drop-shadow(0 0 14px rgba(255,200,80,.25))" }}>🏆</span>
+      <span style={{ fontSize: 64, lineHeight: 1, filter: "drop-shadow(0 0 14px color-mix(in srgb, var(--color-card-yellow) 25%, transparent))" }}>🏆</span>
     );
   }
   return (
@@ -915,7 +915,7 @@ function TrophyImage() {
         width: 110,
         height: 150,
         objectFit: "contain",
-        filter: "drop-shadow(0 6px 22px rgba(255,200,80,.28))",
+        filter: "drop-shadow(0 6px 22px color-mix(in srgb, var(--color-card-yellow) 28%, transparent))",
       }}
     />
   );
@@ -1029,8 +1029,8 @@ function FixtureCard({
                 fontSize: 10,
                 fontWeight: 700,
                 color: "var(--color-positive)",
-                background: "rgba(72,255,67,.10)",
-                border: "1px solid rgba(72,255,67,.28)",
+                background: "color-mix(in srgb, var(--color-positive) 10%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--color-positive) 28%, transparent)",
                 padding: "2px 7px",
                 borderRadius: 4,
               }}

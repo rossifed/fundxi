@@ -21,7 +21,7 @@ import { build_bracket, type BracketLayout } from "@fundxi/core/domain/match/bra
 import { LiveBadge } from "@/components/LiveBadge";
 import { useLiveRefetch, useMatchesLiveVersion, useStandingsLiveVersion } from "@/components/live";
 import { useRefresh } from "@/components/use_refresh";
-import { mono, palette, text } from "@/theme/tokens";
+import { mono, palette, text, with_alpha } from "@/theme/tokens";
 
 type StatusFilter = "all" | FixtureStatus;
 type ViewMode = "calendar" | "bracket" | "groups";
@@ -535,7 +535,7 @@ const styles = StyleSheet.create({
   // Primary nav — status filter pills (rounded, free-floating row).
   status_tabs: { flexDirection: "row", gap: 8, paddingRight: 8 },
   status_tab: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: "rgba(255,255,255,0.07)", backgroundColor: "rgba(255,255,255,0.025)" },
-  status_tab_on: { backgroundColor: "rgba(80,88,248,0.22)", borderColor: "rgba(80,88,248,0.60)" },
+  status_tab_on: { backgroundColor: with_alpha(palette.accentBlue, 0.22), borderColor: with_alpha(palette.accentBlue, 0.60) },
   status_tab_label: { fontSize: 12.5, fontWeight: "600", color: text.secondary },
   status_tab_label_on: { color: "#fff", fontWeight: "800" },
   disabled: { opacity: 0.35 },
@@ -551,9 +551,9 @@ const styles = StyleSheet.create({
   empty: { padding: 40, textAlign: "center", color: text.muted, fontSize: 13 },
 
   day: { backgroundColor: "rgba(255,255,255,0.03)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)", borderRadius: 12, overflow: "hidden" },
-  day_today: { borderColor: "rgba(72,255,67,0.30)" },
+  day_today: { borderColor: with_alpha(palette.positive, 0.30) },
   day_head: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: "rgba(255,255,255,0.05)", borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.06)" },
-  day_head_today: { backgroundColor: "rgba(72,255,67,0.08)", borderBottomColor: "rgba(72,255,67,0.22)" },
+  day_head_today: { backgroundColor: with_alpha(palette.positive, 0.08), borderBottomColor: with_alpha(palette.positive, 0.22) },
   day_weekday: { fontSize: 10, fontWeight: "700", letterSpacing: 1, textTransform: "uppercase", color: text.tertiary },
   day_weekday_today: { color: palette.brandGreen },
   day_date: { fontSize: 16, fontWeight: "800", color: "#fff", letterSpacing: -0.2 },
@@ -571,7 +571,7 @@ const styles = StyleSheet.create({
   upcoming: { fontSize: 10.5, color: text.tertiary, fontWeight: "700", letterSpacing: 0.3, textTransform: "uppercase" },
   phase: { backgroundColor: "rgba(255,255,255,0.04)", borderRadius: 4, paddingHorizontal: 7, paddingVertical: 3 },
   phase_label: { fontSize: 9.5, color: text.tertiary, fontWeight: "700", letterSpacing: 0.5 },
-  held: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(72,255,67,0.10)", borderWidth: 1, borderColor: "rgba(72,255,67,0.28)", borderRadius: 4, paddingHorizontal: 7, paddingVertical: 2, flexShrink: 1 },
+  held: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: with_alpha(palette.positive, 0.10), borderWidth: 1, borderColor: with_alpha(palette.positive, 0.28), borderRadius: 4, paddingHorizontal: 7, paddingVertical: 2, flexShrink: 1 },
   held_dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: palette.positive },
   held_label: { fontSize: 10, fontWeight: "700", color: palette.positive, flexShrink: 1 },
   fx_time: { fontFamily: mono, fontSize: 11, color: text.tertiary, fontWeight: "600" },
@@ -599,7 +599,7 @@ const styles = StyleSheet.create({
   ko_empty_txt: { color: "rgba(255,255,255,0.25)", fontSize: 11, fontWeight: "700", letterSpacing: 1 },
 
   cc: { backgroundColor: "rgba(255,255,255,0.04)", borderWidth: 1, borderColor: "rgba(255,255,255,0.10)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 7, gap: 4 },
-  cc_today: { borderColor: "rgba(72,255,67,0.40)", borderLeftWidth: 3, borderLeftColor: palette.brandGreen },
+  cc_today: { borderColor: with_alpha(palette.positive, 0.40), borderLeftWidth: 3, borderLeftColor: palette.brandGreen },
   cc_live: { backgroundColor: "rgba(255,255,255,0.06)", borderColor: "rgba(255,255,255,0.18)" },
   cc_row: { flexDirection: "row", alignItems: "center", gap: 7 },
   cc_flag: { fontSize: 16, width: 22, textAlign: "center" },
@@ -617,7 +617,7 @@ const styles = StyleSheet.create({
   cc_live_dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: palette.brandGreen },
   cc_live_txt: { fontSize: 9, fontWeight: "800", letterSpacing: 0.6, color: palette.brandGreen },
 
-  final_card: { backgroundColor: "rgba(80,88,248,0.08)", borderWidth: 1, borderColor: "rgba(80,88,248,0.45)", borderRadius: 12, overflow: "hidden" },
+  final_card: { backgroundColor: with_alpha(palette.accentBlue, 0.08), borderWidth: 1, borderColor: with_alpha(palette.accentBlue, 0.45), borderRadius: 12, overflow: "hidden" },
   final_head: { backgroundColor: palette.brandBlue, paddingVertical: 6, alignItems: "center" },
   final_head_txt: { fontSize: 10, letterSpacing: 1.6, fontWeight: "800", color: "#fff" },
   final_body: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12, gap: 10 },
@@ -639,7 +639,7 @@ const styles = StyleSheet.create({
   std_group_letter: { fontSize: 12.5, fontWeight: "800", letterSpacing: 1.2, textTransform: "uppercase", color: "#fff" },
   std_row: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 12, paddingVertical: 9, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.05)" },
   std_head: { borderTopWidth: 0, paddingVertical: 7, backgroundColor: "rgba(255,255,255,0.015)" },
-  std_row_q: { backgroundColor: "rgba(80,88,248,0.10)" },
+  std_row_q: { backgroundColor: with_alpha(palette.accentBlue, 0.10) },
   std_h: { fontSize: 9, fontWeight: "800", letterSpacing: 0.4, textTransform: "uppercase", color: text.tertiary },
   std_pos: { fontFamily: mono, width: 22, textAlign: "center", fontWeight: "800", fontSize: 12 },
   std_team: { flex: 1 },
@@ -652,7 +652,7 @@ const styles = StyleSheet.create({
   std_gd: { fontFamily: mono, width: 34, textAlign: "right", fontSize: 12, color: "rgba(255,255,255,0.7)", fontWeight: "600" },
   std_pts_h: { fontFamily: mono, width: 40, textAlign: "right" },
   std_pts_col: { width: 40, alignItems: "flex-end" },
-  pts_badge: { minWidth: 26, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, backgroundColor: "rgba(80,88,248,0.18)", alignItems: "center" },
+  pts_badge: { minWidth: 26, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, backgroundColor: with_alpha(palette.accentBlue, 0.18), alignItems: "center" },
   pts_badge_q: { backgroundColor: palette.brandBlue },
   pts_txt: { fontFamily: mono, fontSize: 13, fontWeight: "900", color: "rgba(255,255,255,0.8)" },
   pts_txt_q: { color: "#fff" },

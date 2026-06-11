@@ -257,8 +257,8 @@ const field_input: React.CSSProperties = {
 
 const error_style: React.CSSProperties = {
   padding: "10px 12px",
-  background: "rgba(255,40,93,.1)",
-  border: "1px solid rgba(255,40,93,.35)",
+  background: "color-mix(in srgb, var(--color-negative) 10%, transparent)",
+  border: "1px solid color-mix(in srgb, var(--color-negative) 35%, transparent)",
   borderRadius: 8,
   color: "var(--color-negative)",
   fontSize: 13,
@@ -268,8 +268,8 @@ const error_style: React.CSSProperties = {
 
 const success_style: React.CSSProperties = {
   padding: "10px 12px",
-  background: "rgba(55,255,99,.08)",
-  border: "1px solid rgba(55,255,99,.25)",
+  background: "color-mix(in srgb, var(--color-positive) 8%, transparent)",
+  border: "1px solid color-mix(in srgb, var(--color-positive) 25%, transparent)",
   borderRadius: 8,
   color: "var(--color-positive)",
   fontSize: 13,

@@ -59,7 +59,7 @@ export function PortfolioBar({ on_click }: PortfolioBarProps) {
             height: 5,
             borderRadius: 3,
             background: up ? "var(--color-positive)" : "var(--color-negative)",
-            boxShadow: `0 0 6px ${up ? "rgba(55,255,99,.4)" : "rgba(255,40,93,.4)"}`,
+            boxShadow: `0 0 6px ${up ? "color-mix(in srgb, var(--color-positive) 40%, transparent)" : "color-mix(in srgb, var(--color-negative) 40%, transparent)"}`,
           }}
         />
         <span style={{ fontSize: 11, color: "rgba(255,255,255,.35)", fontWeight: 600, letterSpacing: 0.3 }}>

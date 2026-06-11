@@ -230,8 +230,8 @@ export function TradeDialog({
               background: !can_confirm
                 ? "rgba(255,255,255,.04)"
                 : is_buy
-                  ? "linear-gradient(135deg,var(--color-action-buy),#0D9488)"
-                  : "linear-gradient(135deg,var(--color-action-sell),#dc2626)",
+                  ? "linear-gradient(135deg,var(--color-action-buy),color-mix(in srgb, var(--color-action-buy), black 28%))"
+                  : "linear-gradient(135deg,var(--color-action-sell),color-mix(in srgb, var(--color-action-sell), black 18%))",
               color: !can_confirm ? "rgba(255,255,255,.25)" : "#fff",
               border: !can_confirm ? "1px solid rgba(255,255,255,.06)" : "none",
               cursor: !can_confirm ? "not-allowed" : "pointer",
@@ -239,8 +239,8 @@ export function TradeDialog({
               boxShadow: !can_confirm
                 ? "none"
                 : is_buy
-                  ? "0 4px 16px rgba(92,242,108,.25)"
-                  : "0 4px 16px rgba(244,18,88,.25)",
+                  ? "0 4px 16px color-mix(in srgb, var(--color-positive) 25%, transparent)"
+                  : "0 4px 16px color-mix(in srgb, var(--color-negative) 25%, transparent)",
             }}
           >
             Confirm {is_buy ? "Buy" : "Sell"}
@@ -562,8 +562,8 @@ export function TradeDialog({
         {preview.insufficient_capital && (
           <div
             style={{
-              background: "rgba(255,40,93,.08)",
-              border: "1px solid rgba(255,40,93,.25)",
+              background: "color-mix(in srgb, var(--color-negative) 8%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--color-negative) 25%, transparent)",
               borderRadius: 8,
               padding: "10px 14px",
               display: "flex",
@@ -582,8 +582,8 @@ export function TradeDialog({
         {is_short && (
           <div
             style={{
-              background: "rgba(245,158,11,.08)",
-              border: "1px solid rgba(245,158,11,.25)",
+              background: "color-mix(in srgb, var(--color-card-yellow) 8%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--color-card-yellow) 25%, transparent)",
               borderRadius: 8,
               padding: "10px 14px",
               display: "flex",
