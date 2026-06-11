@@ -142,21 +142,22 @@ def _settle_player(
     return SettlementTick(player_id=player_id, price=settled, rating=rating_by_player.get(player_id, 6.0))
 
 
-def plan_flat_impact(
+def plan_impacts(
     *,
-    player_ids: Sequence[int],
+    impacts_by_player: Mapping[int, float],
     base_by_player: Mapping[int, float | None],
     last_price_by_player: Mapping[int, float],
     rating_by_player: Mapping[int, float],
-    impact_frac: float,
     coefficients: PricingCoefficients = DEFAULT_COEFFICIENTS,
 ) -> list[SettlementTick]:
-    """Apply the same ``impact_frac`` (multiplicative on current price) to a set
-    of players — the shared shape behind qualification (+5% to a qualified
-    squad) and suspension (-15% to banned players). One tick per priceable
-    player whose price actually moves."""
+    """Apply a PER-PLAYER ``impact_frac`` (multiplicative on current price). The
+    general shape: suspension/qualification pass a uniform impact, did-not-play
+    passes ``-1% x zero-minute-tally`` per player. One tick per priceable player
+    whose price actually moves."""
     ticks: list[SettlementTick] = []
-    for player_id in player_ids:
+    for player_id, impact_frac in impacts_by_player.items():
+        if impact_frac == 0.0:
+            continue
         tick = _settle_player(
             player_id=player_id,
             impact_frac=impact_frac,
@@ -168,6 +169,27 @@ def plan_flat_impact(
         if tick is not None:
             ticks.append(tick)
     return ticks
+
+
+def plan_flat_impact(
+    *,
+    player_ids: Sequence[int],
+    base_by_player: Mapping[int, float | None],
+    last_price_by_player: Mapping[int, float],
+    rating_by_player: Mapping[int, float],
+    impact_frac: float,
+    coefficients: PricingCoefficients = DEFAULT_COEFFICIENTS,
+) -> list[SettlementTick]:
+    """Apply the SAME ``impact_frac`` to a set of players — the shared shape
+    behind qualification (+5% to a qualified squad) and suspension (-15% to
+    banned players). Thin wrapper over ``plan_impacts``."""
+    return plan_impacts(
+        impacts_by_player={player_id: impact_frac for player_id in player_ids},
+        base_by_player=base_by_player,
+        last_price_by_player=last_price_by_player,
+        rating_by_player=rating_by_player,
+        coefficients=coefficients,
+    )
 
 
 def newly_suspended_players(

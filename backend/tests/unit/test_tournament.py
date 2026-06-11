@@ -18,6 +18,7 @@ from src.valuation.tournament import (
     newly_suspended_players,
     per_side_impacts,
     plan_flat_impact,
+    plan_impacts,
     plan_qualification,
     plan_settlement,
     qualified_team_ids,
@@ -306,3 +307,30 @@ def test_no_previous_match_means_no_drops() -> None:
 
 def test_unchanged_xi_drops_nobody() -> None:
     assert dropped_starters(previous_starters={1, 2}, current_starters={1, 2, 3}) == set()
+
+
+# --- did-not-play (escalating -1% x tally) -------------------------------
+
+
+def test_did_not_play_penalty_scales_with_zero_minute_tally() -> None:
+    # player 1: 1st zero-minute match -> -1% (x0.99); player 2: his 3rd ->
+    # -3% (x0.97). The escalation is just impact = -0.01 * tally per player.
+    ticks = plan_impacts(
+        impacts_by_player={1: -0.01 * 1, 2: -0.01 * 3},
+        base_by_player={1: 100.0, 2: 100.0},
+        last_price_by_player={1: 100.0, 2: 100.0},
+        rating_by_player={},
+    )
+    by_player = {t.player_id: t for t in ticks}
+    assert by_player[1].price == 99.00  # 100 * (1 - 0.01)
+    assert by_player[2].price == 97.00  # 100 * (1 - 0.03)
+
+
+def test_zero_impact_player_gets_no_tick() -> None:
+    # A featured player (tally 0 → impact 0) is never penalised.
+    assert plan_impacts(
+        impacts_by_player={1: 0.0},
+        base_by_player={1: 100.0},
+        last_price_by_player={1: 100.0},
+        rating_by_player={},
+    ) == []

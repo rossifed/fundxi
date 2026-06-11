@@ -38,6 +38,7 @@ w_knockout_elimination_frac = -0.40  # knockout loss — the brutal drop
 w_qualification_frac = 0.05          # group qualification (standings-driven)
 w_suspension_frac = -0.15            # banned next match (red / 2-yellow accumulation)
 w_out_of_xi_frac = -0.02             # dropped from the XI (started last match, benched this one)
+w_did_not_play_frac = -0.01          # per zero-minute match, scaled by tally: -1% x N (benchwarmer rot)
 
 # === Layer 3: Pressure Index modulator ===
 pressure_mod_min = 0.7

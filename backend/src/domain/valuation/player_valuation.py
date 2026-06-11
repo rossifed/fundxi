@@ -17,6 +17,7 @@ class ValuationSource(StrEnum):
     QUALIFICATION = "qualification"  # group qualification (team reaches the knockout bracket)
     SUSPENSION = "suspension"  # banned for the next match (red / 2-yellow accumulation)
     LINEUP_DROP = "lineup_drop"  # dropped from the XI (started last match, benched this one)
+    DID_NOT_PLAY = "did_not_play"  # 0 minutes in a match he was in the squad for (-1% x tally)
 
 
 @dataclass(frozen=True, slots=True)

@@ -59,6 +59,11 @@ class PricingCoefficients:
     w_qualification_frac: float = 0.05  # group qualification (standings-driven, Step 2)
     w_suspension_frac: float = -0.15  # banned for the next match (red / 2-yellow accumulation)
     w_out_of_xi_frac: float = -0.02  # dropped from the XI (started last match, benched this one)
+    # Did-not-play: applied per match a squad player gets 0 minutes, scaled by his
+    # tournament tally of zero-minute matches: -1% x N (a benchwarmer rots faster
+    # the longer he sits). Participation-based, NOT calendar decay: a player who
+    # plays is never touched.
+    w_did_not_play_frac: float = -0.01
 
     # --- Layer 3: Pressure Index modulator -----------------------------
     # delta *= clamp(pressure_factor, mod_min, mod_max). 1.0 = no-op.
