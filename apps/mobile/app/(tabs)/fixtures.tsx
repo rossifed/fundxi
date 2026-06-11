@@ -370,6 +370,10 @@ function CompactCell({ fixture, on_open }: { fixture: Fixture; on_open: (id: num
   const finished = fixture.status === "finished";
   const played = finished || is_live;
   const time = format_kickoff_time(fixture.date);
+  const day = fixture.date
+    ? new Date(fixture.date).toLocaleDateString(undefined, { day: "2-digit", month: "short" }).toUpperCase()
+    : "";
+  const datetime = [day, time].filter(Boolean).join(" · ") || "TBD";
   return (
     <Pressable style={[styles.cc, is_today && styles.cc_today, is_live && styles.cc_live]} onPress={() => on_open(fixture.id)}>
       <CellTeamRow flag={home?.flag} code={home?.name ?? fixture.home_team_id} score={fixture.home_score} played={played} />
@@ -383,7 +387,7 @@ function CompactCell({ fixture, on_open }: { fixture: Fixture; on_open: (id: num
         ) : finished ? (
           <Text style={styles.cc_ft}>FT</Text>
         ) : (
-          <Text style={[styles.cc_foot_time, is_today && styles.cc_foot_time_today]}>{time || "TBD"}</Text>
+          <Text style={[styles.cc_foot_time, is_today && styles.cc_foot_time_today]}>{datetime}</Text>
         )}
       </View>
     </Pressable>

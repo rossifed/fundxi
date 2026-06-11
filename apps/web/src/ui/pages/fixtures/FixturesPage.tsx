@@ -676,7 +676,7 @@ function CompactMatchCell({
             marginTop: 1,
           }}
         >
-          {time || "·"}
+          {[format_short_date(fixture.date), time].filter(Boolean).join(" · ") || "·"}
         </div>
       )}
       {is_live && (
