@@ -4,9 +4,9 @@ export interface PortfolioTotals {
   cash: number; // €M, free cash
   market_value: number; // €M, sum(price × shares)
   total_value: number; // €M, AUM = cash + market_value
-  total_cost: number; // €M, sum(avg_buy × shares)
+  total_cost: number; // €M, sum(avg_buy × shares) — nets long vs short
   pnl: number; // €M
-  return_pct: number; // %, pnl / total_cost
+  return_pct: number; // %, pnl / invested capital base (cash + total_cost)
 }
 
 export interface HoldingMetrics extends Holding {
@@ -33,7 +33,11 @@ export function compute_holding_metrics(holding: Holding, current_price: number)
     market_value,
     cost_basis,
     pnl: market_value - cost_basis,
-    return_pct: cost_basis === 0 ? 0 : ((market_value - cost_basis) / cost_basis) * 100,
+    // Divide by the MAGNITUDE of capital committed so the sign of the return
+    // tracks the P&L, not the sign of the shares. A winning short (shares < 0,
+    // cost_basis < 0) must show a POSITIVE return — dividing by the signed
+    // cost_basis would flip it.
+    return_pct: cost_basis === 0 ? 0 : ((market_value - cost_basis) / Math.abs(cost_basis)) * 100,
   };
 }
 
@@ -56,12 +60,21 @@ export function compute_portfolio_totals(
     total_cost += h.average_buy_price * h.shares;
   }
   const pnl = market_value - total_cost;
+  // Return is measured against the invested CAPITAL BASE, not the net cost.
+  // `cash + total_cost` is the account's opening value (= total_value − pnl):
+  // it stays ~stable at the starting AUM and, crucially, does NOT net to ~0
+  // when a long and a short of similar size offset in `total_cost` — which
+  // would otherwise make `pnl / total_cost` explode (a tiny P&L over a
+  // near-zero denominator showed bogus returns like +32% on a flat book).
+  // When no position has been closed this equals (total_value − opening_cash)
+  // / opening_cash, matching the server's `pnl_vs_open` (COHERENCE-INVARIANT).
+  const invested_base = cash + total_cost;
   return {
     cash,
     market_value,
     total_value: cash + market_value,
     total_cost,
     pnl,
-    return_pct: total_cost === 0 ? 0 : (pnl / total_cost) * 100,
+    return_pct: invested_base <= 0 ? 0 : (pnl / invested_base) * 100,
   };
 }
