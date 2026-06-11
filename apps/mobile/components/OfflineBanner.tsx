@@ -16,7 +16,7 @@ export function OfflineBanner() {
   return (
     <View style={[styles.banner, { paddingTop: insets.top + 4 }]} pointerEvents="none">
       <View style={styles.dot} />
-      <Text style={styles.label}>Live updates offline — reconnecting…</Text>
+      <Text style={styles.label}>Disconnected — reconnecting…</Text>
     </View>
   );
 }

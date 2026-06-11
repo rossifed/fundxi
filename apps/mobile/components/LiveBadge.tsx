@@ -5,6 +5,8 @@
 import { useEffect, useRef } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 
+import { palette, with_alpha } from "@/theme/tokens";
+
 export function LiveBadge() {
   const opacity = useRef(new Animated.Value(1)).current;
 
@@ -28,15 +30,19 @@ export function LiveBadge() {
 }
 
 const styles = StyleSheet.create({
+  // Blue, NOT the connection-status green — a live match and the SSE
+  // connection are different things and must not look alike (web parity).
   badge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    backgroundColor: "rgba(255,255,255,0.1)",
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    backgroundColor: with_alpha(palette.accentBlue, 0.16),
+    borderWidth: 1,
+    borderColor: with_alpha(palette.accentBlue, 0.45),
+    paddingHorizontal: 11,
+    paddingVertical: 6,
     borderRadius: 10,
   },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.5)" },
-  label: { fontSize: 11, fontWeight: "700", color: "rgba(255,255,255,0.5)" },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: palette.accentBlue },
+  label: { fontSize: 11, fontWeight: "800", letterSpacing: 0.4, color: palette.accentBlue },
 });

@@ -17,7 +17,7 @@ export function StreamStatus() {
   return (
     <div
       style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px" }}
-      title={online ? "Live updates connected" : "Live updates offline — showing the last known data"}
+      title={online ? "Live updates connected" : "Live updates disconnected — showing the last known data"}
     >
       <span
         style={{
@@ -36,7 +36,7 @@ export function StreamStatus() {
           color: online ? "rgba(255,255,255,.5)" : color.negative,
         }}
       >
-        {online ? "Live" : "Live offline"}
+        {online ? "Connected" : "Disconnected"}
       </span>
     </div>
   );
