@@ -166,6 +166,16 @@ export function TradeDialog({
   const final_shares = preview.shares;
   const final_amount = preview.amount;
   const final_pct = preview.percentage_of_portfolio;
+
+  // Switching unit carries the value over instead of resetting to 0: the
+  // current preview already holds both equivalents (shares for the chosen %,
+  // and % for the chosen shares), so we just seed the other control with it.
+  const switch_mode = (next: TradeMode) => {
+    if (next === mode) return;
+    if (next === "shares") set_custom_shares(final_shares);
+    else set_percentage(Math.min(100, Math.max(1, final_pct)));
+    set_mode(next);
+  };
   const is_short = preview.is_short;
   const short_qty = preview.short_quantity;
   const held_shares = preview.held_shares;
@@ -343,7 +353,7 @@ export function TradeDialog({
           ]).map(m => (
             <button
               key={m.k}
-              onClick={() => set_mode(m.k)}
+              onClick={() => switch_mode(m.k)}
               style={{
                 flex: 1,
                 padding: "8px 0",

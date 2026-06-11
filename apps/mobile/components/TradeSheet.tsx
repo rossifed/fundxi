@@ -67,6 +67,16 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
 
   const can_confirm = phase === "form" && !preview.insufficient_capital && preview.shares > 0;
 
+  // Switching unit carries the value over instead of resetting to 0: the
+  // current preview already holds both equivalents (shares for the chosen %,
+  // and % for the chosen shares), so we seed the other control with it.
+  const switch_mode = (next: TradeMode) => {
+    if (next === mode) return;
+    if (next === "shares") set_shares(preview.shares);
+    else set_percentage(Math.min(100, Math.max(1, preview.percentage_of_portfolio)));
+    set_mode(next);
+  };
+
   const confirm = async () => {
     if (!can_confirm) return;
     set_phase("submitting");
@@ -133,7 +143,7 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
                 {(["percentage", "shares"] as TradeMode[]).map(m => {
                   const on = mode === m;
                   return (
-                    <Pressable key={m} style={[styles.mode, on && styles.mode_on]} onPress={() => set_mode(m)}>
+                    <Pressable key={m} style={[styles.mode, on && styles.mode_on]} onPress={() => switch_mode(m)}>
                       <Text style={[styles.mode_label, on && styles.mode_label_on]}>
                         {m === "percentage" ? "Percent" : "Shares"}
                       </Text>
