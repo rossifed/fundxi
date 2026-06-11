@@ -2,7 +2,7 @@ import { portfolio_service, type HoldingDetail } from "@fundxi/core/application/
 import { simulate_trade, type TradePreview, type TradePreviewInput } from "@fundxi/core/application/trade_service";
 import type { Holding } from "@fundxi/core/domain/portfolio/holding";
 import type { Trade } from "@fundxi/core/domain/portfolio/trade";
-import type { PortfolioTotals } from "@fundxi/core/domain/portfolio/portfolio_metrics";
+import type { HoldingMetrics, PortfolioTotals } from "@fundxi/core/domain/portfolio/portfolio_metrics";
 import {
   fetch_portfolio_history,
   type HistoryRange,
@@ -20,6 +20,13 @@ export const portfolio_api = {
   },
   get_holding(player_id: number): Holding | undefined {
     return portfolio_service.get_holding_for(player_id);
+  },
+  /** Live metrics for ONE held player (market_value, pnl, return_pct, …) — the
+   * single source the per-player "Your position" card uses on web AND mobile,
+   * so the two clients are aligned by construction, not by copied arithmetic.
+   * undefined when the player is not held. */
+  get_holding_metrics(player_id: number): HoldingMetrics | undefined {
+    return portfolio_service.get_holding_metrics(player_id);
   },
   get_cash(): number {
     return portfolio_service.get_my_cash();

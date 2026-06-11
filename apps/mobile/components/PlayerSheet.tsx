@@ -24,7 +24,6 @@ import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import { teams_api } from "@fundxi/core/api/teams_api";
 import { valuations_api } from "@fundxi/core/api/valuations_api";
 import { POSITION_LABEL, type Player } from "@fundxi/core/domain/player/player";
-import { compute_return_pct } from "@fundxi/core/domain/market/return";
 import type { PlayerValuation } from "@fundxi/core/domain/market/player_valuation";
 import { compute_portfolio_share } from "@fundxi/core/domain/portfolio/portfolio_metrics";
 import type { PlayerTournamentStat } from "@fundxi/core/infrastructure/repositories/player_stats_repository";
@@ -199,7 +198,7 @@ function PlayerDetail({
 
       <PriceChart price_history={price_history} />
 
-      <YourPosition player={player} current_price={current_price} refresh={trade_version} />
+      <YourPosition player={player} refresh={trade_version} />
 
       {player.tags && player.tags.length > 0 && (
         <SectionCard title="Skills">
@@ -289,9 +288,10 @@ function ValuationRibbon({
   refresh: number;
 }) {
   const current_price = valuation?.current_price ?? 0;
-  const holding = useMemo(() => portfolio_api.get_holding(player_id), [player_id, refresh]);
-  const shares = holding?.shares ?? 0;
-  const pnl = shares !== 0 ? shares * (current_price - (holding?.average_buy_price ?? 0)) : null;
+  // P&L from the single core source (same as the Your-position card + web), so
+  // the header never disagrees with the card or the holdings list.
+  const metrics = useMemo(() => portfolio_api.get_holding_metrics(player_id), [player_id, refresh]);
+  const pnl = metrics && metrics.shares !== 0 ? metrics.pnl : null;
 
   // Returns come straight from the server valuation — NEVER recomputed in JS —
   // so this sheet and the screener row always reconcile (COHERENCE-INVARIANT).
@@ -486,10 +486,13 @@ function NewsRow({ n }: { n: PlayerNewsEntry }) {
   );
 }
 
-function YourPosition({ player, current_price, refresh }: { player: Player; current_price: number; refresh: number }) {
-  const holding = useMemo(() => portfolio_api.get_holding(player.id), [player.id, refresh]);
+function YourPosition({ player, refresh }: { player: Player; refresh: number }) {
+  // Single source: market_value / pnl / return come from the core metrics —
+  // the SAME function the web card uses — so the two clients are aligned by
+  // construction and reconcile with the holdings list + AUM.
+  const metrics = useMemo(() => portfolio_api.get_holding_metrics(player.id), [player.id, refresh]);
   const totals = portfolio_api.get_totals();
-  const has_position = !!holding && holding.shares !== 0;
+  const has_position = !!metrics && metrics.shares !== 0;
 
   if (!has_position) {
     return (
@@ -507,11 +510,7 @@ function YourPosition({ player, current_price, refresh }: { player: Player; curr
     );
   }
 
-  const shares = holding!.shares;
-  const market_value = shares * current_price;
-  const cost_basis = shares * holding!.average_buy_price;
-  const pnl = market_value - cost_basis;
-  const return_pct = compute_return_pct(market_value, cost_basis);
+  const { shares, average_buy_price, market_value, pnl, return_pct } = metrics!;
   const portfolio_pct = compute_portfolio_share(market_value, totals.total_value);
   const is_long = shares > 0;
 
@@ -532,7 +531,7 @@ function YourPosition({ player, current_price, refresh }: { player: Player; curr
       </View>
       <View style={styles.kpi_grid}>
         <SmallKpi label="Shares" value={String(Math.abs(shares))} />
-        <SmallKpi label="Avg buy" value={`€${holding!.average_buy_price}M`} />
+        <SmallKpi label="Avg buy" value={`€${average_buy_price}M`} />
         <SmallKpi label="Market value" value={fmt_eur_m(market_value)} />
         <SmallKpi label="P&L" value={fmt_eur_m_signed(pnl)} color={color_for_sign(pnl)} />
         <SmallKpi label="Return" value={fmt_signed_pct(return_pct, 1)} color={color_for_sign(return_pct)} />

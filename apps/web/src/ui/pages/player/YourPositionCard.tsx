@@ -7,19 +7,21 @@
 import type { CSSProperties } from "react";
 import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import type { Player } from "@fundxi/core/domain/player/player";
-import { compute_return_pct } from "@fundxi/core/domain/market/return";
 import { compute_portfolio_share } from "@fundxi/core/domain/portfolio/portfolio_metrics";
 import { color_for_sign, fmt_eur_m, fmt_eur_m_signed, fmt_signed_pct } from "@/ui/helpers/format";
 
-export function YourPositionCard({ player, current_price }: { player: Player; current_price: number }) {
-  const holding = portfolio_api.get_holding(player.id);
+export function YourPositionCard({ player }: { player: Player }) {
+  // Single source: market_value / pnl / return all come from the core
+  // metrics (same price resolution as the holdings list + AUM), so this card
+  // is aligned with mobile by construction and reconciles with the portfolio.
+  const metrics = portfolio_api.get_holding_metrics(player.id);
   const totals = portfolio_api.get_totals();
 
   // Body height is fixed (filled-state grid height) so the empty-state
   // message and the populated grid take the same vertical space — keeps
   // Buy/Sell anchored regardless of holding state.
   const BODY_MIN_HEIGHT = 132;
-  const has_position = !!holding && holding.shares !== 0;
+  const has_position = !!metrics && metrics.shares !== 0;
 
   const header = (status_label: string, color: string, bg: string) => (
     <div
@@ -85,12 +87,9 @@ export function YourPositionCard({ player, current_price }: { player: Player; cu
     );
   }
 
-  const market_value = holding!.shares * current_price;
-  const cost_basis = holding!.shares * holding!.average_buy_price;
-  const pnl = market_value - cost_basis;
-  const return_pct = compute_return_pct(market_value, cost_basis);
+  const { shares, average_buy_price, market_value, pnl, return_pct } = metrics!;
   const portfolio_pct = compute_portfolio_share(market_value, totals.total_value);
-  const is_long = holding!.shares > 0;
+  const is_long = shares > 0;
 
   return (
     <div style={card_style}>
@@ -109,8 +108,8 @@ export function YourPositionCard({ player, current_price }: { player: Player; cu
           alignContent: "center",
         }}
       >
-        <PositionStat label="Shares" value={String(Math.abs(holding!.shares))} />
-        <PositionStat label="Avg buy" value={`€${holding!.average_buy_price}M`} />
+        <PositionStat label="Shares" value={String(Math.abs(shares))} />
+        <PositionStat label="Avg buy" value={`€${average_buy_price}M`} />
         <PositionStat label="Market value" value={fmt_eur_m(market_value)} />
         <PositionStat label="P&L" value={fmt_eur_m_signed(pnl)} color={color_for_sign(pnl)} />
         <PositionStat label="Return" value={fmt_signed_pct(return_pct, 1)} color={color_for_sign(return_pct)} />

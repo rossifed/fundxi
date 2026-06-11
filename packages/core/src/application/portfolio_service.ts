@@ -51,6 +51,21 @@ export const portfolio_service = {
     return portfolio_repository.find_my_holdings().find(h => h.player_id === player_id);
   },
 
+  /** Live metrics for ONE held player — the single source every per-player
+   * "Your position" surface (web + mobile) consumes, so market_value / pnl /
+   * return are computed in exactly one place and can never diverge across
+   * clients (COHERENCE-INVARIANT + web-mobile parity). Price resolution is
+   * identical to get_my_holdings_with_metrics and the portfolio totals
+   * (valuation tick ?? cost basis), so a position's numbers reconcile with the
+   * holdings list and the AUM card too. Returns undefined when the player is
+   * not held (incl. a fully-closed/zero position). */
+  get_holding_metrics(player_id: number): HoldingMetrics | undefined {
+    const holding = portfolio_repository.find_my_holdings().find(h => h.player_id === player_id);
+    if (!holding) return undefined;
+    const price = valuations_repository.find_by_player_id(player_id)?.current_price ?? holding.average_buy_price;
+    return compute_holding_metrics(holding, price);
+  },
+
   get_my_cash(): number {
     return portfolio_repository.find_my_cash();
   },

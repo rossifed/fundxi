@@ -265,7 +265,7 @@ export function PlayerSheet({
               </SectionCard>
             )}
 
-            <YourPositionCard player={player} current_price={current_price} />
+            <YourPositionCard player={player} />
 
             <div style={{ display: "flex", gap: 8 }}>
               <button
