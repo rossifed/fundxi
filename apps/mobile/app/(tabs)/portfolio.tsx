@@ -226,7 +226,8 @@ export default function PortfolioScreen() {
               data={perf}
               height={176}
               format_value={p => fmt_eur_m(p.v)}
-              format_axis={v => `${Math.round(v)}M`}
+              format_axis={v => `€${v.toFixed(1)}M`}
+              min_span_pct={5}
               show_axes
               show_last_value
             />

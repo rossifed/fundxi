@@ -46,6 +46,7 @@ export function PerformanceChart({
   format_axis = v => String(Math.round(v)),
   show_axes = false,
   show_last_value = false,
+  min_span_pct = 0,
 }: {
   data: PerfPoint[];
   height?: number;
@@ -58,6 +59,11 @@ export function PerformanceChart({
   show_axes?: boolean;
   /** Draw a dashed line at the latest value with a value pill at the end. */
   show_last_value?: boolean;
+  /** Minimum vertical span as a % of the mid value. 0 (default) auto-scales
+   *  tight to the data. Set it for value charts (e.g. the portfolio) so a
+   *  near-flat series shows as near-flat instead of a tight auto-scale
+   *  amplifying a <1% wiggle into a full-height cliff. Mirrors the web prop. */
+  min_span_pct?: number;
 }) {
   const [width, set_width] = useState(0);
   const [active, set_active] = useState<number | null>(null);
@@ -79,13 +85,22 @@ export function PerformanceChart({
   const plot_w = Math.max(0, width - pad_right);
   const base_y = height - pad_bottom;
   const values = data.map(d => d.v);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = max - min || 1;
+  const raw_min = Math.min(...values);
+  const raw_max = Math.max(...values);
+  // Y domain. Default: tight auto-scale. With min_span_pct, floor the visible
+  // span so a flat value series doesn't read as a cliff (mirrors web).
+  let y_min = raw_min;
+  let y_span = raw_max - raw_min || 1;
+  if (min_span_pct > 0) {
+    const mid = (raw_min + raw_max) / 2;
+    const floored = Math.max(raw_max - raw_min, Math.abs(mid) * (min_span_pct / 100));
+    y_min = mid - floored / 2;
+    y_span = floored;
+  }
   const step = data.length > 1 ? plot_w / (data.length - 1) : 0;
 
   const point_x = (i: number) => i * step;
-  const point_y = (v: number) => pad_top + (1 - (v - min) / span) * usable_h;
+  const point_y = (v: number) => pad_top + (1 - (v - y_min) / y_span) * usable_h;
 
   // Map a touch x to the nearest data index.
   const index_at = (x: number): number => {
@@ -106,7 +121,7 @@ export function PerformanceChart({
       : d.toLocaleDateString(undefined, { day: "2-digit", month: "short" });
   };
 
-  const y_ticks = show_axes ? Array.from({ length: Y_TICKS + 1 }, (_, k) => min + (span * k) / Y_TICKS) : [];
+  const y_ticks = show_axes ? Array.from({ length: Y_TICKS + 1 }, (_, k) => y_min + (y_span * k) / Y_TICKS) : [];
   const x_ticks =
     show_axes && data.length > 1
       ? Array.from(new Set(Array.from({ length: X_TICKS }, (_, k) => Math.round((k / (X_TICKS - 1)) * (data.length - 1)))))
