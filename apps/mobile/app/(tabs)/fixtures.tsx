@@ -129,26 +129,30 @@ export default function FixturesScreen() {
     ...(held_by_team.get(fx.away_team_id) ?? []),
   ];
 
-  const filter_disabled = view_mode !== "calendar";
-
   return (
     <View style={styles.screen}>
       <View style={styles.toolbar}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.status_tabs}>
-          {STATUS_TABS.map(t => {
-            const on = filter === t.key;
-            return (
-              <Pressable
-                key={t.key}
-                disabled={filter_disabled}
-                onPress={() => set_filter(t.key)}
-                style={[styles.status_tab, on && styles.status_tab_on, filter_disabled && styles.disabled]}
-              >
-                <Text style={[styles.status_tab_label, on && styles.status_tab_label_on]}>{t.label}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        {/* Status filter only applies to the calendar list; bracket and groups
+            show the whole tournament. Hidden there (spacer keeps the view
+            switcher on the right). */}
+        {view_mode === "calendar" ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.status_tabs}>
+            {STATUS_TABS.map(t => {
+              const on = filter === t.key;
+              return (
+                <Pressable
+                  key={t.key}
+                  onPress={() => set_filter(t.key)}
+                  style={[styles.status_tab, on && styles.status_tab_on]}
+                >
+                  <Text style={[styles.status_tab_label, on && styles.status_tab_label_on]}>{t.label}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        ) : (
+          <View style={{ flex: 1 }} />
+        )}
         <View style={styles.view_switch}>
           {(["calendar", "bracket", "groups"] as const).map(m => {
             const on = view_mode === m;

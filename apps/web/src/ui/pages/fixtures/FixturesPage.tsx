@@ -194,34 +194,34 @@ export function FixturesPage({ on_open_match, on_open_team }: FixturesPageProps)
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, width: "100%" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-        <div style={{ display: "flex", gap: 6 }}>
-          {STATUS_TABS.map(tab => {
-            // The status filter only applies to the calendar list — the
-            // bracket and groups views show the whole tournament.
-            const filter_disabled = view_mode !== "calendar";
-            return (
+        {/* The status filter only makes sense for the calendar list — the
+            bracket and groups views show the whole tournament, so it is hidden
+            there (empty slot keeps the view switcher right-aligned). */}
+        {view_mode === "calendar" ? (
+          <div style={{ display: "flex", gap: 6 }}>
+            {STATUS_TABS.map(tab => (
               <button
                 key={tab.key}
                 onClick={() => set_filter(tab.key)}
-                disabled={filter_disabled}
                 style={{
                   padding: "8px 16px",
                   borderRadius: 10,
                   fontSize: 12,
                   fontWeight: filter === tab.key ? 700 : 500,
                   border: "1px solid rgba(255,255,255,.06)",
-                  cursor: filter_disabled ? "not-allowed" : "pointer",
+                  cursor: "pointer",
                   fontFamily: "inherit",
                   background: filter === tab.key ? "rgba(255,255,255,.08)" : "rgba(255,255,255,.02)",
                   color: filter === tab.key ? "#fff" : "rgba(255,255,255,.45)",
-                  opacity: filter_disabled ? 0.4 : 1,
                 }}
               >
                 {tab.label}
               </button>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div />
+        )}
 
         <div
           role="tablist"
