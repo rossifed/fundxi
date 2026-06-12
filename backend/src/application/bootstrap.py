@@ -145,8 +145,10 @@ async def bootstrap_teams(
             if coach_projection is not None:
                 coach_id = await coach_repo.upsert(coach_projection)
                 coaches_linked += 1
-            await team_repo.upsert(team, sportmonks_id=sportmonks_id, coach_id=coach_id)
-            pairs.append((sportmonks_id, team.id))
+            # Use the EFFECTIVE stored id (kept when the short_code changed) so
+            # fixtures/squads resolve teams to an id that exists (FK safety).
+            effective_id = await team_repo.upsert(team, sportmonks_id=sportmonks_id, coach_id=coach_id)
+            pairs.append((sportmonks_id, effective_id))
     log.info(
         "bootstrap.teams.done",
         count=len(pairs),

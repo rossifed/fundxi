@@ -36,7 +36,7 @@ class SqlAlchemyTeamRepository:
 
     async def upsert(
         self, team: Team, *, sportmonks_id: int | None = None, coach_id: int | None = None
-    ) -> None:
+    ) -> str:
         # sportmonks_id is the team's stable identity; the internal id is the
         # provider short_code, which CAN change between syncs (e.g. Haiti
         # HTI→HAI). Keying the upsert on id alone then tries to INSERT a second
@@ -63,7 +63,9 @@ class SqlAlchemyTeamRepository:
                         coach_id=func.coalesce(coach_id, TeamORM.coach_id),
                     )
                 )
-                return
+                # Downstream (fixtures, squads) must reference the id that
+                # actually exists — the kept one, not the new short_code.
+                return existing_id
 
         stmt = pg_insert(TeamORM).values(
             id=team.id,
@@ -89,6 +91,7 @@ class SqlAlchemyTeamRepository:
         }
         stmt = stmt.on_conflict_do_update(index_elements=["id"], set_=update_payload)
         await self._session.execute(stmt)
+        return team.id
 
     async def list_all(self) -> list[Team]:
         result = await self._session.execute(

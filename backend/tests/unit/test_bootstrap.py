@@ -68,9 +68,10 @@ class _FakeTeamRepo:
 
     async def upsert(
         self, team: Team, *, sportmonks_id: int | None = None, coach_id: int | None = None
-    ) -> None:
+    ) -> str:
         self.upserts.append((team, sportmonks_id))
         self.coach_links.append(coach_id)
+        return team.id
 
     async def list_all(self) -> list[Team]:
         raise NotImplementedError

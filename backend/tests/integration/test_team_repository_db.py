@@ -51,13 +51,15 @@ async def test_changed_short_code_updates_in_place_without_collision(isolated_se
     repo = SqlAlchemyTeamRepository(isolated_session)
 
     # First sync: the team arrives under short_code "ZZ1".
-    await repo.upsert(_team("ZZ1", "Testland"), sportmonks_id=_SMK)
+    assert await repo.upsert(_team("ZZ1", "Testland"), sportmonks_id=_SMK) == "ZZ1"
     assert await _rows(isolated_session) == [("ZZ1", _SMK, "Testland")]
 
     # Next sync: the provider changed the short_code to "ZZ2" for the SAME
     # sportmonks_id. Must not raise a unique-constraint violation, must not
-    # create a second row, and must keep the original id (FK safety).
-    await repo.upsert(_team("ZZ2", "Testland Renamed"), sportmonks_id=_SMK)
+    # create a second row, must keep the original id (FK safety), AND return
+    # that effective id so callers (fixtures/squads) reference a real row.
+    effective_id = await repo.upsert(_team("ZZ2", "Testland Renamed"), sportmonks_id=_SMK)
+    assert effective_id == "ZZ1"
 
     rows = await _rows(isolated_session)
     assert rows == [("ZZ1", _SMK, "Testland Renamed")]
