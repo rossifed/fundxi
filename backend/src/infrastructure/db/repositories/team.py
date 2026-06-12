@@ -4,7 +4,7 @@ DDD role: Adapter. Carries an AsyncSession (legitimate stateful class).
 Conflict target = `id` (ISO country code, deterministic from country).
 """
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,6 +37,34 @@ class SqlAlchemyTeamRepository:
     async def upsert(
         self, team: Team, *, sportmonks_id: int | None = None, coach_id: int | None = None
     ) -> None:
+        # sportmonks_id is the team's stable identity; the internal id is the
+        # provider short_code, which CAN change between syncs (e.g. Haiti
+        # HTI→HAI). Keying the upsert on id alone then tries to INSERT a second
+        # row for the same sportmonks_id and trips its unique constraint,
+        # aborting the whole daily refresh. So if this sportmonks_id already
+        # lives under a different id, update THAT row in place — keep its id so
+        # existing FKs (fixtures, players, quotes) stay valid — instead of
+        # creating a colliding new one.
+        if sportmonks_id is not None:
+            existing_id = await self._session.scalar(
+                select(TeamORM.id).where(TeamORM.sportmonks_id == sportmonks_id)
+            )
+            if existing_id is not None and existing_id != team.id:
+                await self._session.execute(
+                    update(TeamORM)
+                    .where(TeamORM.sportmonks_id == sportmonks_id)
+                    .values(
+                        name=team.name,
+                        flag=team.flag,
+                        color=team.color,
+                        kind=team.kind.value,
+                        continent=team.continent,
+                        group=team.group,
+                        coach_id=func.coalesce(coach_id, TeamORM.coach_id),
+                    )
+                )
+                return
+
         stmt = pg_insert(TeamORM).values(
             id=team.id,
             sportmonks_id=sportmonks_id,
