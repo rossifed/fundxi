@@ -40,6 +40,10 @@ class _FakeCommentRepo:
         _ = player_id, limit
         return []
 
+    async def reconcile_overturned_goals(self, fixture_id: int) -> int:
+        _ = fixture_id
+        return 0
+
 
 @dataclass(slots=True)
 class _FakeEventRepo:

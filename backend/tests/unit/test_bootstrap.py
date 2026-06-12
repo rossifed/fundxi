@@ -213,6 +213,9 @@ class _FakeMatchCommentRepo:
     async def list_by_player(self, player_id: int, *, limit: int = 100) -> list[MatchComment]:
         raise NotImplementedError
 
+    async def reconcile_overturned_goals(self, fixture_id: int) -> int:
+        return 0
+
 
 # --- Tests -----------------------------------------------------------------
 

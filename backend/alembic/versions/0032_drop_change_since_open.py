@@ -14,6 +14,7 @@ cumulative for live), so the producers stopped writing it and this drops it.
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "0032"

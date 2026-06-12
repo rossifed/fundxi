@@ -146,6 +146,14 @@ class _FakeTradeRepo:
     async def list_by_portfolio(self, portfolio_id: int, *, limit: int = 200) -> list[Trade]:  # pragma: no cover
         return [t for t in self.trades if t.portfolio_id == portfolio_id][:limit]
 
+    async def get_by_idempotency_key(  # pragma: no cover — these tests submit without a key
+        self, *, portfolio_id: int, idempotency_key: str
+    ) -> Trade | None:
+        return next(
+            (t for t in self.trades if t.portfolio_id == portfolio_id and t.idempotency_key == idempotency_key),
+            None,
+        )
+
 
 def _portfolio(cash: float) -> Portfolio:
     now = datetime.now(UTC)
