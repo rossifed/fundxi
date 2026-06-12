@@ -1,5 +1,7 @@
 """Pydantic response DTO for /api/players/{id}/tournament-stats."""
 
+from dataclasses import asdict
+
 from pydantic import BaseModel
 
 from src.domain.player.player_tournament_stat import PlayerTournamentStat
@@ -8,6 +10,7 @@ from src.domain.player.player_tournament_stat import PlayerTournamentStat
 class PlayerTournamentStatResponse(BaseModel):
     player_id: int
     season_id: int
+    # Core
     appearances: int | None = None
     minutes_played: int | None = None
     goals: int | None = None
@@ -20,22 +23,37 @@ class PlayerTournamentStatResponse(BaseModel):
     passes_total: int | None = None
     passes_accuracy: float | None = None
     rating_avg: float | None = None
+    # Attacking / shooting
+    shots_off_target: int | None = None
+    offsides: int | None = None
+    big_chances_created: int | None = None
+    # Passing / creation
+    accurate_passes: int | None = None
+    crosses_total: int | None = None
+    crosses_accurate: int | None = None
+    long_balls: int | None = None
+    through_balls: int | None = None
+    # Dribble / take-on
+    dribble_attempts: int | None = None
+    dribbles_completed: int | None = None
+    dispossessed: int | None = None
+    dribbled_past: int | None = None
+    fouls_drawn: int | None = None
+    # Defence / duels
+    tackles: int | None = None
+    interceptions: int | None = None
+    clearances: int | None = None
+    total_duels: int | None = None
+    duels_won: int | None = None
+    aerials_won: int | None = None
+    shots_blocked: int | None = None
+    # Discipline
+    fouls: int | None = None
+    # Goalkeeping
+    saves: int | None = None
+    goals_conceded: int | None = None
 
     @classmethod
     def from_domain(cls, stat: PlayerTournamentStat) -> "PlayerTournamentStatResponse":
-        return cls(
-            player_id=stat.player_id,
-            season_id=stat.season_id,
-            appearances=stat.appearances,
-            minutes_played=stat.minutes_played,
-            goals=stat.goals,
-            assists=stat.assists,
-            yellow_cards=stat.yellow_cards,
-            red_cards=stat.red_cards,
-            shots_total=stat.shots_total,
-            shots_on_target=stat.shots_on_target,
-            key_passes=stat.key_passes,
-            passes_total=stat.passes_total,
-            passes_accuracy=stat.passes_accuracy,
-            rating_avg=stat.rating_avg,
-        )
+        # VO field names match this DTO 1:1 — keep them aligned by construction.
+        return cls(**asdict(stat))

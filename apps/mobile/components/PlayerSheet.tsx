@@ -24,6 +24,7 @@ import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import { teams_api } from "@fundxi/core/api/teams_api";
 import { valuations_api } from "@fundxi/core/api/valuations_api";
 import { POSITION_LABEL, type Player } from "@fundxi/core/domain/player/player";
+import { build_tournament_stat_groups, type StatSemantic } from "@fundxi/core/domain/player/player_stat_view";
 import type { PlayerValuation } from "@fundxi/core/domain/market/player_valuation";
 import { compute_portfolio_share } from "@fundxi/core/domain/portfolio/portfolio_metrics";
 import type { PlayerTournamentStat } from "@fundxi/core/infrastructure/repositories/player_stats_repository";
@@ -188,22 +189,7 @@ function PlayerDetail({
 
       <ValuationRibbon player_id={player.id} valuation={valuation} stats={stats} refresh={trade_version} />
 
-      {stats != null && (
-        <SectionCard title="Statistics">
-          <View style={styles.kpi_grid}>
-            <SmallKpi compact label="Apps" value={String(stats.appearances ?? 0)} />
-            <SmallKpi compact label="Min" value={String(stats.minutes_played ?? 0)} />
-            <SmallKpi compact label="Goals" value={String(stats.goals ?? 0)} color={(stats.goals ?? 0) > 0 ? palette.positive : undefined} />
-            <SmallKpi compact label="Assists" value={String(stats.assists ?? 0)} color={(stats.assists ?? 0) > 0 ? palette.positive : undefined} />
-            <SmallKpi compact label="Shots" value={`${stats.shots_on_target ?? 0}/${stats.shots_total ?? 0}`} />
-            <SmallKpi compact label="Yellow" value={String(stats.yellow_cards ?? 0)} color={(stats.yellow_cards ?? 0) > 0 ? palette.cardYellow : undefined} />
-            <SmallKpi compact label="Red" value={String(stats.red_cards ?? 0)} color={(stats.red_cards ?? 0) > 0 ? palette.negative : undefined} />
-            <SmallKpi compact label="Key P" value={String(stats.key_passes ?? 0)} />
-            <SmallKpi compact label="Passes" value={String(stats.passes_total ?? 0)} />
-            <SmallKpi compact label="Pass %" value={stats.passes_accuracy != null ? `${stats.passes_accuracy.toFixed(0)}%` : "—"} />
-          </View>
-        </SectionCard>
-      )}
+      {stats != null && <StatisticsCard stats={stats} />}
 
       <PriceChart price_history={price_history} />
 
@@ -623,6 +609,42 @@ function SmallKpi({
   );
 }
 
+// Grouped tournament-stats panel — mirrors the web PlayerStatistics so both
+// clients render the SAME families in the SAME order (parity invariant). Only
+// the StatSemantic → palette mapping is client-specific. Each family shows
+// only the KPIs the provider actually sent.
+function statistics_color(semantic: StatSemantic): string | undefined {
+  switch (semantic) {
+    case "good":
+      return palette.positive;
+    case "warn":
+      return palette.cardYellow;
+    case "danger":
+      return palette.negative;
+    default:
+      return undefined;
+  }
+}
+
+function StatisticsCard({ stats }: { stats: PlayerTournamentStat }) {
+  const groups = build_tournament_stat_groups(stats);
+  if (groups.length === 0) return null;
+  return (
+    <SectionCard title="Statistics">
+      {groups.map(group => (
+        <View key={group.title} style={styles.stat_group}>
+          <Text style={styles.stat_group_label}>{group.title}</Text>
+          <View style={styles.kpi_grid}>
+            {group.items.map(item => (
+              <SmallKpi key={item.label} compact label={item.label} value={item.value} color={statistics_color(item.semantic)} />
+            ))}
+          </View>
+        </View>
+      ))}
+    </SectionCard>
+  );
+}
+
 const styles = StyleSheet.create({
   bg: { backgroundColor: palette.surfaceDeep },
   glow: { ...StyleSheet.absoluteFillObject, borderTopLeftRadius: 16, borderTopRightRadius: 16, overflow: "hidden" },
@@ -670,6 +692,8 @@ const styles = StyleSheet.create({
 
   section: { gap: 6 },
   section_title: { fontSize: 11, fontWeight: "700", color: "rgba(255,255,255,0.55)", letterSpacing: 0.5, textTransform: "uppercase" },
+  stat_group: { gap: 6, marginTop: 4 },
+  stat_group_label: { fontSize: 9, fontWeight: "700", color: "rgba(255,255,255,0.4)", letterSpacing: 0.5, textTransform: "uppercase" },
   kpi_grid: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   kpi: {
     minWidth: 88,

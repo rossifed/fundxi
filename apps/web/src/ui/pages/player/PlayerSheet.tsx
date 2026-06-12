@@ -20,11 +20,11 @@ import type { PricePoint } from "@fundxi/core/infrastructure/repositories/valuat
 import { AuthDialog } from "@/ui/components/AuthDialog";
 import { Sheet } from "@/ui/components/Sheet";
 import { TradeDialog } from "@/ui/components/TradeDialog";
-import { color } from "@/ui/design/tokens";
 import { useLiveRefetch, usePlayerLiveVersion } from "@/ui/hooks/use_live_updates";
 import { PlayerMatchLog } from "@/ui/pages/player/PlayerMatchLog";
 import { PlayerPriceChart } from "@/ui/pages/player/PlayerPriceChart";
 import { PlayerSheetHeader } from "@/ui/pages/player/PlayerSheetHeader";
+import { PlayerStatistics } from "@/ui/pages/player/PlayerStatistics";
 import { PlayerValuationRibbon } from "@/ui/pages/player/PlayerValuationRibbon";
 import { YourPositionCard } from "@/ui/pages/player/YourPositionCard";
 import { SectionCard, SmallKpi } from "@/ui/pages/player/player_sheet_ui";
@@ -221,49 +221,7 @@ export function PlayerSheet({
               </SectionCard>
             )}
 
-            {tournament_stats !== undefined && tournament_stats !== null && (
-              <SectionCard title="Statistics">
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 0 }}>
-                  <SmallKpi label="Appearances" value={String(tournament_stats.appearances ?? 0)} />
-                  <SmallKpi label="Min" value={String(tournament_stats.minutes_played ?? 0)} />
-                  <SmallKpi
-                    label="Goals"
-                    value={String(tournament_stats.goals ?? 0)}
-                    color={(tournament_stats.goals ?? 0) > 0 ? "var(--color-positive)" : undefined}
-                  />
-                  <SmallKpi
-                    label="Assists"
-                    value={String(tournament_stats.assists ?? 0)}
-                    color={(tournament_stats.assists ?? 0) > 0 ? "var(--color-positive)" : undefined}
-                  />
-                  <SmallKpi
-                    label="Shots (OT/Tot)"
-                    value={`${tournament_stats.shots_on_target ?? 0}/${tournament_stats.shots_total ?? 0}`}
-                    title={`${tournament_stats.shots_on_target ?? 0} on target · ${tournament_stats.shots_total ?? 0} total`}
-                  />
-                  <SmallKpi
-                    label="Yellow Cards"
-                    value={String(tournament_stats.yellow_cards ?? 0)}
-                    color={(tournament_stats.yellow_cards ?? 0) > 0 ? color.cardYellow : undefined}
-                  />
-                  <SmallKpi
-                    label="Red Cards"
-                    value={String(tournament_stats.red_cards ?? 0)}
-                    color={(tournament_stats.red_cards ?? 0) > 0 ? "var(--color-negative)" : undefined}
-                  />
-                  <SmallKpi label="Key Passes" value={String(tournament_stats.key_passes ?? 0)} />
-                  <SmallKpi label="Passes" value={String(tournament_stats.passes_total ?? 0)} />
-                  <SmallKpi
-                    label="Pass Accuracy"
-                    value={
-                      tournament_stats.passes_accuracy != null
-                        ? `${tournament_stats.passes_accuracy.toFixed(0)}%`
-                        : "—"
-                    }
-                  />
-                </div>
-              </SectionCard>
-            )}
+            {tournament_stats != null && <PlayerStatistics stats={tournament_stats} />}
 
             <YourPositionCard player={player} />
 

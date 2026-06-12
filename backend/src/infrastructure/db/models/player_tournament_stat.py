@@ -34,4 +34,28 @@ class PlayerTournamentStatORM(Base, AuditMixin):
     passes_total: Mapped[int | None]
     passes_accuracy: Mapped[float | None] = mapped_column(Numeric(precision=5, scale=2))
     rating_avg: Mapped[float | None] = mapped_column(Numeric(precision=4, scale=2))
+    # Enriched stat set (Sportmonks player.statistics, verified type_ids).
+    shots_off_target: Mapped[int | None]
+    offsides: Mapped[int | None]
+    big_chances_created: Mapped[int | None]
+    accurate_passes: Mapped[int | None]
+    crosses_total: Mapped[int | None]
+    crosses_accurate: Mapped[int | None]
+    long_balls: Mapped[int | None]
+    through_balls: Mapped[int | None]
+    dribble_attempts: Mapped[int | None]
+    dribbles_completed: Mapped[int | None]
+    dispossessed: Mapped[int | None]
+    dribbled_past: Mapped[int | None]
+    fouls_drawn: Mapped[int | None]
+    tackles: Mapped[int | None]
+    interceptions: Mapped[int | None]
+    clearances: Mapped[int | None]
+    total_duels: Mapped[int | None]
+    duels_won: Mapped[int | None]
+    aerials_won: Mapped[int | None]
+    shots_blocked: Mapped[int | None]
+    fouls: Mapped[int | None]
+    saves: Mapped[int | None]
+    goals_conceded: Mapped[int | None]
     raw_stats: Mapped[dict[str, Any] | None] = mapped_column(JSONB)

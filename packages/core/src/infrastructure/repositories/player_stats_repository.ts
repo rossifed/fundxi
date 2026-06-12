@@ -8,6 +8,7 @@ import { api_get } from "@fundxi/core/infrastructure/api_client";
 export interface PlayerTournamentStat {
   player_id: number;
   season_id: number;
+  // Core
   appearances: number | null;
   minutes_played: number | null;
   goals: number | null;
@@ -20,6 +21,35 @@ export interface PlayerTournamentStat {
   passes_total: number | null;
   passes_accuracy: number | null;
   rating_avg: number | null;
+  // Attacking / shooting
+  shots_off_target: number | null;
+  offsides: number | null;
+  big_chances_created: number | null;
+  // Passing / creation
+  accurate_passes: number | null;
+  crosses_total: number | null;
+  crosses_accurate: number | null;
+  long_balls: number | null;
+  through_balls: number | null;
+  // Dribble / take-on
+  dribble_attempts: number | null;
+  dribbles_completed: number | null;
+  dispossessed: number | null;
+  dribbled_past: number | null;
+  fouls_drawn: number | null;
+  // Defence / duels
+  tackles: number | null;
+  interceptions: number | null;
+  clearances: number | null;
+  total_duels: number | null;
+  duels_won: number | null;
+  aerials_won: number | null;
+  shots_blocked: number | null;
+  // Discipline
+  fouls: number | null;
+  // Goalkeeping
+  saves: number | null;
+  goals_conceded: number | null;
 }
 
 const _cache = new Map<number, Promise<PlayerTournamentStat | null>>();

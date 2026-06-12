@@ -1,5 +1,6 @@
 """SqlAlchemyPlayerTournamentStatRepository — Adapter for tournament stats."""
 
+from dataclasses import fields
 from typing import Any
 
 from sqlalchemy import select
@@ -9,24 +10,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.domain.player.player_tournament_stat import PlayerTournamentStat
 from src.infrastructure.db.models.player_tournament_stat import PlayerTournamentStatORM
 
+# Field-driven mapping: the VO field names match the ORM column names 1:1, so
+# we derive the insert/update/read sets from the dataclass. With ~35 stat
+# fields this avoids the WET triple-repetition (insert values, on-conflict
+# update, _to_domain) that would silently drift when a new stat is added.
+_STAT_FIELDS: tuple[str, ...] = tuple(f.name for f in fields(PlayerTournamentStat))
+# Stored as Numeric in PG → cast back to float on read.
+_NUMERIC_FIELDS = frozenset({"passes_accuracy", "rating_avg"})
+
 
 def _to_domain(orm: PlayerTournamentStatORM) -> PlayerTournamentStat:
-    return PlayerTournamentStat(
-        player_id=orm.player_id,
-        season_id=orm.season_id,
-        appearances=orm.appearances,
-        minutes_played=orm.minutes_played,
-        goals=orm.goals,
-        assists=orm.assists,
-        yellow_cards=orm.yellow_cards,
-        red_cards=orm.red_cards,
-        shots_total=orm.shots_total,
-        shots_on_target=orm.shots_on_target,
-        key_passes=orm.key_passes,
-        passes_total=orm.passes_total,
-        passes_accuracy=float(orm.passes_accuracy) if orm.passes_accuracy is not None else None,
-        rating_avg=float(orm.rating_avg) if orm.rating_avg is not None else None,
-    )
+    values: dict[str, Any] = {}
+    for name in _STAT_FIELDS:
+        value = getattr(orm, name)
+        if name in _NUMERIC_FIELDS and value is not None:
+            value = float(value)
+        values[name] = value
+    return PlayerTournamentStat(**values)
 
 
 class SqlAlchemyPlayerTournamentStatRepository:
@@ -40,40 +40,13 @@ class SqlAlchemyPlayerTournamentStatRepository:
         sportmonks_statistic_id: int,
         raw_stats: dict[str, Any] | None,
     ) -> None:
-        stmt = pg_insert(PlayerTournamentStatORM).values(
-            sportmonks_statistic_id=sportmonks_statistic_id,
-            player_id=stat.player_id,
-            season_id=stat.season_id,
-            appearances=stat.appearances,
-            minutes_played=stat.minutes_played,
-            goals=stat.goals,
-            assists=stat.assists,
-            yellow_cards=stat.yellow_cards,
-            red_cards=stat.red_cards,
-            shots_total=stat.shots_total,
-            shots_on_target=stat.shots_on_target,
-            key_passes=stat.key_passes,
-            passes_total=stat.passes_total,
-            passes_accuracy=stat.passes_accuracy,
-            rating_avg=stat.rating_avg,
-            raw_stats=raw_stats,
-        )
+        insert_values: dict[str, Any] = {name: getattr(stat, name) for name in _STAT_FIELDS}
+        insert_values["sportmonks_statistic_id"] = sportmonks_statistic_id
+        insert_values["raw_stats"] = raw_stats
+        stmt = pg_insert(PlayerTournamentStatORM).values(**insert_values)
+        # Refresh every column except the conflict key on re-ingest.
         update_payload = {
-            "player_id": stmt.excluded.player_id,
-            "season_id": stmt.excluded.season_id,
-            "appearances": stmt.excluded.appearances,
-            "minutes_played": stmt.excluded.minutes_played,
-            "goals": stmt.excluded.goals,
-            "assists": stmt.excluded.assists,
-            "yellow_cards": stmt.excluded.yellow_cards,
-            "red_cards": stmt.excluded.red_cards,
-            "shots_total": stmt.excluded.shots_total,
-            "shots_on_target": stmt.excluded.shots_on_target,
-            "key_passes": stmt.excluded.key_passes,
-            "passes_total": stmt.excluded.passes_total,
-            "passes_accuracy": stmt.excluded.passes_accuracy,
-            "rating_avg": stmt.excluded.rating_avg,
-            "raw_stats": stmt.excluded.raw_stats,
+            name: getattr(stmt.excluded, name) for name in insert_values if name != "sportmonks_statistic_id"
         }
         stmt = stmt.on_conflict_do_update(index_elements=["sportmonks_statistic_id"], set_=update_payload)
         await self._session.execute(stmt)
