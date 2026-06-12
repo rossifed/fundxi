@@ -11,10 +11,6 @@ import {
   fetch_player_matches,
   type PlayerMatchEntry,
 } from "@fundxi/core/infrastructure/repositories/player_matches_repository";
-import {
-  fetch_player_news,
-  type PlayerNewsEntry,
-} from "@fundxi/core/infrastructure/repositories/player_news_repository";
 
 export const players_api = {
   list(): Player[] {
@@ -34,8 +30,5 @@ export const players_api = {
   },
   get_matches(player_id: number): Promise<PlayerMatchEntry[]> {
     return fetch_player_matches(player_id);
-  },
-  get_news(player_id: number): Promise<PlayerNewsEntry[]> {
-    return fetch_player_news(player_id);
   },
 };

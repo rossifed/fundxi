@@ -24,12 +24,12 @@ import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import { teams_api } from "@fundxi/core/api/teams_api";
 import { valuations_api } from "@fundxi/core/api/valuations_api";
 import { POSITION_LABEL, type Player } from "@fundxi/core/domain/player/player";
+import { match_event_badges, type MatchEventKind } from "@fundxi/core/domain/player/player_match_view";
 import { build_tournament_stat_groups, type StatSemantic } from "@fundxi/core/domain/player/player_stat_view";
 import type { PlayerValuation } from "@fundxi/core/domain/market/player_valuation";
 import { compute_portfolio_share } from "@fundxi/core/domain/portfolio/portfolio_metrics";
 import type { PlayerTournamentStat } from "@fundxi/core/infrastructure/repositories/player_stats_repository";
 import type { PlayerMatchEntry } from "@fundxi/core/infrastructure/repositories/player_matches_repository";
-import type { PlayerNewsEntry } from "@fundxi/core/infrastructure/repositories/player_news_repository";
 import type { PricePoint } from "@fundxi/core/infrastructure/repositories/valuations_repository";
 
 import { useAuth } from "@/components/AuthContext";
@@ -156,11 +156,16 @@ function PlayerDetail({
 
   const [price_history, set_price_history] = useState<PricePoint[] | null>(null);
   const [stats, set_stats] = useState<PlayerTournamentStat | null | undefined>(undefined);
+  // Valuation / Statistics live in a single tabbed slot so the (large) stat
+  // families don't push the rest of the sheet down. The price chart sits
+  // INSIDE the Valuation tab, so switching tabs never shifts it.
+  const [tab, set_tab] = useState<"valuation" | "statistics">("valuation");
 
   useEffect(() => {
     let cancelled = false;
     set_price_history(null);
     set_stats(undefined);
+    set_tab("valuation");
     valuations_api.get_price_history(player.id).then(
       p => !cancelled && set_price_history(p),
       () => !cancelled && set_price_history([]),
@@ -187,13 +192,39 @@ function PlayerDetail({
     <View style={styles.detail}>
       <Header player={player} team_color={team?.color ?? "#888"} team_name={team?.name ?? "?"} team_flag={team?.flag} team_flag_url={team?.flag_url} on_open_team={() => on_open_team(player.team_id)} />
 
-      <ValuationRibbon player_id={player.id} valuation={valuation} stats={stats} refresh={trade_version} />
+      <View style={styles.maintabs}>
+        {(["valuation", "statistics"] as const).map(t => {
+          const on = tab === t;
+          return (
+            <Pressable
+              key={t}
+              onPress={() => {
+                void Haptics.selectionAsync();
+                set_tab(t);
+              }}
+              style={[styles.maintab, on && styles.maintab_on]}
+            >
+              <Text style={[styles.maintab_label, on && styles.maintab_label_on]}>
+                {t === "valuation" ? "Valuation" : "Statistics"}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
 
-      {stats != null && <StatisticsCard stats={stats} />}
-
-      <PriceChart price_history={price_history} />
-
-      <YourPosition player={player} refresh={trade_version} />
+      {tab === "valuation" ? (
+        <>
+          <ValuationRibbon player_id={player.id} valuation={valuation} stats={stats} refresh={trade_version} />
+          <PriceChart price_history={price_history} />
+          <YourPosition player={player} refresh={trade_version} />
+        </>
+      ) : stats != null ? (
+        <StatisticsCard stats={stats} />
+      ) : (
+        <Text style={styles.tab_empty}>
+          {stats === undefined ? "loading stats…" : "No stats yet — this player hasn't featured."}
+        </Text>
+      )}
 
       {player.tags && player.tags.length > 0 && (
         <SectionCard title="Skills">
@@ -349,66 +380,33 @@ function PriceChart({ price_history }: { price_history: PricePoint[] | null }) {
 }
 
 function MatchLog({ player_id, on_open_match }: { player_id: number; on_open_match: (fixture_id: number) => void }) {
-  const [tab, set_tab] = useState<"matches" | "news">("matches");
   const [matches, set_matches] = useState<PlayerMatchEntry[] | null>(null);
-  const [news, set_news] = useState<PlayerNewsEntry[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     set_matches(null);
-    set_news(null);
     players_api.get_matches(player_id).then(
       m => !cancelled && set_matches(m),
       () => !cancelled && set_matches([]),
-    );
-    players_api.get_news(player_id).then(
-      n => !cancelled && set_news(n),
-      () => !cancelled && set_news([]),
     );
     return () => {
       cancelled = true;
     };
   }, [player_id]);
 
-  const count =
-    tab === "matches"
-      ? matches === null
-        ? "loading…"
-        : `${matches.length} appearances`
-      : news === null
-        ? "loading…"
-        : `${news.length} articles`;
-
   return (
     <View style={styles.matchlog}>
       <View style={styles.matchlog_head}>
-        <View style={styles.matchlog_tabs}>
-          {(["matches", "news"] as const).map(t => {
-            const on = tab === t;
-            return (
-              <Pressable key={t} onPress={() => set_tab(t)} style={[styles.ml_tab, on && styles.ml_tab_on]}>
-                <Text style={[styles.ml_tab_label, on && styles.ml_tab_label_on]}>{t === "matches" ? "Fixtures" : "News"}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        <Text style={styles.matchlog_count}>{count}</Text>
+        <Text style={styles.section_title}>Fixtures</Text>
+        <Text style={styles.matchlog_count}>{matches === null ? "loading…" : `${matches.length} appearances`}</Text>
       </View>
 
-      {tab === "matches" ? (
-        matches === null ? (
-          <Text style={styles.ml_loading}>loading…</Text>
-        ) : matches.length === 0 ? (
-          <Text style={styles.ml_loading}>No matches played yet for this player.</Text>
-        ) : (
-          matches.map(m => <MatchRow key={m.fixture_id} m={m} on_open_match={on_open_match} />)
-        )
-      ) : news === null ? (
+      {matches === null ? (
         <Text style={styles.ml_loading}>loading…</Text>
-      ) : news.length === 0 ? (
-        <Text style={styles.ml_loading}>No news yet for this player&apos;s team.</Text>
+      ) : matches.length === 0 ? (
+        <Text style={styles.ml_loading}>No matches played yet for this player.</Text>
       ) : (
-        news.map(n => <NewsRow key={n.id} n={n} />)
+        matches.map(m => <MatchRow key={m.fixture_id} m={m} on_open_match={on_open_match} />)
       )}
     </View>
   );
@@ -455,7 +453,10 @@ function MatchRow({ m, on_open_match }: { m: PlayerMatchEntry; on_open_match: (f
         <Text style={styles.ml_opp} numberOfLines={1}>
           {opp?.name ?? (is_home ? m.away_team_id : m.home_team_id)}
         </Text>
-        <Text style={styles.ml_date}>{date_label}</Text>
+        <View style={styles.ml_meta_sub}>
+          <Text style={styles.ml_date}>{date_label}</Text>
+          {finished && <MatchEvents m={m} />}
+        </View>
       </View>
       <Text style={styles.ml_score}>{finished || live ? score_label : "—"}</Text>
       <Text
@@ -470,19 +471,22 @@ function MatchRow({ m, on_open_match }: { m: PlayerMatchEntry; on_open_match: (f
   );
 }
 
-function NewsRow({ n }: { n: PlayerNewsEntry }) {
-  const dt = n.published_at ? new Date(n.published_at) : null;
-  const date_label = dt ? dt.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "2-digit" }) : "—";
-  const type_label = n.type === "prematch" ? "PRE" : n.type === "postmatch" ? "POST" : n.type.toUpperCase();
+// The player's discrete events for one fixture (goals/assists/cards from
+// core.match_event). Goals/cards reuse the match glyphs; assist is a lettered
+// chip (no on-brand emoji). Shared badge logic lives in player_match_view.
+const _EVENT_ICON: Record<MatchEventKind, string> = { goal: "⚽", assist: "A", yellow: "🟨", red: "🟥" };
+
+function MatchEvents({ m }: { m: PlayerMatchEntry }) {
+  const badges = match_event_badges(m);
+  if (badges.length === 0) return null;
   return (
-    <View style={styles.news_row}>
-      <View style={styles.news_type}>
-        <Text style={styles.news_type_label}>{type_label}</Text>
-      </View>
-      <Text style={styles.news_title} numberOfLines={2}>
-        {n.title}
-      </Text>
-      <Text style={styles.news_date}>{date_label}</Text>
+    <View style={styles.ml_events}>
+      {badges.map(b => (
+        <View key={b.kind} style={styles.ml_event}>
+          <Text style={[styles.ml_event_icon, b.kind === "assist" && styles.ml_event_assist]}>{_EVENT_ICON[b.kind]}</Text>
+          {b.count > 1 && <Text style={styles.ml_event_count}>{b.count}</Text>}
+        </View>
+      ))}
     </View>
   );
 }
@@ -694,6 +698,21 @@ const styles = StyleSheet.create({
   section_title: { fontSize: 11, fontWeight: "700", color: "rgba(255,255,255,0.55)", letterSpacing: 0.5, textTransform: "uppercase" },
   stat_group: { gap: 6, marginTop: 4 },
   stat_group_label: { fontSize: 9, fontWeight: "700", color: "rgba(255,255,255,0.4)", letterSpacing: 0.5, textTransform: "uppercase" },
+  // Valuation / Statistics segmented control (one slot, no layout shift).
+  maintabs: {
+    flexDirection: "row",
+    gap: 4,
+    padding: 3,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    borderRadius: 9,
+  },
+  maintab: { flex: 1, alignItems: "center", paddingVertical: 8, borderRadius: 7 },
+  maintab_on: { backgroundColor: "rgba(255,255,255,0.08)" },
+  maintab_label: { fontSize: 12, fontWeight: "700", color: text.tertiary, letterSpacing: 0.5, textTransform: "uppercase" },
+  maintab_label_on: { color: "#fff" },
+  tab_empty: { color: text.tertiary, fontSize: 13, fontWeight: "600", paddingVertical: 28, textAlign: "center" },
   kpi_grid: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   kpi: {
     minWidth: 88,
@@ -724,11 +743,6 @@ const styles = StyleSheet.create({
 
   matchlog: { gap: 8 },
   matchlog_head: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  matchlog_tabs: { flexDirection: "row", gap: 4 },
-  ml_tab: { borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", borderRadius: 5, paddingHorizontal: 10, paddingVertical: 4 },
-  ml_tab_on: { backgroundColor: "rgba(255,255,255,0.06)" },
-  ml_tab_label: { fontSize: 11, fontWeight: "700", color: text.tertiary, letterSpacing: 0.5, textTransform: "uppercase" },
-  ml_tab_label_on: { color: "#fff" },
   matchlog_count: { fontSize: 11, color: text.muted },
   ml_loading: { paddingVertical: 12, paddingHorizontal: 8, fontSize: 12, color: text.tertiary },
 
@@ -754,25 +768,15 @@ const styles = StyleSheet.create({
   ml_flag_emoji: { fontSize: 16, width: 22 },
   ml_meta: { flex: 1, minWidth: 0 },
   ml_opp: { fontSize: 12, fontWeight: "700", color: "#fff" },
-  ml_date: { fontSize: 10, color: text.tertiary, marginTop: 1 },
+  ml_meta_sub: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 1 },
+  ml_date: { fontSize: 10, color: text.tertiary },
+  ml_events: { flexDirection: "row", alignItems: "center", gap: 6 },
+  ml_event: { flexDirection: "row", alignItems: "center", gap: 1 },
+  ml_event_icon: { fontSize: 11 },
+  ml_event_assist: { fontSize: 10, fontWeight: "800", color: palette.positive },
+  ml_event_count: { fontFamily: mono, fontSize: 10, fontWeight: "800", color: text.secondary },
   ml_score: { fontFamily: mono, fontSize: 12, fontWeight: "800", color: "#fff" },
   ml_pct: { fontFamily: mono, fontSize: 11, fontWeight: "800", minWidth: 56, textAlign: "right" },
-
-  news_row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 6,
-    backgroundColor: "rgba(255,255,255,0.025)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
-  },
-  news_type: { backgroundColor: "rgba(255,255,255,0.04)", borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2, width: 44, alignItems: "center" },
-  news_type_label: { fontSize: 9, fontWeight: "800", color: "rgba(255,255,255,0.55)", letterSpacing: 0.6 },
-  news_title: { flex: 1, fontSize: 12, fontWeight: "600", color: "#fff", lineHeight: 16 },
-  news_date: { fontSize: 10, color: text.tertiary },
 
   position_card: { backgroundColor: "rgba(255,255,255,0.02)", borderWidth: 1, borderColor: "rgba(255,255,255,0.05)", borderRadius: 10, overflow: "hidden" },
   position_head: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 10, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.05)", backgroundColor: "rgba(255,255,255,0.025)" },
