@@ -18,6 +18,9 @@ import { fmt_signed_pct } from "@/ui/helpers/format";
 interface PlayerMatchLogProps {
   player_id: number;
   on_open_match?: (fixture_id: number) => void;
+  /** When true, the internal "Fixtures" header is dropped (a parent tab bar
+   * already labels it). */
+  embedded?: boolean;
 }
 
 // Discrete event icons. Goals/cards reuse the match-view glyphs; the assist
@@ -47,7 +50,7 @@ function EventBadges({ entry }: { entry: PlayerMatchEntry }) {
   );
 }
 
-export function PlayerMatchLog({ player_id, on_open_match }: PlayerMatchLogProps) {
+export function PlayerMatchLog({ player_id, on_open_match, embedded = false }: PlayerMatchLogProps) {
   // Per-match summary list — each entry carries the fixture metadata + the
   // player's stat line; click-through reopens the dedicated MatchView.
   const [match_entries, set_match_entries] = useState<PlayerMatchEntry[] | null>(null);
@@ -69,30 +72,32 @@ export function PlayerMatchLog({ player_id, on_open_match }: PlayerMatchLogProps
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "0 24px 20px" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 8,
-          flexShrink: 0,
-        }}
-      >
-        <span
+      {!embedded && (
+        <div
           style={{
-            fontSize: 11,
-            fontWeight: 700,
-            color: "rgba(255,255,255,.55)",
-            letterSpacing: 0.5,
-            textTransform: "uppercase",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 8,
+            flexShrink: 0,
           }}
         >
-          Fixtures
-        </span>
-        <span style={{ fontSize: 11, color: "rgba(255,255,255,.25)" }}>
-          {match_entries === null ? "loading…" : `${match_entries.length} appearances`}
-        </span>
-      </div>
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: "rgba(255,255,255,.55)",
+              letterSpacing: 0.5,
+              textTransform: "uppercase",
+            }}
+          >
+            Fixtures
+          </span>
+          <span style={{ fontSize: 11, color: "rgba(255,255,255,.25)" }}>
+            {match_entries === null ? "loading…" : `${match_entries.length} appearances`}
+          </span>
+        </div>
+      )}
       <div
         className="scroll-visible"
         style={{ flex: 1, overflowY: "auto", minHeight: 0, display: "flex", flexDirection: "column", gap: 6 }}

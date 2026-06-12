@@ -101,9 +101,12 @@ export function PlayerSheet({
   });
 
   const [tournament_stats, set_tournament_stats] = useState<PlayerTournamentStat | null | undefined>(undefined);
+  // Left-column tab: Fixtures (default) vs Statistics.
+  const [left_tab, set_left_tab] = useState<"fixtures" | "statistics">("fixtures");
   useEffect(() => {
     let cancelled = false;
     set_tournament_stats(undefined);
+    set_left_tab("fixtures");
     players_api
       .get_tournament_stats(player.id)
       .then(stats => {
@@ -158,7 +161,54 @@ export function PlayerSheet({
               />
               <PlayerPriceChart price_history={price_history} />
             </div>
-            <PlayerMatchLog player_id={player.id} on_open_match={go_match} />
+
+            {/* Fixtures | Statistics — tabbed so the (long) stat families don't
+                push the trade buttons in the right column off-screen. */}
+            <div style={{ display: "flex", gap: 4, padding: "0 24px 8px", flexShrink: 0 }}>
+              {(["fixtures", "statistics"] as const).map(tab => {
+                const active = left_tab === tab;
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => set_left_tab(tab)}
+                    style={{
+                      background: active ? "rgba(255,255,255,.06)" : "transparent",
+                      border: "1px solid rgba(255,255,255,.06)",
+                      color: active ? "#fff" : "rgba(255,255,255,.45)",
+                      padding: "4px 12px",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      letterSpacing: 0.5,
+                      textTransform: "uppercase",
+                      borderRadius: 5,
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    {tab === "fixtures" ? "Fixtures" : "Statistics"}
+                  </button>
+                );
+              })}
+            </div>
+
+            {left_tab === "fixtures" ? (
+              <PlayerMatchLog player_id={player.id} on_open_match={go_match} embedded />
+            ) : (
+              <div
+                className="scroll-visible"
+                style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0 24px 20px" }}
+              >
+                {tournament_stats === undefined ? (
+                  <div style={{ padding: "12px 2px", fontSize: 12, color: "rgba(255,255,255,.4)" }}>loading…</div>
+                ) : tournament_stats === null ? (
+                  <div style={{ padding: "12px 2px", fontSize: 12, color: "rgba(255,255,255,.4)" }}>
+                    No stats yet — this player hasn&apos;t featured.
+                  </div>
+                ) : (
+                  <PlayerStatistics stats={tournament_stats} embedded />
+                )}
+              </div>
+            )}
           </div>
 
           {/* RIGHT — personal, skills, statistics, position, trade. */}
@@ -220,8 +270,6 @@ export function PlayerSheet({
                 </div>
               </SectionCard>
             )}
-
-            {tournament_stats != null && <PlayerStatistics stats={tournament_stats} />}
 
             <YourPositionCard player={player} />
 

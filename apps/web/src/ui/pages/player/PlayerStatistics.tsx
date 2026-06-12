@@ -24,48 +24,55 @@ function semantic_color(semantic: StatSemantic): string | undefined {
   }
 }
 
-export function PlayerStatistics({ stats }: { stats: PlayerTournamentStat }) {
+/**
+ * @param embedded When true (e.g. inside the left-column tab where the tab bar
+ * already labels it "Statistics"), the "Statistics" SectionCard title is
+ * dropped and the box carries its own top border. Otherwise it renders as a
+ * titled card.
+ */
+export function PlayerStatistics({ stats, embedded = false }: { stats: PlayerTournamentStat; embedded?: boolean }) {
   const groups = build_tournament_stat_groups(stats);
   if (groups.length === 0) return null;
 
-  return (
-    <SectionCard title="Statistics">
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          border: "1px solid rgba(255,255,255,.05)",
-          borderTop: "none",
-        }}
-      >
-        {groups.map(group => (
-          <div key={group.title}>
-            <div
-              style={{
-                fontSize: 9,
-                fontWeight: 700,
-                color: "rgba(255,255,255,.4)",
-                textTransform: "uppercase",
-                letterSpacing: 0.5,
-                padding: "7px 10px 4px",
-              }}
-            >
-              {group.title}
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 0 }}>
-              {group.items.map(item => (
-                <SmallKpi
-                  key={item.label}
-                  label={item.label}
-                  value={item.value}
-                  color={semantic_color(item.semantic)}
-                  title={item.title}
-                />
-              ))}
-            </div>
+  const box = (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        border: "1px solid rgba(255,255,255,.05)",
+        borderTop: embedded ? "1px solid rgba(255,255,255,.05)" : "none",
+        borderRadius: embedded ? 6 : 0,
+      }}
+    >
+      {groups.map(group => (
+        <div key={group.title}>
+          <div
+            style={{
+              fontSize: 9,
+              fontWeight: 700,
+              color: "rgba(255,255,255,.4)",
+              textTransform: "uppercase",
+              letterSpacing: 0.5,
+              padding: "7px 10px 4px",
+            }}
+          >
+            {group.title}
           </div>
-        ))}
-      </div>
-    </SectionCard>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 0 }}>
+            {group.items.map(item => (
+              <SmallKpi
+                key={item.label}
+                label={item.label}
+                value={item.value}
+                color={semantic_color(item.semantic)}
+                title={item.title}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
   );
+
+  return embedded ? box : <SectionCard title="Statistics">{box}</SectionCard>;
 }
