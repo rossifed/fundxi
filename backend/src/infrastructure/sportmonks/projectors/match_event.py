@@ -52,6 +52,23 @@ def _classify_type(payload: dict[str, Any]) -> MatchEventType:
     return MatchEventType.OTHER
 
 
+def is_goal_disallowed_var(payload: dict[str, Any]) -> bool:
+    """True iff this event is a VAR review that DISALLOWED a goal.
+
+    Sportmonks emits a ``VAR`` event with ``addition == "Goal Disallowed"``
+    (``sub_type_id`` 1512, ``info`` carrying the reason e.g. ``"Offside"``)
+    and, in a later poll, REMOVES the original goal event from the feed. We
+    only upsert, so the now-stale goal lingers; this predicate identifies the
+    annulment so the twin goal can be retracted. The ``addition`` discriminant
+    is required — a VAR event may instead CONFIRM a goal or award a penalty,
+    which must NOT cancel anything.
+    """
+    if _classify_type(payload) is not MatchEventType.VAR:
+        return False
+    addition = payload.get("addition")
+    return isinstance(addition, str) and addition.strip().lower() == "goal disallowed"
+
+
 def project_match_event(
     payload: dict[str, Any],
     *,

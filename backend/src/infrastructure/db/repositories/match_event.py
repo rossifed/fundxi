@@ -1,6 +1,8 @@
 """SqlAlchemyMatchEventRepository — Adapter for MatchEventRepository."""
 
-from sqlalchemy import select
+from typing import Any, cast
+
+from sqlalchemy import CursorResult, delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -54,6 +56,23 @@ class SqlAlchemyMatchEventRepository:
         }
         stmt = stmt.on_conflict_do_update(index_elements=["sportmonks_id"], set_=update_payload)
         await self._session.execute(stmt)
+
+    async def delete_goal(self, fixture_id: int, *, player_id: int, minute: int) -> int:
+        """Remove a player's goal event at a given minute. Used to retract a
+        goal annulled by VAR — Sportmonks drops the goal from its feed, but our
+        upsert-only ingestion would otherwise keep the stale row. Idempotent
+        (0 rows once already gone). Returns the number of events deleted."""
+        result = cast(
+            CursorResult[Any],
+            await self._session.execute(
+                delete(MatchEventORM)
+                .where(MatchEventORM.fixture_id == fixture_id)
+                .where(MatchEventORM.type == MatchEventType.GOAL.value)
+                .where(MatchEventORM.player_id == player_id)
+                .where(MatchEventORM.minute == minute)
+            ),
+        )
+        return result.rowcount or 0
 
     async def list_by_fixture(self, fixture_id: int) -> list[MatchEvent]:
         result = await self._session.execute(

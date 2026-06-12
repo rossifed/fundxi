@@ -95,3 +95,37 @@ def test_missing_minute_raises() -> None:
 
     with pytest.raises(ValueError, match="minute"):
         project_match_event(payload, fixture_id=65, player_id_by_sportmonks=p, team_id_by_sportmonks=t)
+
+
+# --- VAR goal-disallowed detection (real Sportmonks shape, Korea-Czech 77') ---
+
+from src.infrastructure.sportmonks.projectors.match_event import is_goal_disallowed_var  # noqa: E402
+
+
+def _soucek_var_disallowed() -> dict[str, object]:
+    return {
+        "id": 157148043,
+        "info": "Offside",
+        "type": {"id": 10, "code": "VAR", "name": "VAR"},
+        "minute": 77,
+        "addition": "Goal Disallowed",
+        "sub_type_id": 1512,
+        "player_id": 80655,
+        "player_name": "Tomáš Souček",
+    }
+
+
+def test_var_goal_disallowed_is_detected() -> None:
+    assert is_goal_disallowed_var(_soucek_var_disallowed()) is True
+
+
+def test_var_without_goal_disallowed_addition_is_ignored() -> None:
+    """A VAR event that confirms a goal / awards a penalty must NOT cancel."""
+    confirm = _soucek_var_disallowed() | {"addition": "Goal Confirmed"}
+    no_addition = _soucek_var_disallowed() | {"addition": None}
+    assert is_goal_disallowed_var(confirm) is False
+    assert is_goal_disallowed_var(no_addition) is False
+
+
+def test_non_var_event_is_not_goal_disallowed() -> None:
+    assert is_goal_disallowed_var(_mbappe_penalty()) is False

@@ -32,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.apply_did_not_play import apply_did_not_play
 from src.application.apply_lineup_drops import apply_lineup_drops
 from src.application.apply_suspensions import apply_suspensions
+from src.application.reconcile_var_disallowed_goals import reconcile_var_disallowed_goals
 from src.application.settle_fixture import settle_fixture
 from src.domain.match.fixture import Fixture, FixtureStatus
 from src.domain.match.player_match_stat import PlayerMatchStat
@@ -210,6 +211,16 @@ class SportmonksInplayPoller:
         comments_count = await self._project_comments(
             session=session,
             comments_payload=_array(data.get("comments")),
+        )
+        # Retract any goal annulled by VAR: a ``VAR / Goal Disallowed`` event
+        # is authoritative, but Sportmonks drops the goal from its feed while we
+        # only upsert — so the stale goal (event + commentary line) would persist
+        # as a phantom scorer. Reconcile against the VAR events each poll.
+        await reconcile_var_disallowed_goals(
+            session,
+            fixture_id=self.fixture_internal_id,
+            events_payload=_array(data.get("events")),
+            player_id_by_sportmonks=self.id_maps.player_id_by_sportmonks,
         )
         lineups_count = await self._project_lineups(session=session, lineups_payload=lineups_payload)
         player_stats_count, curr_stats, prev_by_player = await self._project_player_match_stats(

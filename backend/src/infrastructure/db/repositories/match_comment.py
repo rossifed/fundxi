@@ -1,11 +1,15 @@
 """SqlAlchemyMatchCommentRepository — Adapter for MatchCommentRepository."""
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.match.match_comment import MatchComment
 from src.infrastructure.db.models.match_comment import MatchCommentORM
+from src.infrastructure.sportmonks.projectors.match_comment import (
+    comment_names_scorer,
+    overturned_goal_ids,
+)
 
 
 def _to_domain(orm: MatchCommentORM) -> MatchComment:
@@ -47,6 +51,52 @@ class SqlAlchemyMatchCommentRepository:
         }
         stmt = stmt.on_conflict_do_update(index_elements=["sportmonks_id"], set_=update_payload)
         await self._session.execute(stmt)
+
+    async def reconcile_overturned_goals(self, fixture_id: int) -> int:
+        """Retract goals annulled by VAR: flip ``is_goal`` to False on every
+        ``Goal! ...`` comment cancelled by a later ``GOAL OVERTURNED BY VAR``
+        sibling (same scorer). Idempotent — the per-comment projector always
+        re-derives ``is_goal=True`` from the goal text, this re-applies the
+        retraction over the full fixture each call. Returns the count flipped."""
+        comments = await self.list_by_fixture(fixture_id)
+        cancelled = overturned_goal_ids(comments)
+        if not cancelled:
+            return 0
+        await self._session.execute(
+            update(MatchCommentORM)
+            .where(MatchCommentORM.id.in_(cancelled))
+            .where(MatchCommentORM.is_goal.is_(True))
+            .values(is_goal=False)
+        )
+        return len(cancelled)
+
+    async def disallow_goal(self, fixture_id: int, *, minute: int, scorer_name: str) -> int:
+        """Clear the goal flag on the commentary line for a VAR-disallowed goal.
+
+        Scoped to the annulled goal's minute; among the goal comments there,
+        flips only those naming ``scorer_name`` (accent-insensitive surname
+        match). Driven by the structured VAR ``Goal Disallowed`` event, whose
+        ``player_name`` is the authoritative scorer. Idempotent. Returns the
+        number of comments flipped."""
+        rows = (
+            (
+                await self._session.execute(
+                    select(MatchCommentORM)
+                    .where(MatchCommentORM.fixture_id == fixture_id)
+                    .where(MatchCommentORM.minute == minute)
+                    .where(MatchCommentORM.is_goal.is_(True))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        targets = [r.id for r in rows if comment_names_scorer(r.comment, scorer_name)]
+        if not targets:
+            return 0
+        await self._session.execute(
+            update(MatchCommentORM).where(MatchCommentORM.id.in_(targets)).values(is_goal=False)
+        )
+        return len(targets)
 
     async def list_by_fixture(self, fixture_id: int) -> list[MatchComment]:
         result = await self._session.execute(
