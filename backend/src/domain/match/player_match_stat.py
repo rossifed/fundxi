@@ -25,6 +25,10 @@ class PlayerMatchStat:
     passes_total: int | None = None
     passes_accuracy: float | None = None
     rating: float | None = None
+    # Expected Goals (Sportmonks type_id 5304). Primary input of the Layer-2
+    # continuous term in the pricing kernel; None ⇒ the term degrades to
+    # shots/key-passes (never fabricates xG).
+    xg: float | None = None
 
 
 class PlayerMatchStatRepository(Protocol):

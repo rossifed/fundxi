@@ -15,16 +15,18 @@ from src.valuation.strategies.layered_v1 import StatSnapshot
 
 def _stats(stat: PlayerMatchStat | None) -> StatSnapshot:
     """Map the subset of stats we actually project to a StatSnapshot.
-    xG/xA are not on PlayerMatchStat (they live in raw_details on the
-    All-In plan); 0.0 ⇒ the L2 term degrades to shots/key-passes, never
-    invents xG. ``None`` counters ⇒ 0 (a missing field never fabricates
-    a negative diff)."""
+    xG (Sportmonks type_id 5304) is now projected onto PlayerMatchStat and
+    drives the L2 term's primary input; when the feed omits it (``None``) the
+    term degrades to shots/key-passes, never inventing xG. xA has no provider
+    source on this subscription, so it stays 0.0. ``None`` counters ⇒ 0 (a
+    missing field never fabricates a negative diff)."""
     if stat is None:
         return StatSnapshot()
     return StatSnapshot(
         shots_total=stat.shots_total or 0,
         shots_on_target=stat.shots_on_target or 0,
         key_passes=stat.key_passes or 0,
+        xg=stat.xg or 0.0,
     )
 
 

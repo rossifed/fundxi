@@ -25,6 +25,7 @@ def _to_domain(orm: PlayerMatchStatORM) -> PlayerMatchStat:
         passes_total=orm.passes_total,
         passes_accuracy=float(orm.passes_accuracy) if orm.passes_accuracy is not None else None,
         rating=float(orm.rating) if orm.rating is not None else None,
+        xg=float(orm.xg) if orm.xg is not None else None,
     )
 
 
@@ -52,6 +53,7 @@ class SqlAlchemyPlayerMatchStatRepository:
             passes_total=stat.passes_total,
             passes_accuracy=stat.passes_accuracy,
             rating=stat.rating,
+            xg=stat.xg,
             raw_details=raw_details,
         )
         update_payload = {
@@ -66,6 +68,7 @@ class SqlAlchemyPlayerMatchStatRepository:
             "passes_total": stmt.excluded.passes_total,
             "passes_accuracy": stmt.excluded.passes_accuracy,
             "rating": stmt.excluded.rating,
+            "xg": stmt.excluded.xg,
             "raw_details": stmt.excluded.raw_details,
             "updated_at": stmt.excluded.updated_at,
         }

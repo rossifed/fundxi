@@ -20,6 +20,7 @@ def test_projects_known_stats_into_typed_fields() -> None:
             {"type_id": 86, "data": {"value": 3}},  # shots on target
             {"type_id": 80, "data": {"value": 21}},  # passes total
             {"type_id": 1584, "data": {"value": 76}},  # passes accuracy %
+            {"type_id": 5304, "data": {"value": 0.6849}},  # xG — kept as float
             {"type_id": 999, "data": {"value": 42}},  # unknown code → ignored
         ],
     )
@@ -37,6 +38,8 @@ def test_projects_known_stats_into_typed_fields() -> None:
     assert stat.shots_on_target == 3
     assert stat.passes_total == 21
     assert stat.passes_accuracy == 76.0
+    # xG keeps its fractional part (NOT truncated to int)
+    assert stat.xg == 0.6849
     # missing codes default to None
     assert stat.assists is None
     assert stat.yellow_cards is None

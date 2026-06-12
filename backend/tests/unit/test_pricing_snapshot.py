@@ -29,6 +29,25 @@ def test_build_snapshot_maps_stat_increment() -> None:
     assert price(50.0, 0.0, snap).price > 50.0
 
 
+def test_build_snapshot_feeds_xg_to_the_kernel() -> None:
+    # A +0.50 xG increment at a neutral rating must move the price up via the
+    # Layer-2 term (w_xg_per_0_1_pct), proving xG now reaches the kernel.
+    prev = _stat(xg=0.10, rating=6.0)
+    curr = _stat(xg=0.60, rating=6.0)
+    snap = build_snapshot(curr, prev, pressure_factor=1.0, is_live=True)
+    assert snap.curr_stats.xg == 0.60
+    assert snap.prev_stats.xg == 0.10
+    assert price(50.0, 0.0, snap).price > 50.0
+
+
+def test_absent_xg_degrades_without_fabrication() -> None:
+    # No xG on either poll ⇒ xg stays 0.0 (degrades to shots/key-passes),
+    # and with no other stat increment the neutral-rating price is unchanged.
+    snap = build_snapshot(_stat(rating=6.0), _stat(rating=6.0), pressure_factor=1.0, is_live=True)
+    assert snap.curr_stats.xg == 0.0
+    assert price(50.0, 0.0, snap).price == pytest.approx(50.0, abs=0.01)
+
+
 def test_missing_rating_is_neutral_not_a_crash() -> None:
     snap = build_snapshot(_stat(rating=None), None, pressure_factor=None, is_live=True)
     assert price(50.0, 0.0, snap).price == pytest.approx(50.0, abs=0.01)

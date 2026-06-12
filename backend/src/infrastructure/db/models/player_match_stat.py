@@ -38,6 +38,8 @@ class PlayerMatchStatORM(Base):
     passes_total: Mapped[int | None]
     passes_accuracy: Mapped[float | None] = mapped_column(Numeric(precision=5, scale=2))
     rating: Mapped[float | None] = mapped_column(Numeric(precision=4, scale=2))
+    # Expected Goals (Sportmonks type_id 5304), e.g. 0.6849.
+    xg: Mapped[float | None] = mapped_column(Numeric(precision=6, scale=4))
     raw_details: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

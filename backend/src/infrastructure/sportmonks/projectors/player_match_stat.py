@@ -28,6 +28,7 @@ _CODE_RED_CARDS = 83
 _CODE_KEY_PASSES = 117
 _CODE_PASSES_TOTAL = 80
 _CODE_PASSES_ACCURACY_PCT = 1584  # "Accurate Passes Percentage"
+_CODE_XG = 5304  # "Expected Goals (xG)" — value is a float scalar (e.g. 0.6849)
 
 
 def _detail_value(detail: dict[str, Any]) -> object | None:
@@ -100,5 +101,6 @@ def project_player_match_stat(
         passes_total=_as_int(by_code.get(_CODE_PASSES_TOTAL)),
         passes_accuracy=_as_float(by_code.get(_CODE_PASSES_ACCURACY_PCT)),
         rating=_as_float(by_code.get(_CODE_RATING)),
+        xg=_as_float(by_code.get(_CODE_XG)),
     )
     return stat, {"details": details}
