@@ -6,10 +6,10 @@
  * a project invariant). Each client only maps `semantic` to its own colour
  * tokens — no presentation logic is duplicated.
  *
- * Sourcing rule: a KPI is emitted ONLY when its provider value is non-null.
- * A goalkeeper shows Saves/Conceded; an outfielder doesn't. A group with no
- * present KPI is dropped. We never fabricate a "0" for a stat the provider
- * didn't send (0 is shown only when the provider actually reports 0).
+ * Layout is FIXED: every family and every KPI is always emitted, so the grid
+ * looks the same for every player. A missing provider value renders as "—"
+ * (an explicit absence marker — NOT fabricated data; we never invent a number).
+ * A real 0 from the provider shows as "0".
  */
 
 import type { PlayerTournamentStat } from "@fundxi/core/infrastructure/repositories/player_stats_repository";
@@ -32,84 +32,92 @@ export interface StatGroup {
 type Num = number | null;
 
 const present = (v: Num): v is number => v !== null && v !== undefined;
+const num = (v: Num): string => (present(v) ? String(v) : "—");
+/** "good" when there is a real positive value; neutral otherwise (incl. absent). */
 const pos = (v: Num): StatSemantic => (present(v) && v > 0 ? "good" : "neutral");
 
-/** A "x/y" ratio shown when EITHER side is present (missing side renders 0). */
-function ratio(made: Num, attempted: Num): { value: string; title: string } | null {
-  if (!present(made) && !present(attempted)) return null;
+/** A "x/y" ratio; "—" when BOTH sides are absent, else fills a missing side with 0. */
+function ratio(made: Num, attempted: Num): { value: string; title?: string } {
+  if (!present(made) && !present(attempted)) return { value: "—" };
   return { value: `${made ?? 0}/${attempted ?? 0}`, title: `${made ?? 0} of ${attempted ?? 0}` };
 }
 
 export function build_tournament_stat_groups(s: PlayerTournamentStat): StatGroup[] {
-  const groups: StatGroup[] = [];
-  const push = (title: string, items: (StatItem | null)[]) => {
-    const present_items = items.filter((i): i is StatItem => i !== null);
-    if (present_items.length > 0) groups.push({ title, items: present_items });
-  };
-  const kpi = (label: string, v: Num, semantic: StatSemantic = "neutral"): StatItem | null =>
-    present(v) ? { label, value: String(v), semantic } : null;
+  const kpi = (label: string, value: string, semantic: StatSemantic = "neutral", title?: string): StatItem => ({
+    label,
+    value,
+    semantic,
+    title,
+  });
 
-  // Overview
-  push("Overview", [
-    kpi("Apps", s.appearances),
-    kpi("Min", s.minutes_played),
-    s.rating_avg !== null ? { label: "Rating", value: s.rating_avg.toFixed(1), semantic: "neutral" } : null,
-  ]);
-
-  // Attacking / shooting
   const shots = ratio(s.shots_on_target, s.shots_total);
-  push("Attacking", [
-    kpi("Goals", s.goals, pos(s.goals)),
-    kpi("Assists", s.assists, pos(s.assists)),
-    shots ? { label: "Shots OT/Tot", value: shots.value, semantic: "neutral", title: shots.title } : null,
-    kpi("Shots off T", s.shots_off_target),
-    kpi("Big Chances", s.big_chances_created, pos(s.big_chances_created)),
-    kpi("Offsides", s.offsides),
-  ]);
-
-  // Passing / creation
   const crosses = ratio(s.crosses_accurate, s.crosses_total);
-  push("Passing", [
-    kpi("Passes", s.passes_total),
-    s.passes_accuracy !== null
-      ? { label: "Pass %", value: `${s.passes_accuracy.toFixed(0)}%`, semantic: "neutral" }
-      : null,
-    kpi("Accurate", s.accurate_passes),
-    kpi("Key Passes", s.key_passes, pos(s.key_passes)),
-    crosses ? { label: "Crosses A/T", value: crosses.value, semantic: "neutral", title: crosses.title } : null,
-    kpi("Long Balls", s.long_balls),
-    kpi("Through Balls", s.through_balls),
-  ]);
-
-  // Dribble / take-on
   const dribbles = ratio(s.dribbles_completed, s.dribble_attempts);
-  push("Dribbling", [
-    dribbles ? { label: "Dribbles", value: dribbles.value, semantic: "neutral", title: dribbles.title } : null,
-    kpi("Dispossessed", s.dispossessed),
-    kpi("Dribbled Past", s.dribbled_past),
-    kpi("Fouls Won", s.fouls_drawn),
-  ]);
-
-  // Defence / duels
   const duels = ratio(s.duels_won, s.total_duels);
-  push("Defending", [
-    kpi("Tackles", s.tackles),
-    kpi("Intercept.", s.interceptions),
-    kpi("Clearances", s.clearances),
-    duels ? { label: "Duels W/T", value: duels.value, semantic: "neutral", title: duels.title } : null,
-    kpi("Aerials Won", s.aerials_won),
-    kpi("Blocks", s.shots_blocked),
-  ]);
 
-  // Discipline
-  push("Discipline", [
-    kpi("Fouls", s.fouls),
-    kpi("Yellow", s.yellow_cards, present(s.yellow_cards) && s.yellow_cards > 0 ? "warn" : "neutral"),
-    kpi("Red", s.red_cards, present(s.red_cards) && s.red_cards > 0 ? "danger" : "neutral"),
-  ]);
-
-  // Goalkeeping (only present for keepers)
-  push("Goalkeeping", [kpi("Saves", s.saves, pos(s.saves)), kpi("Conceded", s.goals_conceded)]);
-
-  return groups;
+  return [
+    {
+      title: "Overview",
+      items: [
+        kpi("Apps", num(s.appearances)),
+        kpi("Min", num(s.minutes_played)),
+        kpi("Rating", present(s.rating_avg) ? s.rating_avg.toFixed(1) : "—"),
+      ],
+    },
+    {
+      title: "Attacking",
+      items: [
+        kpi("Goals", num(s.goals), pos(s.goals)),
+        kpi("Assists", num(s.assists), pos(s.assists)),
+        kpi("Shots OT/Tot", shots.value, "neutral", shots.title),
+        kpi("Shots off T", num(s.shots_off_target)),
+        kpi("Big Chances", num(s.big_chances_created), pos(s.big_chances_created)),
+        kpi("Offsides", num(s.offsides)),
+      ],
+    },
+    {
+      title: "Passing",
+      items: [
+        kpi("Passes", num(s.passes_total)),
+        kpi("Pass %", present(s.passes_accuracy) ? `${s.passes_accuracy.toFixed(0)}%` : "—"),
+        kpi("Accurate", num(s.accurate_passes)),
+        kpi("Key Passes", num(s.key_passes), pos(s.key_passes)),
+        kpi("Crosses A/T", crosses.value, "neutral", crosses.title),
+        kpi("Long Balls", num(s.long_balls)),
+        kpi("Through Balls", num(s.through_balls)),
+      ],
+    },
+    {
+      title: "Dribbling",
+      items: [
+        kpi("Dribbles", dribbles.value, "neutral", dribbles.title),
+        kpi("Dispossessed", num(s.dispossessed)),
+        kpi("Dribbled Past", num(s.dribbled_past)),
+        kpi("Fouls Won", num(s.fouls_drawn)),
+      ],
+    },
+    {
+      title: "Defending",
+      items: [
+        kpi("Tackles", num(s.tackles)),
+        kpi("Intercept.", num(s.interceptions)),
+        kpi("Clearances", num(s.clearances)),
+        kpi("Duels W/T", duels.value, "neutral", duels.title),
+        kpi("Aerials Won", num(s.aerials_won)),
+        kpi("Blocks", num(s.shots_blocked)),
+      ],
+    },
+    {
+      title: "Discipline",
+      items: [
+        kpi("Fouls", num(s.fouls)),
+        kpi("Yellow", num(s.yellow_cards), present(s.yellow_cards) && s.yellow_cards > 0 ? "warn" : "neutral"),
+        kpi("Red", num(s.red_cards), present(s.red_cards) && s.red_cards > 0 ? "danger" : "neutral"),
+      ],
+    },
+    {
+      title: "Goalkeeping",
+      items: [kpi("Saves", num(s.saves), pos(s.saves)), kpi("Conceded", num(s.goals_conceded))],
+    },
+  ];
 }

@@ -46,49 +46,45 @@ function stat(overrides: Partial<PlayerTournamentStat>): PlayerTournamentStat {
   };
 }
 
+const ALL_GROUPS = ["Overview", "Attacking", "Passing", "Dribbling", "Defending", "Discipline", "Goalkeeping"];
+
 const find = (groups: ReturnType<typeof build_tournament_stat_groups>, title: string) =>
   groups.find(g => g.title === title);
+const item = (groups: ReturnType<typeof build_tournament_stat_groups>, group: string, label: string) =>
+  find(groups, group)?.items.find(i => i.label === label);
 
 describe("build_tournament_stat_groups", () => {
-  it("emits only groups that have at least one present KPI", () => {
-    const groups = build_tournament_stat_groups(stat({ appearances: 3, minutes_played: 210 }));
-    expect(groups.map(g => g.title)).toEqual(["Overview"]);
-    // Goalkeeping/Defending/etc. are dropped when the provider sent nothing.
-    expect(find(groups, "Goalkeeping")).toBeUndefined();
+  it("always emits every family in a fixed order, even for an all-null player", () => {
+    const groups = build_tournament_stat_groups(stat({}));
+    expect(groups.map(g => g.title)).toEqual(ALL_GROUPS);
+    // Goalkeeping is present for outfielders too (predictable layout).
+    expect(item(groups, "Goalkeeping", "Saves")?.value).toBe("—");
   });
 
-  it("never fabricates a 0 for an absent stat (null is dropped, real 0 is kept)", () => {
-    const groups = build_tournament_stat_groups(stat({ appearances: 1, fouls: 0 }));
-    const discipline = find(groups, "Discipline");
-    expect(discipline?.items.map(i => i.label)).toEqual(["Fouls"]);
-    expect(discipline?.items[0].value).toBe("0");
+  it("renders an absent value as a dash and a real 0 as '0'", () => {
+    const groups = build_tournament_stat_groups(stat({ fouls: 0, tackles: null }));
+    expect(item(groups, "Discipline", "Fouls")?.value).toBe("0");
+    expect(item(groups, "Defending", "Tackles")?.value).toBe("—");
   });
 
-  it("shows Goalkeeping only for keepers (saves present)", () => {
-    const groups = build_tournament_stat_groups(stat({ appearances: 2, saves: 5, goals_conceded: 1 }));
-    const gk = find(groups, "Goalkeeping");
-    expect(gk?.items.map(i => i.label)).toEqual(["Saves", "Conceded"]);
-    expect(find(groups, "Goalkeeping")?.items.find(i => i.label === "Saves")?.semantic).toBe("good");
+  it("colours only real positive values (absent ⇒ neutral)", () => {
+    const groups = build_tournament_stat_groups(stat({ goals: 2, assists: null, yellow_cards: 1, red_cards: 1 }));
+    expect(item(groups, "Attacking", "Goals")?.semantic).toBe("good");
+    expect(item(groups, "Attacking", "Assists")?.semantic).toBe("neutral"); // absent, not coloured
+    expect(item(groups, "Discipline", "Yellow")?.semantic).toBe("warn");
+    expect(item(groups, "Discipline", "Red")?.semantic).toBe("danger");
   });
 
-  it("maps card semantics (yellow=warn, red=danger) and goals=good", () => {
-    const groups = build_tournament_stat_groups(stat({ goals: 2, yellow_cards: 1, red_cards: 1 }));
-    const attacking = find(groups, "Attacking");
-    const discipline = find(groups, "Discipline");
-    expect(attacking?.items.find(i => i.label === "Goals")?.semantic).toBe("good");
-    expect(discipline?.items.find(i => i.label === "Yellow")?.semantic).toBe("warn");
-    expect(discipline?.items.find(i => i.label === "Red")?.semantic).toBe("danger");
-  });
-
-  it("renders a ratio when either side is present (missing side as 0)", () => {
-    const groups = build_tournament_stat_groups(stat({ shots_on_target: 2 }));
-    const shots = find(groups, "Attacking")?.items.find(i => i.label === "Shots OT/Tot");
-    expect(shots?.value).toBe("2/0");
+  it("shows a ratio as a dash when both sides are absent, else x/y", () => {
+    expect(item(build_tournament_stat_groups(stat({})), "Attacking", "Shots OT/Tot")?.value).toBe("—");
+    expect(item(build_tournament_stat_groups(stat({ shots_on_target: 2 })), "Attacking", "Shots OT/Tot")?.value).toBe(
+      "2/0",
+    );
   });
 
   it("formats rating to one decimal and pass accuracy as a percentage", () => {
-    const groups = build_tournament_stat_groups(stat({ rating_avg: 7.214, passes_accuracy: 85.7, passes_total: 50 }));
-    expect(find(groups, "Overview")?.items.find(i => i.label === "Rating")?.value).toBe("7.2");
-    expect(find(groups, "Passing")?.items.find(i => i.label === "Pass %")?.value).toBe("86%");
+    const groups = build_tournament_stat_groups(stat({ rating_avg: 7.214, passes_accuracy: 85.7 }));
+    expect(item(groups, "Overview", "Rating")?.value).toBe("7.2");
+    expect(item(groups, "Passing", "Pass %")?.value).toBe("86%");
   });
 });
