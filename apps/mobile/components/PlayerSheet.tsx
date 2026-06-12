@@ -68,6 +68,12 @@ export const PlayerSheet = forwardRef<PlayerSheetHandle, object>(function Player
     router.push(`/team/${team_id}`);
   };
 
+  // Tap a fixture row in the match log → close the sheet and push the match view.
+  const open_match = (fixture_id: number) => {
+    sheet_ref.current?.close();
+    router.push(`/match/${fixture_id}`);
+  };
+
   const current_price = (player ? valuations_api.get_for_player(player.id)?.current_price : 0) ?? 0;
 
   const gate_trade = (k: "buy" | "sell") => {
@@ -114,7 +120,9 @@ export const PlayerSheet = forwardRef<PlayerSheetHandle, object>(function Player
       >
         <SheetGlow />
         <BottomSheetScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          {player && <PlayerDetail player={player} on_open_team={open_team} trade_version={trade_version} />}
+          {player && (
+            <PlayerDetail player={player} on_open_team={open_team} on_open_match={open_match} trade_version={trade_version} />
+          )}
         </BottomSheetScrollView>
       </BottomSheet>
       {player && (
@@ -134,10 +142,12 @@ export const PlayerSheet = forwardRef<PlayerSheetHandle, object>(function Player
 function PlayerDetail({
   player,
   on_open_team,
+  on_open_match,
   trade_version,
 }: {
   player: Player;
   on_open_team: (team_id: string) => void;
+  on_open_match: (fixture_id: number) => void;
   trade_version: number;
 }) {
   const team = teams_api.get(player.team_id);
@@ -211,7 +221,7 @@ function PlayerDetail({
         </SectionCard>
       )}
 
-      <MatchLog player_id={player.id} />
+      <MatchLog player_id={player.id} on_open_match={on_open_match} />
     </View>
   );
 }
@@ -352,7 +362,7 @@ function PriceChart({ price_history }: { price_history: PricePoint[] | null }) {
   );
 }
 
-function MatchLog({ player_id }: { player_id: number }) {
+function MatchLog({ player_id, on_open_match }: { player_id: number; on_open_match: (fixture_id: number) => void }) {
   const [tab, set_tab] = useState<"matches" | "news">("matches");
   const [matches, set_matches] = useState<PlayerMatchEntry[] | null>(null);
   const [news, set_news] = useState<PlayerNewsEntry[] | null>(null);
@@ -405,7 +415,7 @@ function MatchLog({ player_id }: { player_id: number }) {
         ) : matches.length === 0 ? (
           <Text style={styles.ml_loading}>No matches played yet for this player.</Text>
         ) : (
-          matches.map(m => <MatchRow key={m.fixture_id} m={m} />)
+          matches.map(m => <MatchRow key={m.fixture_id} m={m} on_open_match={on_open_match} />)
         )
       ) : news === null ? (
         <Text style={styles.ml_loading}>loading…</Text>
@@ -418,7 +428,7 @@ function MatchLog({ player_id }: { player_id: number }) {
   );
 }
 
-function MatchRow({ m }: { m: PlayerMatchEntry }) {
+function MatchRow({ m, on_open_match }: { m: PlayerMatchEntry; on_open_match: (fixture_id: number) => void }) {
   const is_home = m.player_team_id === m.home_team_id;
   const opp = teams_api.get(is_home ? m.away_team_id : m.home_team_id);
   const my_score = is_home ? m.home_score : m.away_score;
@@ -435,7 +445,10 @@ function MatchRow({ m }: { m: PlayerMatchEntry }) {
   const pct = m.in_match_pct;
 
   return (
-    <View style={[styles.ml_row, live && styles.ml_row_live]}>
+    <Pressable
+      onPress={() => on_open_match(m.fixture_id)}
+      style={({ pressed }) => [styles.ml_row, live && styles.ml_row_live, pressed && styles.ml_row_pressed]}
+    >
       <View style={styles.ml_status}>
         {live ? (
           <View style={styles.ml_live}>
@@ -467,7 +480,7 @@ function MatchRow({ m }: { m: PlayerMatchEntry }) {
       >
         {finished && pct != null ? fmt_signed_pct(pct, 2) : "—"}
       </Text>
-    </View>
+    </Pressable>
   );
 }
 
@@ -707,6 +720,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.05)",
   },
   ml_row_live: { backgroundColor: with_alpha(palette.negative, 0.08), borderColor: with_alpha(palette.negative, 0.25) },
+  ml_row_pressed: { opacity: 0.6 },
   ml_status: { width: 34, alignItems: "flex-start" },
   ml_live: { backgroundColor: palette.actionSell, borderRadius: 3, paddingHorizontal: 5, paddingVertical: 2 },
   ml_live_label: { fontSize: 9, fontWeight: "800", color: "#fff", letterSpacing: 0.6 },
