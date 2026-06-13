@@ -783,7 +783,7 @@ const styles = StyleSheet.create({
   strip_cell: {},
   strip_label: { fontSize: 8, fontWeight: "700", color: text.muted, letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 2 },
   strip_value: { fontFamily: mono, fontSize: 12, fontWeight: "700", color: "#fff" },
-  strip_sub: { fontFamily: mono, fontSize: 10, fontWeight: "700", marginTop: 1 },
+  strip_sub: { fontFamily: mono, fontSize: 10, fontWeight: "700", marginTop: 1, color: text.secondary },
 
   section_title: { fontSize: 11, fontWeight: "800", color: "rgba(255,255,255,0.55)", letterSpacing: 0.5, textTransform: "uppercase", paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.05)" },
 
