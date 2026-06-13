@@ -6,15 +6,15 @@ import { simulate_trade, type TradeMode } from "@fundxi/core/application/trade_s
 import type { Player } from "@fundxi/core/domain/player/player";
 import { PlayerChip } from "@/ui/components/PlayerChip";
 import { Sheet } from "@/ui/components/Sheet";
-import { fmt_eur_m, fmt_shares } from "@/ui/helpers/format";
+import { fmt_eur_from_m, fmt_eur_m, fmt_shares } from "@/ui/helpers/format";
 
 type TradeKindLocal = "buy" | "sell";
 
 interface ConfirmedTrade {
   kind: TradeKindLocal;
-  shares: number;
-  amount: number;
-  percentage: number;
+  display_shares: number; // shown to the user (ownership fraction × N)
+  price_per_share: number; // €M per share
+  amount: number; // €M total
 }
 
 interface TradeDialogProps {
@@ -83,7 +83,7 @@ export function TradeDialog({
             {c_is_buy ? "Bought" : "Sold"}!
           </div>
           <div style={{ fontSize: 13, color: "rgba(255,255,255,.55)", marginBottom: 22 }}>
-            {c.shares} shares of {player.name}
+            {fmt_shares(c.display_shares)} shares of {player.name}
           </div>
           <div
             style={{
@@ -93,13 +93,12 @@ export function TradeDialog({
               marginBottom: 22,
             }}
           >
-            <SummaryCell label="Shares" value={String(c.shares)} />
-            <SummaryCell label="Amount" value={`€${c.amount.toLocaleString()}`} />
+            <SummaryCell label="Shares" value={fmt_shares(c.display_shares)} />
+            <SummaryCell label="Price" value={fmt_eur_from_m(c.price_per_share)} />
             <SummaryCell
-              label="Position"
-              value={c_is_buy ? "📈 Long" : "📉 Short"}
+              label="Total"
+              value={fmt_eur_m(c.amount)}
               color={c_is_buy ? "var(--color-positive)" : "var(--color-negative)"}
-              mono={false}
             />
           </div>
           <div style={{ display: "flex", gap: 8 }}>
@@ -163,28 +162,29 @@ export function TradeDialog({
     current_price,
   });
 
+  // `shares` is the canonical ownership fraction (sent to the backend);
+  // `display_shares` is what the user sees and types (fraction × N).
   const final_shares = preview.shares;
+  const final_display = preview.display_shares;
   const final_amount = preview.amount;
   const final_pct = preview.percentage_of_portfolio;
+  const price_per_share = preview.price_per_share;
 
-  // Switching unit carries the value over instead of resetting to 0: the
-  // current preview already holds both equivalents (shares for the chosen %,
-  // and % for the chosen shares), so we just seed the other control with it.
+  // Switching unit carries the value over instead of resetting to 0.
   const switch_mode = (next: TradeMode) => {
     if (next === mode) return;
-    if (next === "shares") set_custom_shares(final_shares);
+    if (next === "shares") set_custom_shares(Math.round(final_display));
     else set_percentage(Math.min(100, Math.max(1, final_pct)));
     set_mode(next);
   };
   const is_short = preview.is_short;
-  const short_qty = preview.short_quantity;
-  const held_shares = preview.held_shares;
+  const held_display = preview.held_display_shares;
 
-  const safe_price = current_price > 0 ? current_price : 1;
-  const max_shares = is_buy
-    ? Math.floor(preview.cash_before / safe_price)
-    : Math.max(held_shares, Math.floor(preview.cash_before / safe_price));
-  const slider_max = Math.max(max_shares, 1);
+  // Max tradeable, in DISPLAY shares, bounded by BOTH cash (buys) and the
+  // player-value cap (max_trade_display_shares = headroom toward ±100%).
+  const safe_pps = price_per_share > 0 ? price_per_share : 1;
+  const max_affordable = is_buy ? preview.cash_before / safe_pps : Infinity;
+  const slider_max = Math.max(1, Math.floor(Math.min(max_affordable, preview.max_trade_display_shares)));
 
   const can_confirm = !preview.insufficient_capital && final_shares > 0;
 
@@ -227,9 +227,9 @@ export function TradeDialog({
                 .then(() => {
                   set_confirmed({
                     kind,
-                    shares: final_shares,
+                    display_shares: final_display,
+                    price_per_share,
                     amount: final_amount,
-                    percentage: final_pct,
                   });
                 })
                 .catch((err: unknown) => {
@@ -287,6 +287,9 @@ export function TradeDialog({
           </div>
           <div style={{ textAlign: "right" }}>
             <div className="mono" style={{ fontSize: 14, fontWeight: 800 }}>€{current_price}M</div>
+            <div className="mono" style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,.4)" }}>
+              {fmt_eur_from_m(price_per_share)}/share
+            </div>
             <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: is_up ? "var(--color-positive)" : "var(--color-negative)" }}>
               {is_up ? "+" : ""}{change_pct}%
             </div>
@@ -338,9 +341,12 @@ export function TradeDialog({
           <span style={{ color: "rgba(255,255,255,.4)" }}>
             CASH <span className="mono" style={{ color: "#fff", fontWeight: 700, marginLeft: 6 }}>{fmt_eur_m(preview.cash_before)}</span>
           </span>
-          {held_shares > 0 && (
+          {held_display !== 0 && (
             <span style={{ color: "rgba(255,255,255,.4)" }}>
-              HOLDING <span className="mono" style={{ color: "#fff", fontWeight: 700, marginLeft: 6 }}>{fmt_shares(held_shares)} shares</span>
+              HOLDING{" "}
+              <span className="mono" style={{ color: "#fff", fontWeight: 700, marginLeft: 6 }}>
+                {fmt_shares(held_display)} shares ({Math.round(preview.pct_of_player_held)}%)
+              </span>
             </span>
           )}
         </div>
@@ -411,17 +417,14 @@ export function TradeDialog({
                 </button>
               ))
             : (() => {
-                // Quantize to the 0.1-share increment the trade engine uses
-                // (trade_calc SHARES_QUANTUM). Computing shortcuts on a floored
-                // INTEGER affordability produced "0" buttons for any expensive
-                // player (max < 5 ⇒ round(max*0.1)=0) — useless and confusing.
-                const q = (x: number) => Math.floor(x * 10) / 10;
-                const max_aff = is_buy
-                  ? preview.cash_before / safe_price
-                  : Math.max(held_shares, preview.cash_before / safe_price);
+                // Shortcuts are whole displayed shares, bounded by what's both
+                // affordable AND within the player-value cap. A sell offers
+                // fractions of the held position (close 25/50/75/100%).
+                const q = (x: number) => Math.floor(x);
+                const max_aff = is_buy ? Math.min(max_affordable, preview.max_trade_display_shares) : preview.max_trade_display_shares;
                 const raw =
-                  !is_buy && held_shares > 0
-                    ? [held_shares * 0.25, held_shares * 0.5, held_shares * 0.75, held_shares]
+                  !is_buy && held_display > 0
+                    ? [held_display * 0.25, held_display * 0.5, held_display * 0.75, held_display]
                     : [max_aff * 0.1, max_aff * 0.25, max_aff * 0.5, max_aff];
                 // Drop zeros and duplicates so we never render a dead "0" chip.
                 const vals = [...new Set(raw.map(q).filter(v => v > 0))];
@@ -478,7 +481,7 @@ export function TradeDialog({
           >
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <button
-                onClick={() => set_custom_shares(Math.max(0, Math.round((custom_shares - 0.1) * 10) / 10))}
+                onClick={() => set_custom_shares(Math.max(0, custom_shares - 1))}
                 style={{
                   width: 34,
                   height: 34,
@@ -499,13 +502,13 @@ export function TradeDialog({
                 type="range"
                 min={0}
                 max={slider_max}
-                step={0.1}
+                step={1}
                 value={custom_shares}
-                onChange={e => set_custom_shares(Math.round(parseFloat(e.target.value) * 10) / 10)}
+                onChange={e => set_custom_shares(Math.round(parseFloat(e.target.value)))}
                 style={{ flex: 1 }}
               />
               <button
-                onClick={() => set_custom_shares(Math.min(slider_max, Math.round((custom_shares + 0.1) * 10) / 10))}
+                onClick={() => set_custom_shares(Math.min(slider_max, custom_shares + 1))}
                 style={{
                   width: 34,
                   height: 34,
@@ -526,10 +529,10 @@ export function TradeDialog({
           </div>
         )}
 
-        {/* Min-lot notice: a very expensive player can't be bought below one
-            0.1-share lot, so a small % rounds to 0 shares. Explain it instead
-            of silently disabling Confirm. */}
-        {preview.below_min_lot && (
+        {/* Player-value cap: a position can never exceed 100% of the player's
+            value, long or short. When the requested size would breach it we
+            clamp to the whole player and say so, rather than silently trimming. */}
+        {preview.capped && (
           <div
             style={{
               background: "rgba(255,255,255,.03)",
@@ -541,9 +544,8 @@ export function TradeDialog({
               color: "rgba(255,255,255,.7)",
             }}
           >
-            Minimum lot is {fmt_shares(preview.min_lot_shares)} share = {fmt_eur_m(preview.min_lot_cost)} (~
-            {preview.min_lot_pct}% of your portfolio) at €{current_price}M/share. Raise the amount to at least{" "}
-            {preview.min_lot_pct}%.
+            Capped at the whole player: you can hold at most 100% of {player.name} (€{current_price}M = {fmt_shares(slider_max)} shares
+            here). This is the largest {is_buy ? "position" : "short"} you can still take.
           </div>
         )}
 
@@ -570,7 +572,7 @@ export function TradeDialog({
             Trade preview
           </div>
           <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: 5 }}>
-            <PreviewRow label="Shares" value={`${fmt_shares(final_shares)} @ €${current_price}M`} />
+            <PreviewRow label="Shares" value={`${fmt_shares(final_display)} @ ${fmt_eur_from_m(price_per_share)}/sh`} />
             <PreviewRow
               label="Total"
               value={fmt_eur_m(final_amount)}
@@ -579,8 +581,8 @@ export function TradeDialog({
             />
             <PreviewRow
               label="Position"
-              before={`${fmt_shares(held_shares)} shares`}
-              after={`${fmt_shares(preview.shares_after)} shares`}
+              before={`${fmt_shares(held_display)} sh`}
+              after={`${fmt_shares(preview.shares_after_display)} sh (${Math.round(preview.pct_of_player_after)}%)`}
               accent={is_buy ? "var(--color-positive)" : "var(--color-negative)"}
             />
             <PreviewRow
@@ -592,7 +594,7 @@ export function TradeDialog({
             />
             <PreviewRow
               label="Type"
-              value={is_buy ? "📈 Long" : is_short ? `📉 Short (${short_qty} naked)` : "Close position"}
+              value={is_buy ? "📈 Long" : is_short ? `📉 Short (${fmt_shares(preview.short_display_shares)} naked)` : "Close position"}
               accent={is_buy ? "var(--color-positive)" : is_short ? "rgba(255,255,255,.5)" : "var(--color-negative)"}
             />
           </div>
@@ -633,7 +635,8 @@ export function TradeDialog({
           >
             <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
             <span style={{ fontSize: 12, color: "rgba(255,255,255,.7)", lineHeight: 1.45 }}>
-              Selling {fmt_shares(final_shares)} closes your {fmt_shares(held_shares)} shares and opens a short of {fmt_shares(short_qty)}.
+              Selling {fmt_shares(final_display)} closes your {fmt_shares(held_display)} shares and opens a short of{" "}
+              {fmt_shares(preview.short_display_shares)}.
             </span>
           </div>
         )}

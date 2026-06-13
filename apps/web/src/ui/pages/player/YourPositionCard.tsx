@@ -8,7 +8,7 @@ import type { CSSProperties } from "react";
 import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import type { Player } from "@fundxi/core/domain/player/player";
 import { compute_portfolio_share } from "@fundxi/core/domain/portfolio/portfolio_metrics";
-import { color_for_sign, fmt_eur_m, fmt_eur_m_signed, fmt_signed_pct } from "@/ui/helpers/format";
+import { color_for_sign, fmt_eur_from_m, fmt_eur_m, fmt_eur_m_signed, fmt_shares, fmt_signed_pct } from "@/ui/helpers/format";
 
 export function YourPositionCard({ player }: { player: Player }) {
   // Single source: market_value / pnl / return all come from the core
@@ -87,7 +87,8 @@ export function YourPositionCard({ player }: { player: Player }) {
     );
   }
 
-  const { shares, average_buy_price, market_value, pnl, return_pct } = metrics!;
+  const { shares, display_shares, price_per_share, avg_buy_per_share, current_price, market_value, pnl, return_pct } =
+    metrics!;
   const portfolio_pct = compute_portfolio_share(market_value, totals.total_value);
   const is_long = shares > 0;
 
@@ -108,12 +109,14 @@ export function YourPositionCard({ player }: { player: Player }) {
           alignContent: "center",
         }}
       >
-        <PositionStat label="Shares" value={String(Math.abs(shares))} />
-        <PositionStat label="Avg buy" value={`€${average_buy_price}M`} />
-        <PositionStat label="Market value" value={fmt_eur_m(market_value)} />
+        <PositionStat label="Shares" value={fmt_shares(Math.abs(display_shares))} />
+        <PositionStat label="Price /sh" value={fmt_eur_from_m(price_per_share)} />
+        <PositionStat label="Entry /sh" value={fmt_eur_from_m(avg_buy_per_share)} />
+        <PositionStat label="Value" value={fmt_eur_m(market_value)} />
+        <PositionStat label="Mkt cap" value={fmt_eur_m(current_price)} />
+        <PositionStat label="% portfolio" value={`${portfolio_pct.toFixed(1)}%`} />
         <PositionStat label="P&L" value={fmt_eur_m_signed(pnl)} color={color_for_sign(pnl)} />
         <PositionStat label="Return" value={fmt_signed_pct(return_pct, 1)} color={color_for_sign(return_pct)} />
-        <PositionStat label="% portfolio" value={`${portfolio_pct.toFixed(1)}%`} />
       </div>
     </div>
   );

@@ -9,6 +9,7 @@ import { DarkTheme, ThemeProvider } from '@react-navigation/native';
 import 'react-native-reanimated';
 
 import { set_api_base } from '@fundxi/core/infrastructure/api_client';
+import { set_max_gross_leverage, set_shares_per_player } from '@fundxi/core/infrastructure/runtime_config';
 import { set_stream_base } from '@fundxi/core/infrastructure/stream_client';
 
 import { AppBackground } from '@/components/AppBackground';
@@ -36,6 +37,12 @@ const api_url = process.env.EXPO_PUBLIC_API_URL;
 if (api_url) set_api_base(api_url);
 const stream_url_env = process.env.EXPO_PUBLIC_STREAM_URL;
 if (stream_url_env) set_stream_base(stream_url_env);
+// Shares-per-player denomination (display only); configurable, N-independent
+// persisted data — see core/infrastructure/runtime_config.ts.
+const shares_per_player_env = process.env.EXPO_PUBLIC_SHARES_PER_PLAYER;
+if (shares_per_player_env) set_shares_per_player(Number(shares_per_player_env));
+const max_leverage_env = process.env.EXPO_PUBLIC_MAX_GROSS_LEVERAGE;
+if (max_leverage_env) set_max_gross_leverage(Number(max_leverage_env));
 
 export {
   // Catch any errors thrown by the Layout component.

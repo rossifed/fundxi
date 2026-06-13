@@ -38,7 +38,7 @@ import { PerformanceChart } from "@/components/PerformanceChart";
 import { TickValue } from "@/components/TickValue";
 import { TradeSheet } from "@/components/TradeSheet";
 import { useLiveRefetch, usePlayerLiveVersion } from "@/components/live";
-import { color_for_sign, fmt_eur_m, fmt_eur_m_signed, fmt_signed_pct } from "@/lib/format";
+import { color_for_sign, fmt_eur_from_m, fmt_eur_m, fmt_eur_m_signed, fmt_shares, fmt_signed_pct } from "@/lib/format";
 import { border, mono, palette, surface, text, with_alpha } from "@/theme/tokens";
 
 export interface PlayerSheetHandle {
@@ -515,7 +515,8 @@ function YourPosition({ player, refresh }: { player: Player; refresh: number }) 
     );
   }
 
-  const { shares, average_buy_price, market_value, pnl, return_pct } = metrics!;
+  const { shares, display_shares, price_per_share, avg_buy_per_share, current_price, market_value, pnl, return_pct } =
+    metrics!;
   const portfolio_pct = compute_portfolio_share(market_value, totals.total_value);
   const is_long = shares > 0;
 
@@ -535,12 +536,14 @@ function YourPosition({ player, refresh }: { player: Player; refresh: number }) 
         </View>
       </View>
       <View style={styles.kpi_grid}>
-        <SmallKpi label="Shares" value={String(Math.abs(shares))} />
-        <SmallKpi label="Avg buy" value={`€${average_buy_price}M`} />
-        <SmallKpi label="Market value" value={fmt_eur_m(market_value)} />
+        <SmallKpi label="Shares" value={fmt_shares(Math.abs(display_shares))} />
+        <SmallKpi label="Price /sh" value={fmt_eur_from_m(price_per_share)} />
+        <SmallKpi label="Value" value={fmt_eur_m(market_value)} />
+        <SmallKpi label="% portfolio" value={`${portfolio_pct.toFixed(1)}%`} />
+        <SmallKpi label="Entry /sh" value={fmt_eur_from_m(avg_buy_per_share)} />
+        <SmallKpi label="Mkt cap" value={fmt_eur_m(current_price)} />
         <SmallKpi label="P&L" value={fmt_eur_m_signed(pnl)} color={color_for_sign(pnl)} />
         <SmallKpi label="Return" value={fmt_signed_pct(return_pct, 1)} color={color_for_sign(return_pct)} />
-        <SmallKpi label="% portfolio" value={`${portfolio_pct.toFixed(1)}%`} />
       </View>
     </View>
   );

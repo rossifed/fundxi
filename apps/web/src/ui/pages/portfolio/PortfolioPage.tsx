@@ -15,7 +15,7 @@ import { PerformanceChart } from "@/ui/components/PerformanceChart";
 import { Donut } from "@/ui/components/Donut";
 import { SortableHeader, type SortDir } from "@/ui/components/SortableHeader";
 import { TeamLink } from "@/ui/components/TeamLink";
-import { color_for_sign, fmt_eur_m, fmt_eur_m_signed, fmt_shares, fmt_signed_pct } from "@/ui/helpers/format";
+import { color_for_sign, fmt_eur_from_m, fmt_eur_m, fmt_eur_m_signed, fmt_shares, fmt_signed_pct } from "@/ui/helpers/format";
 import { position_color } from "@/ui/design/tokens";
 
 function fmt_short_date(iso: string | undefined): string {
@@ -143,8 +143,8 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
   // shared with mobile (packages/core domain). The UI only maps these to
   // display items below — no calculation leaks here. See COHERENCE-INVARIANT.
   const breakdowns = useMemo(
-    () => compute_portfolio_breakdowns(holdings, total_value, id => teams_api.get(id)),
-    [holdings, total_value],
+    () => compute_portfolio_breakdowns(holdings, id => teams_api.get(id)),
+    [holdings],
   );
   const win_rate = breakdowns.win_rate;
 
@@ -264,15 +264,15 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
         <KpiCard label="Cash" value={fmt_eur_m(totals.cash)} title="Free cash available to trade" />
         <KpiCard
           label="Invested"
-          value={fmt_eur_m(totals.total_cost)}
-          title="What you paid for your current positions (sum of avg buy price x shares)"
+          value={fmt_eur_m(totals.gross_cost)}
+          title="Capital deployed across all positions (sum of |avg buy x shares|). A long and an offsetting short both count — they do NOT cancel."
         />
         <KpiCard label="Positions" value={String(holdings.length)} title="Number of open positions" />
         <KpiCard
           label="P&L"
           value={fmt_eur_m_signed(pnl)}
           color={color_for_sign(pnl)}
-          title="Unrealised profit / loss on open positions = market value - invested. Equals the sum of the P&L column in the positions table."
+          title="Unrealised profit / loss on your open positions. Equals the sum of the P&L column in the positions table."
         />
         <KpiCard
           label="Return"
@@ -450,8 +450,8 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
                   { key: "side", label: "Side", align: "left" },
                   { key: "opened", label: "Opened", align: "left" },
                   { key: "shares", label: "Shares", align: "right" },
-                  { key: "avg_buy", label: "Avg buy", align: "right" },
-                  { key: "price", label: "Price", align: "right" },
+                  { key: "avg_buy", label: "Avg /sh", align: "right" },
+                  { key: "price", label: "Price /sh", align: "right" },
                   { key: "value", label: "Value", align: "right" },
                   { key: "pnl", label: "P&L", align: "right" },
                 ] as const
@@ -531,11 +531,19 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
                   <span className="mono" style={{ fontSize: 12, color: "rgba(255,255,255,.55)" }}>
                     {fmt_short_date(opened_by_player.get(h.player_id))}
                   </span>
-                  <span className="mono" style={{ textAlign: "right", fontWeight: 700 }}>{fmt_shares(h.shares)}</span>
+                  <span className="mono" style={{ textAlign: "right", fontWeight: 700 }}>{fmt_shares(h.display_shares)}</span>
                   <span className="mono" style={{ textAlign: "right", color: "rgba(255,255,255,.55)" }}>
-                    €{h.average_buy_price}M
+                    {fmt_eur_from_m(h.avg_buy_per_share)}
                   </span>
-                  <PulseValueCell value={h.current_price} display={fmt_eur_m(h.current_price)} />
+                  <div
+                    className="mono"
+                    style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", lineHeight: 1.2 }}
+                  >
+                    <PulseValueCell value={h.price_per_share} display={fmt_eur_from_m(h.price_per_share)} />
+                    <span style={{ fontSize: 11, color: "rgba(255,255,255,.4)" }} title="Player market cap (whole value)">
+                      {fmt_eur_m(h.current_price)} cap
+                    </span>
+                  </div>
                   <div
                     className="mono"
                     style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", lineHeight: 1.2 }}
@@ -585,7 +593,7 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
                   { key: "player", label: "Player", align: "left" },
                   { key: "type", label: "Type", align: "left" },
                   { key: "shares", label: "Shares", align: "right" },
-                  { key: "price", label: "Price", align: "right" },
+                  { key: "price", label: "Price /sh", align: "right" },
                   { key: "total", label: "Total", align: "right" },
                   { key: "date", label: "Date", align: "right" },
                 ] as const
@@ -659,9 +667,9 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
                     >
                       {t.kind.toUpperCase()}
                     </span>
-                    <span className="mono" style={{ textAlign: "right" }}>{fmt_shares(t.shares)}</span>
+                    <span className="mono" style={{ textAlign: "right" }}>{fmt_shares(portfolio_api.to_display_shares(t.shares))}</span>
                     <span className="mono" style={{ textAlign: "right", color: "rgba(255,255,255,.55)" }}>
-                      €{t.price}M
+                      {fmt_eur_from_m(portfolio_api.to_price_per_share(t.price))}
                     </span>
                     <span className="mono" style={{ textAlign: "right", fontWeight: 700 }}>
                       {fmt_eur_m(t.total)}

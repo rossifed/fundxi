@@ -15,7 +15,7 @@ import { trades_api } from "@fundxi/core/api/trades_api";
 import type { TradeMode } from "@fundxi/core/application/trade_service";
 import type { Player } from "@fundxi/core/domain/player/player";
 
-import { fmt_eur_m, fmt_eur_m_signed, fmt_shares } from "@/lib/format";
+import { fmt_eur_from_m, fmt_eur_m, fmt_eur_m_signed, fmt_shares } from "@/lib/format";
 import { palette, text } from "@/theme/tokens";
 
 type Kind = "buy" | "sell";
@@ -41,6 +41,8 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
   const [phase, set_phase] = useState<Phase>("form");
   const [error, set_error] = useState<string | null>(null);
   const [done_shares, set_done_shares] = useState(0);
+  const [done_price, set_done_price] = useState(0);
+  const [done_total, set_done_total] = useState(0);
 
   // Re-seed when reopened in a given mode.
   const [last_kind, set_last_kind] = useState<Kind>(initial_kind);
@@ -57,22 +59,20 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
     [player, kind, mode, percentage, shares, current_price],
   );
 
-  // Slider ceiling in shares mode — affordable shares (buy) or, for sell, at
-  // least the held position. Mirrors the web TradeDialog.
-  const safe_price = current_price > 0 ? current_price : 1;
-  const max_shares = is_buy
-    ? Math.floor(preview.cash_before / safe_price)
-    : Math.max(preview.held_shares, Math.floor(preview.cash_before / safe_price));
-  const slider_max = Math.max(max_shares, 1);
+  // Slider ceiling in shares mode, in DISPLAY shares — bounded by BOTH cash
+  // (buys) and the player-value cap (max_trade_display_shares). Mirrors the web
+  // TradeDialog. `shares` state is the displayed count; preview.shares is the
+  // canonical ownership fraction sent to the backend.
+  const safe_pps = preview.price_per_share > 0 ? preview.price_per_share : 1;
+  const max_affordable = is_buy ? preview.cash_before / safe_pps : Infinity;
+  const slider_max = Math.max(1, Math.floor(Math.min(max_affordable, preview.max_trade_display_shares)));
 
   const can_confirm = phase === "form" && !preview.insufficient_capital && preview.shares > 0;
 
-  // Switching unit carries the value over instead of resetting to 0: the
-  // current preview already holds both equivalents (shares for the chosen %,
-  // and % for the chosen shares), so we seed the other control with it.
+  // Switching unit carries the value over instead of resetting to 0.
   const switch_mode = (next: TradeMode) => {
     if (next === mode) return;
-    if (next === "shares") set_shares(preview.shares);
+    if (next === "shares") set_shares(Math.round(preview.display_shares));
     else set_percentage(Math.min(100, Math.max(1, preview.percentage_of_portfolio)));
     set_mode(next);
   };
@@ -83,11 +83,16 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
     set_error(null);
     try {
       await trades_api.execute({ player_id: player.id, kind, shares: preview.shares, price: current_price });
-      set_done_shares(preview.shares);
+      set_done_shares(preview.display_shares);
+      set_done_price(preview.price_per_share);
+      set_done_total(preview.amount);
       set_phase("done");
       on_done?.();
-    } catch {
-      set_error("Order failed. Please try again.");
+    } catch (err) {
+      // Surface the server's real reason (e.g. "insufficient buying power…")
+      // instead of a generic message — the BFF already puts the detail on the
+      // ApiError (see infrastructure/api_client).
+      set_error(err instanceof Error && err.message ? err.message : "Order failed. Please try again.");
       set_phase("form");
     }
   };
@@ -112,6 +117,11 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
               <Text style={styles.done_sub}>
                 {fmt_shares(done_shares)} shares of {player.name}
               </Text>
+              <View style={[styles.preview, { alignSelf: "stretch" }]}>
+                <PreviewRow label="Shares" value={fmt_shares(done_shares)} />
+                <PreviewRow label="Price" value={fmt_eur_from_m(done_price)} />
+                <PreviewRow label="Total" value={fmt_eur_m(done_total)} color={accent} />
+              </View>
               <Pressable style={[styles.confirm, { backgroundColor: accent }]} onPress={close}>
                 <Text style={styles.confirm_label}>Done</Text>
               </Pressable>
@@ -119,7 +129,9 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
           ) : (
             <>
               <Text style={styles.title}>{player.full_name ?? player.name}</Text>
-              <Text style={styles.price}>Price {fmt_eur_m(current_price)}</Text>
+              <Text style={styles.price}>
+                Value {fmt_eur_m(current_price)} · {fmt_eur_from_m(preview.price_per_share)}/share
+              </Text>
 
               {/* Buy / Sell */}
               <View style={styles.toggle_row}>
@@ -174,9 +186,9 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
                   style={styles.slider}
                   minimumValue={0}
                   maximumValue={slider_max}
-                  step={0.1}
+                  step={1}
                   value={shares}
-                  onValueChange={v => set_shares(Math.round(v * 10) / 10)}
+                  onValueChange={v => set_shares(Math.round(v))}
                   minimumTrackTintColor={accent}
                   maximumTrackTintColor="rgba(255,255,255,0.15)"
                   thumbTintColor={accent}
@@ -197,8 +209,10 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
 
               {/* Preview */}
               <View style={styles.preview}>
-                <PreviewRow label="Shares" value={fmt_shares(preview.shares)} />
+                <PreviewRow label="Shares" value={fmt_shares(preview.display_shares)} />
+                <PreviewRow label="Price / share" value={fmt_eur_from_m(preview.price_per_share)} />
                 <PreviewRow label="Amount" value={fmt_eur_m(preview.amount)} />
+                <PreviewRow label="Owned after" value={`${Math.round(preview.pct_of_player_after)}% of player`} />
                 <PreviewRow label="% of portfolio" value={`${preview.percentage_of_portfolio.toFixed(1)}%`} />
                 <PreviewRow label="Cash after" value={fmt_eur_m(preview.cash_after)} />
                 {preview.realized_pnl !== 0 && (
@@ -210,11 +224,10 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
                 )}
               </View>
 
-              {preview.below_min_lot && (
+              {preview.capped && (
                 <Text style={styles.hint}>
-                  Minimum lot is {fmt_shares(preview.min_lot_shares)} share = {fmt_eur_m(preview.min_lot_cost)} (~
-                  {preview.min_lot_pct}% of your portfolio) at this price. Raise the amount to at least{" "}
-                  {preview.min_lot_pct}%.
+                  Capped at the whole player: a position can't exceed 100% of {player.name} ({fmt_eur_m(current_price)} ={" "}
+                  {fmt_shares(slider_max)} shares). This is the largest {is_buy ? "position" : "short"} you can take.
                 </Text>
               )}
               {preview.insufficient_capital && (
@@ -231,7 +244,7 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
                   <ActivityIndicator color="#04140a" />
                 ) : (
                   <Text style={styles.confirm_label}>
-                    {is_buy ? "Buy" : "Sell"} {fmt_shares(preview.shares)} shares
+                    {is_buy ? "Buy" : "Sell"} {fmt_shares(preview.display_shares)} shares
                   </Text>
                 )}
               </Pressable>

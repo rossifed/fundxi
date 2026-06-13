@@ -31,7 +31,7 @@ import { TickValue } from "@/components/TickValue";
 import { PlayerSheet, type PlayerSheetHandle } from "@/components/PlayerSheet";
 import { useLiveRefetch, usePricesLiveVersion } from "@/components/live";
 import { useRefresh } from "@/components/use_refresh";
-import { color_for_sign, fmt_eur_m, fmt_eur_m_signed, fmt_shares, fmt_signed_pct } from "@/lib/format";
+import { color_for_sign, fmt_eur_from_m, fmt_eur_m, fmt_eur_m_signed, fmt_shares, fmt_signed_pct } from "@/lib/format";
 import { mono, palette, position_color, text } from "@/theme/tokens";
 
 // Flat detail panel: four peer tabs, max one sub-level (Allocation only).
@@ -143,8 +143,8 @@ export default function PortfolioScreen() {
   // (packages/core domain). The UI only maps these to display rows below —
   // no calculation leaks here. See COHERENCE-INVARIANT.
   const breakdowns = useMemo(
-    () => compute_portfolio_breakdowns(holdings, total_value, id => teams_api.get(id)),
-    [holdings, total_value],
+    () => compute_portfolio_breakdowns(holdings, id => teams_api.get(id)),
+    [holdings],
   );
   const win_rate = breakdowns.win_rate;
   // Best open position by P&L — the "top position" KPI. Unrealized (we have no
@@ -184,15 +184,6 @@ export default function PortfolioScreen() {
   }, [data_version, period]);
   const period_return = useMemo(() => compute_period_return(perf.map(p => p.v)), [perf]);
 
-  const opened_by_player = useMemo(() => {
-    const map = new Map<number, string>();
-    for (const t of trades) {
-      const cur = map.get(t.player_id);
-      if (!cur || t.date < cur) map.set(t.player_id, t.date);
-    }
-    return map;
-  }, [trades]);
-
   const sorted_holdings = useMemo(() => [...holdings].sort((a, b) => b.market_value - a.market_value), [holdings]);
   const sorted_trades = useMemo(() => [...trades].sort((a, b) => b.date.localeCompare(a.date)), [trades]);
 
@@ -212,8 +203,9 @@ export default function PortfolioScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
       >
-        {/* Hero — two headline stat cards (the dashboard's primary read):
-            Total value and P&L, each with its delta since open. */}
+        {/* Hero — two distinct headline reads (no duplicated P&L):
+            Total value (net worth + P&L since open) and Buying power (free cash
+            still deployable). */}
         <View style={styles.hero_row}>
           <View style={styles.hero_card}>
             <Text style={styles.hero_label}>Total value</Text>
@@ -226,14 +218,14 @@ export default function PortfolioScreen() {
             <Text style={styles.hero_note}>Since open</Text>
           </View>
           <View style={styles.hero_card}>
-            <Text style={styles.hero_label}>P&L</Text>
-            <Text style={[styles.hero_value, { color: pnl_color }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
-              {fmt_eur_m_signed(totals.pnl)}
+            <Text style={styles.hero_label}>Buying power</Text>
+            <Text style={styles.hero_value} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+              {fmt_eur_m(totals.buying_power)}
             </Text>
-            <Text style={[styles.hero_delta, { color: pnl_color }]} numberOfLines={1}>
-              {fmt_signed_pct(totals.return_pct, 1)}
+            <Text style={[styles.hero_delta, { color: text.secondary }]} numberOfLines={1}>
+              {fmt_eur_m(totals.cash)} cash
             </Text>
-            <Text style={styles.hero_note}>Since open</Text>
+            <Text style={styles.hero_note}>Deployable now</Text>
           </View>
         </View>
 
@@ -273,8 +265,7 @@ export default function PortfolioScreen() {
         {/* Secondary KPI grid — 3×2 iconised cells. Lower visual weight than the
             hero; supporting figures the user scans after the headline. */}
         <View style={styles.kpi_grid}>
-          <KpiCard icon="cash" label="Cash" value={fmt_eur_m(totals.cash)} />
-          <KpiCard icon="invested" label="Invested" value={fmt_eur_m(totals.total_cost)} />
+          <KpiCard icon="invested" label="Invested" value={fmt_eur_m(totals.gross_cost)} />
           <KpiCard icon="positions" label="Positions" value={String(holdings.length)} />
           <KpiCard icon="trades" label="Trades" value={String(trades.length)} />
           <KpiCard icon="winrate" label="Win rate" value={win_rate == null ? "—" : `${win_rate.toFixed(0)}%`} />
@@ -350,7 +341,7 @@ export default function PortfolioScreen() {
                       </Pressable>
                     </View>
                     {sorted_holdings.map(h => (
-                      <PositionRow key={h.player_id} h={h} opened={fmt_short_date(opened_by_player.get(h.player_id))} on_open={() => sheet_ref.current?.open(h.player)} />
+                      <PositionRow key={h.player_id} h={h} on_open={() => sheet_ref.current?.open(h.player)} />
                     ))}
                   </>
                 )
@@ -395,9 +386,11 @@ function PlayerAvatar({ player, size }: { player: Player; size: number }) {
   );
 }
 
-function PositionRow({ h, opened, on_open }: { h: HoldingDetail; opened: string; on_open: () => void }) {
+function PositionRow({ h, on_open }: { h: HoldingDetail; on_open: () => void }) {
   const team = teams_api.get(h.player.team_id);
   const is_long = h.shares > 0;
+  const opened = portfolio_api.opened_at(h.player_id);
+  const opened_label = opened ? fmt_short_date(opened.date) : "—"; // date only, no time
   return (
     <Pressable style={({ pressed }) => [styles.row, pressed && styles.row_pressed]} onPress={on_open} accessibilityRole="button">
       <View style={styles.row_top}>
@@ -414,35 +407,55 @@ function PositionRow({ h, opened, on_open }: { h: HoldingDetail; opened: string;
             {team?.flag} {team?.name} <Text style={{ color: position_color[h.player.position] }}>· {POSITION_ABBR[h.player.position]}</Text>
           </Text>
         </View>
-        <View style={styles.row_pnl}>
-          <Text style={[styles.row_pnl_value, { color: color_for_sign(h.pnl) }]}>{fmt_eur_m_signed(h.pnl)}</Text>
-          <Text style={[styles.row_pnl_pct, { color: color_for_sign(h.return_pct) }]}>{fmt_signed_pct(h.return_pct, 1)}</Text>
+        {/* Player market data — the player's own value, beside the name. */}
+        <View style={styles.row_market}>
+          <TickValue value={h.current_price}>
+            <Text style={styles.mkt_cap}>{fmt_eur_m(h.current_price)}</Text>
+          </TickValue>
+          <Text style={styles.mkt_price}>{fmt_eur_from_m(h.price_per_share)}/sh</Text>
         </View>
       </View>
-      <View style={styles.row_divider} />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.strip}>
-        <StripCell label="Opened" value={opened} />
-        <StripCell label="Shares" value={fmt_shares(h.shares)} />
-        <StripCell label="Avg buy" value={`€${h.average_buy_price}M`} />
-        <StripCell label="Price" value={fmt_eur_m(h.current_price)} pulse={h.current_price} />
-        <StripCell label="Value" value={fmt_eur_m(h.market_value)} pulse={h.market_value} />
-        <StripCell label="% Port" value={`${h.portfolio_pct.toFixed(1)}%`} />
-      </ScrollView>
+
+      {/* Your position: date · shares · entry · P&L (amount over percent). */}
+      <View style={[styles.stats_row, styles.row_stats_mt]}>
+        <StripCell label="Opened" value={opened_label} />
+        <StripCell label="Shares" value={fmt_shares(Math.abs(h.display_shares))} />
+        <StripCell label="Entry price" value={fmt_eur_from_m(h.avg_buy_per_share)} />
+        <StripCell
+          label="P&L"
+          value={fmt_eur_m_signed(h.pnl)}
+          sub={fmt_signed_pct(h.return_pct, 1)}
+          color={color_for_sign(h.pnl)}
+        />
+      </View>
     </Pressable>
   );
 }
 
-function StripCell({ label, value, pulse }: { label: string; value: string; pulse?: number }) {
+function StripCell({
+  label,
+  value,
+  sub,
+  pulse,
+  color,
+}: {
+  label: string;
+  value: string;
+  sub?: string; // optional second line (e.g. P&L percent under the amount)
+  pulse?: number;
+  color?: string;
+}) {
   return (
     <View style={styles.strip_cell}>
-      <Text style={styles.strip_label}>{label}</Text>
+      <Text style={styles.strip_label} numberOfLines={1}>{label}</Text>
       {pulse !== undefined ? (
         <TickValue value={pulse}>
-          <Text style={styles.strip_value}>{value}</Text>
+          <Text style={[styles.strip_value, color ? { color } : null]} numberOfLines={1}>{value}</Text>
         </TickValue>
       ) : (
-        <Text style={styles.strip_value}>{value}</Text>
+        <Text style={[styles.strip_value, color ? { color } : null]} numberOfLines={1}>{value}</Text>
       )}
+      {sub ? <Text style={[styles.strip_sub, color ? { color } : null]} numberOfLines={1}>{sub}</Text> : null}
     </View>
   );
 }
@@ -471,11 +484,11 @@ function TradeRow({ trade: t }: { trade: import("@fundxi/core/domain/portfolio/t
         </View>
       </View>
       <View style={styles.row_divider} />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.strip}>
-        <StripCell label="Shares" value={fmt_shares(t.shares)} />
-        <StripCell label="Price" value={`€${t.price}M`} />
+      <View style={styles.stats_row}>
+        <StripCell label="Shares" value={fmt_shares(portfolio_api.to_display_shares(t.shares))} />
+        <StripCell label="Price /sh" value={fmt_eur_from_m(portfolio_api.to_price_per_share(t.price))} />
         <StripCell label="Total" value={fmt_eur_m(t.total)} />
-      </ScrollView>
+      </View>
     </View>
   );
 }
@@ -751,15 +764,21 @@ const styles = StyleSheet.create({
   kind_label: { fontSize: 9, fontWeight: "800", letterSpacing: 0.5, color: "#fff" },
   row_team: { fontSize: 11, color: text.muted, marginTop: 3 },
   row_pnl: { alignItems: "flex-end", minWidth: 70 },
-  row_pnl_value: { fontFamily: mono, fontSize: 13, fontWeight: "700" },
+  row_market: { alignItems: "flex-end", minWidth: 80, marginLeft: 8 },
+  mkt_cap: { fontFamily: mono, fontSize: 13, fontWeight: "800", color: "#fff" },
+  mkt_price: { fontFamily: mono, fontSize: 10.5, color: text.secondary, marginTop: 1 },
+  row_stats_mt: { marginTop: 10 },
+  row_pnl_label: { fontSize: 8, fontWeight: "700", color: text.muted, letterSpacing: 0.5, textTransform: "uppercase" },
+  row_pnl_value: { fontFamily: mono, fontSize: 14, fontWeight: "800" },
   row_pnl_pct: { fontFamily: mono, fontSize: 11, marginTop: 1 },
   trade_total: { fontFamily: mono, fontSize: 13, fontWeight: "700", color: "#fff" },
   trade_date: { fontSize: 11, color: text.tertiary, marginTop: 1 },
 
-  strip: { flexDirection: "row", gap: 16, paddingTop: 2, alignItems: "center" },
-  strip_cell: { minWidth: 44 },
+  stats_row: { flexDirection: "row", columnGap: 22 },
+  strip_cell: {},
   strip_label: { fontSize: 8, fontWeight: "700", color: text.muted, letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 2 },
   strip_value: { fontFamily: mono, fontSize: 12, fontWeight: "700", color: "#fff" },
+  strip_sub: { fontFamily: mono, fontSize: 10, fontWeight: "700", marginTop: 1 },
 
   section_title: { fontSize: 11, fontWeight: "800", color: "rgba(255,255,255,0.55)", letterSpacing: 0.5, textTransform: "uppercase", paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.05)" },
 

@@ -11,7 +11,14 @@ export const fmt_eur_m = (value_m: number): string => `€${value_m.toFixed(1)}M
 export const fmt_eur_m_signed = (value_m: number): string =>
   `${value_m >= 0 ? "+" : ""}${fmt_eur_m(value_m)}`;
 
-export const fmt_shares = (n: number): string => (Number.isInteger(n) ? String(n) : n.toFixed(2));
+/** Format a €M value as plain euros (×1,000,000) — for per-share prices, which
+ * are tiny in €M (e.g. €0.0000008M = €0.80) and read better in €. */
+export const fmt_eur_from_m = (value_m: number): string =>
+  `€${(value_m * 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+
+/** Share count. Whole shares show with thousands separators (counts run large
+ * under the shares-per-player denomination); sub-shares show 2 decimals. */
+export const fmt_shares = (n: number): string => (Number.isInteger(n) ? n.toLocaleString() : n.toFixed(2));
 
 export const fmt_signed_pct = (v: number | null | undefined, decimals = 1): string => {
   if (v == null) return "—";
