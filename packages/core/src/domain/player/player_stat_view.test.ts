@@ -87,4 +87,32 @@ describe("build_tournament_stat_groups", () => {
     expect(item(groups, "Overview", "Rating")?.value).toBe("7.2");
     expect(item(groups, "Passing", "Pass %")?.value).toBe("86%");
   });
+
+  it("treats an absent counting stat as 0 once the player has featured", () => {
+    // Sportmonks omits zero counting stats; a player who played but is missing
+    // assists/goals/tackles really has 0, not "unknown".
+    const groups = build_tournament_stat_groups(stat({ appearances: 1, minutes_played: 66 }));
+    expect(item(groups, "Attacking", "Assists")?.value).toBe("0");
+    expect(item(groups, "Attacking", "Goals")?.value).toBe("0");
+    expect(item(groups, "Defending", "Tackles")?.value).toBe("0");
+    expect(item(groups, "Goalkeeping", "Saves")?.value).toBe("0");
+  });
+
+  it("keeps non-counting stats (rating, pass %) as a dash even when featured", () => {
+    // An average / a percentage with no value must NOT be synthesised to 0.
+    const groups = build_tournament_stat_groups(stat({ minutes_played: 90, rating_avg: null, passes_accuracy: null }));
+    expect(item(groups, "Overview", "Rating")?.value).toBe("—");
+    expect(item(groups, "Passing", "Pass %")?.value).toBe("—");
+  });
+
+  it("shows a 0/0 ratio for a featured player with both sides absent", () => {
+    const groups = build_tournament_stat_groups(stat({ appearances: 1 }));
+    expect(item(groups, "Attacking", "Shots OT/Tot")?.value).toBe("0/0");
+  });
+
+  it("a player who has NOT featured shows dashes throughout", () => {
+    const groups = build_tournament_stat_groups(stat({}));
+    expect(item(groups, "Attacking", "Assists")?.value).toBe("—");
+    expect(item(groups, "Defending", "Tackles")?.value).toBe("—");
+  });
 });
