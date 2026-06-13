@@ -7,7 +7,7 @@
 // explain that on tap.
 
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Defs, RadialGradient, Rect, Stop } from "react-native-svg";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
@@ -22,6 +22,7 @@ import BottomSheet, {
 import { players_api } from "@fundxi/core/api/players_api";
 import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import { teams_api } from "@fundxi/core/api/teams_api";
+import { trades_api } from "@fundxi/core/api/trades_api";
 import { valuations_api } from "@fundxi/core/api/valuations_api";
 import { POSITION_LABEL, type Player } from "@fundxi/core/domain/player/player";
 import { match_event_badges, type MatchEventKind } from "@fundxi/core/domain/player/player_match_view";
@@ -495,7 +496,11 @@ function YourPosition({ player, refresh }: { player: Player; refresh: number }) 
   // Single source: market_value / pnl / return come from the core metrics —
   // the SAME function the web card uses — so the two clients are aligned by
   // construction and reconcile with the holdings list + AUM.
-  const metrics = useMemo(() => portfolio_api.get_holding_metrics(player.id), [player.id, refresh]);
+  // `closed_bump` re-reads the (cache-refreshed) metrics after a Close so the
+  // card flips to its empty state without leaving the sheet.
+  const [closed_bump, set_closed_bump] = useState(0);
+  const [closing, set_closing] = useState(false);
+  const metrics = useMemo(() => portfolio_api.get_holding_metrics(player.id), [player.id, refresh, closed_bump]);
   const totals = portfolio_api.get_totals();
   const has_position = !!metrics && metrics.shares !== 0;
 
@@ -519,6 +524,27 @@ function YourPosition({ player, refresh }: { player: Player; refresh: number }) 
     metrics!;
   const portfolio_pct = compute_portfolio_share(market_value, totals.total_value);
   const is_long = shares > 0;
+
+  // Close = trade the exact held quantity in the opposite direction (sell a
+  // long, buy back a short). Confirms first; reduces exposure so it never trips
+  // the cap/margin. trades_api.execute refreshes the shared caches.
+  const close_position = () => {
+    Alert.alert("Close position", `Close your ${is_long ? "long" : "short"} on ${player.name}?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Close",
+        style: "destructive",
+        onPress: () => {
+          set_closing(true);
+          trades_api
+            .execute({ player_id: player.id, kind: is_long ? "sell" : "buy", shares: Math.abs(shares), price: current_price })
+            .then(() => set_closed_bump(b => b + 1))
+            .catch(() => Alert.alert("Couldn't close", "The order failed. Please try again."))
+            .finally(() => set_closing(false));
+        },
+      },
+    ]);
+  };
 
   return (
     <View style={styles.position_card}>
@@ -545,6 +571,14 @@ function YourPosition({ player, refresh }: { player: Player; refresh: number }) 
         <SmallKpi label="P&L" value={fmt_eur_m_signed(pnl)} color={color_for_sign(pnl)} />
         <SmallKpi label="Return" value={fmt_signed_pct(return_pct, 1)} color={color_for_sign(return_pct)} />
       </View>
+      <Pressable
+        style={[styles.close_pos_btn, closing && { opacity: 0.5 }]}
+        onPress={close_position}
+        disabled={closing}
+        accessibilityRole="button"
+      >
+        <Text style={styles.close_pos_label}>{closing ? "Closing…" : "Close position"}</Text>
+      </Pressable>
     </View>
   );
 }
@@ -787,6 +821,18 @@ const styles = StyleSheet.create({
   position_badge: { backgroundColor: "rgba(255,255,255,0.04)", borderRadius: 4, paddingHorizontal: 8, paddingVertical: 3 },
   position_badge_label: { fontSize: 10, fontWeight: "800", color: text.tertiary, letterSpacing: 0.5 },
   position_empty: { padding: 14, fontSize: 12, color: text.tertiary, lineHeight: 18 },
+  close_pos_btn: {
+    marginHorizontal: 10,
+    marginBottom: 10,
+    marginTop: 8,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: with_alpha(palette.negative, 0.4),
+    backgroundColor: with_alpha(palette.negative, 0.08),
+  },
+  close_pos_label: { color: palette.negative, fontSize: 13, fontWeight: "800" },
 
   trade_row: { flexDirection: "row", gap: 8, marginTop: 4 },
   trade_btn: { flex: 1, paddingVertical: 13, borderRadius: 10, alignItems: "center" },
