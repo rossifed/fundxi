@@ -1,4 +1,5 @@
 import type { Holding } from "./holding";
+import { pct_of_player, price_per_share, to_display_shares } from "./trade_calc";
 
 export interface PortfolioTotals {
   cash: number; // €M, free cash
@@ -6,17 +7,32 @@ export interface PortfolioTotals {
   long_value: number; // €M, gross long market value (positions with shares > 0)
   short_value: number; // €M, gross short market value, as a POSITIVE magnitude
   total_value: number; // €M, AUM = cash + market_value
-  total_cost: number; // €M, sum(avg_buy × shares) — nets long vs short
+  total_cost: number; // €M, sum(avg_buy × shares) — nets long vs short (a long and an offsetting short cancel)
+  gross_cost: number; // €M, sum(|avg_buy × shares|) — capital deployed regardless of direction (never nets)
+  // €M still deployable before the gross-exposure limit (= max_leverage × equity
+  // − gross exposure). A SHORT consumes it (it adds gross exposure), so it does
+  // NOT inflate buying power even though it credits cash. Floored at 0.
+  buying_power: number;
   pnl: number; // €M
   return_pct: number; // %, pnl / invested capital base (cash + total_cost)
 }
 
 export interface HoldingMetrics extends Holding {
+  // The player's WHOLE value (a.k.a. market cap), €M. ``current_price`` keeps
+  // its name for back-compat but it is NOT a per-share price.
   current_price: number;
   market_value: number;
   cost_basis: number;
   pnl: number;
   return_pct: number;
+  // Display denomination of the position (the ``shares`` field is the canonical
+  // ownership fraction; these are what the UI shows). See trade_calc.ts.
+  display_shares: number; // shares × N
+  pct_of_player: number; // % of the player owned (shares × 100)
+  // Per-SHARE prices (€M/share = value / N) — what a position's "price" and
+  // entry actually are in the share model, distinct from the player's mkt cap.
+  price_per_share: number; // current market value of one share
+  avg_buy_per_share: number; // weighted entry price per share (recomputed on each fill)
 }
 
 /** Share of the portfolio represented by a position's market value.
@@ -26,7 +42,11 @@ export function compute_portfolio_share(market_value: number, total_value: numbe
   return (market_value / total_value) * 100;
 }
 
-export function compute_holding_metrics(holding: Holding, current_price: number): HoldingMetrics {
+export function compute_holding_metrics(
+  holding: Holding,
+  current_price: number,
+  shares_per_player: number,
+): HoldingMetrics {
   const market_value = current_price * holding.shares;
   const cost_basis = holding.average_buy_price * holding.shares;
   return {
@@ -34,6 +54,10 @@ export function compute_holding_metrics(holding: Holding, current_price: number)
     current_price,
     market_value,
     cost_basis,
+    display_shares: to_display_shares(holding.shares, shares_per_player),
+    pct_of_player: pct_of_player(holding.shares),
+    price_per_share: price_per_share(current_price, shares_per_player),
+    avg_buy_per_share: price_per_share(holding.average_buy_price, shares_per_player),
     pnl: market_value - cost_basis,
     // Divide by the MAGNITUDE of capital committed so the sign of the return
     // tracks the P&L, not the sign of the shares. A winning short (shares < 0,
@@ -47,11 +71,13 @@ export function compute_portfolio_totals(
   holdings: readonly Holding[],
   prices_by_player_id: ReadonlyMap<number, number>,
   cash: number,
+  max_leverage: number,
 ): PortfolioTotals {
   let market_value = 0;
   let long_value = 0;
   let short_value = 0;
   let total_cost = 0;
+  let gross_cost = 0;
   for (const h of holdings) {
     // Price comes from the valuation surface (tick ?? base) — the SAME rule the
     // backend snapshot/history service marks at (SqlAlchemyCurrentPriceProvider),
@@ -65,6 +91,7 @@ export function compute_portfolio_totals(
     if (mv >= 0) long_value += mv;
     else short_value += -mv;
     total_cost += h.average_buy_price * h.shares;
+    gross_cost += Math.abs(h.average_buy_price * h.shares);
   }
   const pnl = market_value - total_cost;
   // Return is measured against the invested CAPITAL BASE, not the net cost.
@@ -76,13 +103,19 @@ export function compute_portfolio_totals(
   // When no position has been closed this equals (total_value − opening_cash)
   // / opening_cash, matching the server's `pnl_vs_open` (COHERENCE-INVARIANT).
   const invested_base = cash + total_cost;
+  const total_value = cash + market_value;
+  // Equity = AUM (cash + net positions), same base the backend margin rule uses.
+  // Deployable headroom = leverage × equity − current gross exposure.
+  const buying_power = Math.max(0, max_leverage * total_value - (long_value + short_value));
   return {
     cash,
     market_value,
     long_value,
     short_value,
-    total_value: cash + market_value,
+    total_value,
     total_cost,
+    gross_cost,
+    buying_power,
     pnl,
     return_pct: invested_base <= 0 ? 0 : (pnl / invested_base) * 100,
   };

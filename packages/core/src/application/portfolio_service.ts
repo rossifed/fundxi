@@ -8,6 +8,7 @@ import {
   type PortfolioTotals,
 } from "@fundxi/core/domain/portfolio/portfolio_metrics";
 import { compute_trade_outcome, type TradeOutcome } from "@fundxi/core/domain/portfolio/trade_outcome";
+import { get_max_gross_leverage, get_shares_per_player } from "@fundxi/core/infrastructure/runtime_config";
 import { players_repository } from "@fundxi/core/infrastructure/repositories/players_repository";
 import { portfolio_repository } from "@fundxi/core/infrastructure/repositories/portfolio_repository";
 import { trades_repository } from "@fundxi/core/infrastructure/repositories/trades_repository";
@@ -30,6 +31,7 @@ export const portfolio_service = {
       portfolio_repository.find_my_holdings(),
       build_prices_index(),
       portfolio_repository.find_my_cash(),
+      get_max_gross_leverage(),
     );
   },
 
@@ -48,7 +50,7 @@ export const portfolio_service = {
         // Cost basis is only the last-resort fallback when no valuation exists.
         const price =
           valuations_repository.find_by_player_id(h.player_id)?.current_price ?? h.average_buy_price;
-        const metrics = compute_holding_metrics(h, price);
+        const metrics = compute_holding_metrics(h, price, get_shares_per_player());
         const portfolio_pct = compute_portfolio_share(metrics.market_value, total_value);
         return { ...metrics, player, portfolio_pct };
       })
@@ -71,7 +73,7 @@ export const portfolio_service = {
     const holding = portfolio_repository.find_my_holdings().find(h => h.player_id === player_id);
     if (!holding) return undefined;
     const price = valuations_repository.find_by_player_id(player_id)?.current_price ?? holding.average_buy_price;
-    return compute_holding_metrics(holding, price);
+    return compute_holding_metrics(holding, price, get_shares_per_player());
   },
 
   get_my_cash(): number {
@@ -86,7 +88,7 @@ export const portfolio_service = {
     return trades
       .map(t => {
         const current_price = valuations_repository.find_by_player_id(t.player_id)?.current_price ?? t.price;
-        return compute_trade_outcome(t, current_price);
+        return compute_trade_outcome(t, current_price, get_shares_per_player());
       })
       .slice()
       .reverse();

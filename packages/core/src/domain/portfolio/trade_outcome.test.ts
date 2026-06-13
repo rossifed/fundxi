@@ -17,25 +17,26 @@ const trade = (kind: "buy" | "sell", price: number): Trade => ({
 
 describe("compute_trade_outcome", () => {
   it("returns the signed price-change percentage since the trade", () => {
-    const out = compute_trade_outcome(trade("buy", 10), 12);
+    const out = compute_trade_outcome(trade("buy", 10), 12, 10);
     expect(out.change_pct).toBe(20);
   });
 
   it("negative change when price went down", () => {
-    const out = compute_trade_outcome(trade("buy", 10), 8);
+    const out = compute_trade_outcome(trade("buy", 10), 8, 10);
     expect(out.change_pct).toBe(-20);
   });
 
   it("returns change_pct=null when the trade price was 0 (avoid div/0)", () => {
-    const out = compute_trade_outcome(trade("buy", 0), 5);
+    const out = compute_trade_outcome(trade("buy", 0), 5, 10);
     expect(out.change_pct).toBeNull();
   });
 
-  it("carries through all trade fields untouched + current_price", () => {
+  it("carries through all trade fields untouched + current_price + display denomination", () => {
     const t = trade("sell", 10);
-    const out = compute_trade_outcome(t, 11);
+    const out = compute_trade_outcome(t, 11, 10); // N=10, shares 5 → display 50
     expect(out.kind).toBe("sell");
     expect(out.shares).toBe(5);
     expect(out.current_price).toBe(11);
+    expect(out.display_shares).toBe(50);
   });
 });

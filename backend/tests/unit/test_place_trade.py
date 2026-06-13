@@ -167,10 +167,11 @@ def test_unpriceable_player_is_rejected() -> None:
 
 
 def test_buy_uses_the_server_tick_when_present() -> None:
+    # shares is the ownership fraction (<=1.0 = up to the whole player).
     user_repo, portfolio_repo, trade_repo, price_provider = _setup(cash=1000.0, prices={7: 12.0})
     out = _run(
         place_trade(
-            command=PlaceTradeCommand(user_id=1, player_id=7, kind="buy", shares=2.0),
+            command=PlaceTradeCommand(user_id=1, player_id=7, kind="buy", shares=0.5),
             user_repo=user_repo,
             portfolio_repo=portfolio_repo,
             trade_repo=trade_repo,
@@ -180,16 +181,18 @@ def test_buy_uses_the_server_tick_when_present() -> None:
         )
     )
     assert out.trade.price == 12.0
-    assert out.portfolio.cash == 1000.0 - 24.0
+    assert out.portfolio.cash == 1000.0 - 6.0  # 0.5 x €12M
 
 
 def test_short_beyond_equity_is_rejected_by_margin() -> None:
-    # Flat €100M portfolio, no leverage: shorting 20 @ €10M = €200M gross > €100M.
-    user_repo, portfolio_repo, trade_repo, price_provider = _setup(cash=100.0, prices={7: 10.0})
+    # Flat €100M portfolio, no leverage. The per-player cap allows shorting up to
+    # the whole player; margin still rejects when the player's value alone
+    # exceeds equity — short the whole €300M player = €300M gross > €100M.
+    user_repo, portfolio_repo, trade_repo, price_provider = _setup(cash=100.0, prices={7: 300.0})
     with pytest.raises(InsufficientMarginError):
         _run(
             place_trade(
-                command=PlaceTradeCommand(user_id=1, player_id=7, kind="sell", shares=20.0),
+                command=PlaceTradeCommand(user_id=1, player_id=7, kind="sell", shares=1.0),
                 user_repo=user_repo,
                 portfolio_repo=portfolio_repo,
                 trade_repo=trade_repo,
@@ -212,7 +215,7 @@ def test_duplicate_idempotency_key_replays_without_re_executing() -> None:
         return _run(
             place_trade(
                 command=PlaceTradeCommand(
-                    user_id=1, player_id=7, kind="buy", shares=2.0, idempotency_key="key-abc"
+                    user_id=1, player_id=7, kind="buy", shares=0.3, idempotency_key="key-abc"
                 ),
                 user_repo=user_repo,
                 portfolio_repo=portfolio_repo,
@@ -226,14 +229,14 @@ def test_duplicate_idempotency_key_replays_without_re_executing() -> None:
     first = submit()
     second = submit()
 
-    # Exactly one trade recorded; cash debited once (1000 - 24, not - 48).
+    # Exactly one trade recorded; cash debited once (1000 - 3.6, not - 7.2).
     assert len(trade_repo.trades) == 1
-    assert portfolio_repo.portfolio.cash == 1000.0 - 24.0
+    assert portfolio_repo.portfolio.cash == pytest.approx(1000.0 - 3.6)  # 0.3 x €12M
     # The replay echoes the original trade.
     assert second.trade.id == first.trade.id
     assert second.trade.idempotency_key == "key-abc"
-    # The holding reflects a single buy of 2 shares, not 4.
-    assert portfolio_repo.holdings[7].shares == 2.0
+    # The holding reflects a single buy of 0.3, not 0.6.
+    assert portfolio_repo.holdings[7].shares == pytest.approx(0.3)
 
 
 def test_distinct_idempotency_keys_execute_independently() -> None:
@@ -244,7 +247,7 @@ def test_distinct_idempotency_keys_execute_independently() -> None:
         _run(
             place_trade(
                 command=PlaceTradeCommand(
-                    user_id=1, player_id=7, kind="buy", shares=1.0, idempotency_key=key
+                    user_id=1, player_id=7, kind="buy", shares=0.3, idempotency_key=key
                 ),
                 user_repo=user_repo,
                 portfolio_repo=portfolio_repo,
@@ -255,14 +258,14 @@ def test_distinct_idempotency_keys_execute_independently() -> None:
             )
         )
     assert len(trade_repo.trades) == 2
-    assert portfolio_repo.holdings[7].shares == 2.0
+    assert portfolio_repo.holdings[7].shares == pytest.approx(0.6)  # 0.3 + 0.3, within the cap
 
 
 def test_short_within_equity_is_allowed() -> None:
-    user_repo, portfolio_repo, trade_repo, price_provider = _setup(cash=100.0, prices={7: 10.0})
+    user_repo, portfolio_repo, trade_repo, price_provider = _setup(cash=100.0, prices={7: 50.0})
     out = _run(
         place_trade(
-            command=PlaceTradeCommand(user_id=1, player_id=7, kind="sell", shares=5.0),
+            command=PlaceTradeCommand(user_id=1, player_id=7, kind="sell", shares=1.0),
             user_repo=user_repo,
             portfolio_repo=portfolio_repo,
             trade_repo=trade_repo,
@@ -271,7 +274,8 @@ def test_short_within_equity_is_allowed() -> None:
             max_leverage=1.0,
         )
     )
-    # 5 short @ 10 = 50 gross <= 100 equity. Cash credited, short position open.
+    # Short the whole €50M player = €50M gross <= €100M equity. Cash credited,
+    # short position open at -100% of the player.
     assert out.portfolio.cash == 150.0
     assert out.holding is not None
-    assert out.holding.shares == -5.0
+    assert out.holding.shares == -1.0

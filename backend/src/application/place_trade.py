@@ -17,12 +17,30 @@ from src.application.portfolio_snapshot_service import LatestPriceProvider
 from src.application.trade_execution import TradeOutcome, TradeRequest, execute_trade
 from src.domain.portfolio.margin import MarginVerdict, evaluate_margin
 from src.domain.portfolio.portfolio import PortfolioRepository, TradeKind, TradeRepository
+from src.domain.portfolio.position_cap import MAX_OWNERSHIP_FRACTION, would_exceed_player_cap
 from src.domain.portfolio.user import UserRepository
 from src.domain.valuation.starting_price_provider import StartingPriceProvider
 
 
 class UserNotFoundError(Exception):
     """The authenticated user id no longer resolves to a user."""
+
+
+class PlayerOwnershipCapError(Exception):
+    """The trade would push the position past +/-100% of the player's value.
+
+    A position may never exceed the player's whole value in either direction
+    (see domain/portfolio/position_cap.py). Carries the held + requested
+    fractions so the transport layer can explain the rejection."""
+
+    def __init__(self, *, player_id: int, held: float, requested: float, kind: TradeKind) -> None:
+        self.player_id = player_id
+        self.held = held
+        self.requested = requested
+        super().__init__(
+            f"position cap: a {kind.value} of {requested:.4f} on top of {held:.4f} would exceed "
+            f"+/-{MAX_OWNERSHIP_FRACTION:.0f}x the player's value"
+        )
 
 
 class PortfolioNotFoundError(Exception):
@@ -110,6 +128,15 @@ async def place_trade(
         kind = TradeKind(command.kind)
     except ValueError as exc:
         raise InvalidTradeKindError(command.kind) from exc
+
+    # Player-value cap (authoritative — the client caps its preview too, but it
+    # is never trusted). A position may never exceed +/-100% of the player.
+    held = await portfolio_repo.get_holding(portfolio_id=portfolio.id, player_id=command.player_id)
+    prev_shares = held.shares if held else 0.0
+    if would_exceed_player_cap(prev_shares=prev_shares, kind=kind, qty=command.shares):
+        raise PlayerOwnershipCapError(
+            player_id=command.player_id, held=prev_shares, requested=command.shares, kind=kind
+        )
 
     # Authoritative execution price = latest server-side valuation tick. The
     # client price is display-only and never trusted, or a client could buy

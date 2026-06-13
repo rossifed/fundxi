@@ -13,23 +13,27 @@ const h = (player_id: number, shares: number, avg: number): Holding => ({
 });
 
 describe("compute_holding_metrics", () => {
-  it("derives market_value, cost_basis, pnl, return_pct", () => {
-    const m = compute_holding_metrics(h(1, 10, 5), 7);
+  it("derives market_value, cost_basis, pnl, return_pct + the display denomination", () => {
+    const m = compute_holding_metrics(h(1, 10, 5), 7, 10); // N=10 → display_shares = 100
     expect(m.market_value).toBe(70);
     expect(m.cost_basis).toBe(50);
     expect(m.pnl).toBe(20);
     expect(m.return_pct).toBe(40); // (20/50)*100
+    expect(m.display_shares).toBe(100); // shares × N
+    expect(m.pct_of_player).toBe(1000); // shares × 100 (cap is enforced at trade time, not here)
+    expect(m.price_per_share).toBeCloseTo(0.7, 12); // current_price (7) / N (10)
+    expect(m.avg_buy_per_share).toBeCloseTo(0.5, 12); // avg_buy (5) / N (10)
   });
 
   it("returns 0 return_pct when cost_basis is 0 (free position)", () => {
-    const m = compute_holding_metrics(h(1, 5, 0), 10);
+    const m = compute_holding_metrics(h(1, 5, 0), 10, 10);
     expect(m.cost_basis).toBe(0);
     expect(m.pnl).toBe(50);
     expect(m.return_pct).toBe(0);
   });
 
   it("handles short positions (negative shares ⇒ negative market_value)", () => {
-    const m = compute_holding_metrics(h(1, -10, 5), 7);
+    const m = compute_holding_metrics(h(1, -10, 5), 7, 10);
     expect(m.market_value).toBe(-70);
     expect(m.cost_basis).toBe(-50);
     expect(m.pnl).toBe(-20); // price went up against the short
@@ -38,7 +42,7 @@ describe("compute_holding_metrics", () => {
 
   it("a winning short shows a POSITIVE return (sign tracks P&L, not shares)", () => {
     // Short 10 @ 5, price falls to 3 → the short gained.
-    const m = compute_holding_metrics(h(1, -10, 5), 3);
+    const m = compute_holding_metrics(h(1, -10, 5), 3, 10);
     expect(m.cost_basis).toBe(-50);
     expect(m.pnl).toBe(20); // (3-5)×-10
     expect(m.return_pct).toBe(40); // 20 / |−50| — POSITIVE, not −40
@@ -48,7 +52,7 @@ describe("compute_holding_metrics", () => {
 describe("compute_portfolio_totals", () => {
   it("sums market_value across holdings and adds cash", () => {
     const prices = new Map([[1, 10], [2, 5]]);
-    const totals = compute_portfolio_totals([h(1, 3, 8), h(2, 4, 3)], prices, 100);
+    const totals = compute_portfolio_totals([h(1, 3, 8), h(2, 4, 3)], prices, 100, 1); // leverage 1×
     expect(totals.market_value).toBe(3 * 10 + 4 * 5); // 50
     expect(totals.cash).toBe(100);
     expect(totals.total_value).toBe(150);
@@ -56,6 +60,8 @@ describe("compute_portfolio_totals", () => {
     expect(totals.pnl).toBe(14);
     // return = pnl / (cash + total_cost) = 14 / (100 + 36)
     expect(totals.return_pct).toBeCloseTo((14 / 136) * 100, 6);
+    // buying power = 1 × 150 equity − 50 gross exposure (both long) = 100
+    expect(totals.buying_power).toBeCloseTo(100, 6);
   });
 
   it("long + short of similar cost: return stays sane (no near-zero denominator blow-up)", () => {
@@ -65,8 +71,11 @@ describe("compute_portfolio_totals", () => {
     const prices = new Map([[1, 10.2], [2, 9.8]]); // both moved ~2% from cost 10
     const long = h(1, 10, 10); // +100 cost
     const short = h(2, -10, 10); // −100 cost ⇒ total_cost ≈ 0
-    const totals = compute_portfolio_totals([long, short], prices, 100);
-    expect(totals.total_cost).toBeCloseTo(0, 6);
+    const totals = compute_portfolio_totals([long, short], prices, 100, 1); // leverage 1×
+    expect(totals.total_cost).toBeCloseTo(0, 6); // long +100, short −100 net to ~0
+    expect(totals.gross_cost).toBeCloseTo(200, 6); // but 100 + 100 deployed — never nets
+    // gross exposure ≈ 200 already exceeds 1× equity (~104) → no buying power left
+    expect(totals.buying_power).toBe(0);
     // long +2 pnl, short +2 pnl (price fell below cost) ⇒ pnl ≈ 4 on a 100 base
     expect(totals.pnl).toBeCloseTo(4, 6);
     expect(totals.return_pct).toBeCloseTo((4 / 100) * 100, 6); // ~4%, not hundreds
@@ -82,7 +91,7 @@ describe("compute_portfolio_totals", () => {
     // get_my_holdings_with_metrics + the backend snapshot service — all mark
     // at cost basis (flat) rather than one dropping and another zeroing it.
     const prices = new Map([[1, 10]]); // player 2 missing
-    const totals = compute_portfolio_totals([h(1, 5, 5), h(2, 3, 3)], prices, 0);
+    const totals = compute_portfolio_totals([h(1, 5, 5), h(2, 3, 3)], prices, 0, 1);
     // h1: 5×10 mkt / 5×5 cost. h2 (no price): marked at cost 3 → 3×3 both.
     expect(totals.market_value).toBe(50 + 9);
     expect(totals.total_cost).toBe(25 + 9);
@@ -90,7 +99,8 @@ describe("compute_portfolio_totals", () => {
   });
 
   it("empty portfolio: total_value = cash, no division by zero", () => {
-    const totals = compute_portfolio_totals([], new Map(), 100);
+    const totals = compute_portfolio_totals([], new Map(), 100, 1);
+    expect(totals.buying_power).toBe(100); // all cash deployable, no positions
     expect(totals.total_value).toBe(100);
     expect(totals.pnl).toBe(0);
     expect(totals.return_pct).toBe(0);

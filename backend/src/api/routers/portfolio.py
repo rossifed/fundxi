@@ -20,6 +20,7 @@ from src.application.place_trade import (
     InvalidTradeKindError,
     NoServerPriceError,
     PlaceTradeCommand,
+    PlayerOwnershipCapError,
     PortfolioNotFoundError,
     UserNotFoundError,
     place_trade,
@@ -135,6 +136,8 @@ async def post_trade(
             status_code=409, detail=f"no current price for player {body.player_id}; cannot execute trade"
         ) from exc
     except InsufficientMarginError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except PlayerOwnershipCapError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except TradeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

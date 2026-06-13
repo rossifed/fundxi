@@ -61,9 +61,15 @@ const DEFAULT_AGE = 25;
 
 const pct_of = (value: number, total: number): number => (total > 0 ? (value / total) * 100 : 0);
 
+/** Allocation = how EXPOSURE is distributed across the book. A short is
+ * exposure too, so every position is sized by its ABSOLUTE market value
+ * (a €1M short = €1M of exposure, like a €1M long) and each slice is measured
+ * against the total GROSS exposure — not against AUM (which is dominated by
+ * idle cash and made every slice look tiny). Longs and shorts are NOT netted:
+ * netting opposite bets on the same team/position to zero would hide real risk.
+ */
 export function compute_portfolio_breakdowns(
   holdings: readonly EnrichedHolding[],
-  total_value: number,
   resolve_team: (team_id: string) => TeamRef | undefined,
 ): PortfolioBreakdowns {
   const team_value = new Map<string, { team: TeamRef; value: number }>();
@@ -71,26 +77,29 @@ export function compute_portfolio_breakdowns(
   const age_value = new Map<string, number>();
   for (const b of AGE_BUCKETS) age_value.set(b.label, 0);
 
+  const gross = holdings.reduce((sum, h) => sum + Math.abs(h.market_value), 0);
+
   let winners = 0;
   for (const h of holdings) {
     if (h.pnl > 0) winners += 1;
+    const exposure = Math.abs(h.market_value);
 
     const team = resolve_team(h.player.team_id);
     if (team) {
       const acc = team_value.get(team.id) ?? { team, value: 0 };
-      acc.value += h.market_value;
+      acc.value += exposure;
       team_value.set(team.id, acc);
     }
 
-    position_value.set(h.player.position, (position_value.get(h.player.position) ?? 0) + h.market_value);
+    position_value.set(h.player.position, (position_value.get(h.player.position) ?? 0) + exposure);
 
     const age = h.player.age ?? DEFAULT_AGE;
     const bucket = AGE_BUCKETS.find(b => age >= b.lo && age < b.hi) ?? AGE_BUCKETS[AGE_BUCKETS.length - 1];
-    age_value.set(bucket.label, (age_value.get(bucket.label) ?? 0) + h.market_value);
+    age_value.set(bucket.label, (age_value.get(bucket.label) ?? 0) + exposure);
   }
 
   const by_team: TeamAllocationSlice[] = [...team_value.values()]
-    .map(({ team, value }) => ({ key: team.id, name: team.name, flag: team.flag, value, pct: pct_of(value, total_value) }))
+    .map(({ team, value }) => ({ key: team.id, name: team.name, flag: team.flag, value, pct: pct_of(value, gross) }))
     .sort((a, b) => b.value - a.value);
 
   const by_position: AllocationSlice[] = [...position_value.entries()]
@@ -98,7 +107,7 @@ export function compute_portfolio_breakdowns(
       key: position,
       label: POSITION_LABEL[position as keyof typeof POSITION_LABEL] ?? position,
       value,
-      pct: pct_of(value, total_value),
+      pct: pct_of(value, gross),
     }))
     .sort((a, b) => b.value - a.value);
 
@@ -107,7 +116,7 @@ export function compute_portfolio_breakdowns(
     key: b.label,
     label: b.label,
     value: age_value.get(b.label) ?? 0,
-    pct: pct_of(age_value.get(b.label) ?? 0, total_value),
+    pct: pct_of(age_value.get(b.label) ?? 0, gross),
   })).filter(slice => slice.value > 0);
 
   const win_rate = holdings.length > 0 ? (winners / holdings.length) * 100 : null;

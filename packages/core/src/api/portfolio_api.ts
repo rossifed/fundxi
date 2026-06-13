@@ -1,6 +1,8 @@
 import { portfolio_service, type HoldingDetail } from "@fundxi/core/application/portfolio_service";
 import { simulate_trade, type TradePreview, type TradePreviewInput } from "@fundxi/core/application/trade_service";
 import type { Trade } from "@fundxi/core/domain/portfolio/trade";
+import { price_per_share, to_display_shares } from "@fundxi/core/domain/portfolio/trade_calc";
+import { get_shares_per_player } from "@fundxi/core/infrastructure/runtime_config";
 import type { HoldingMetrics, PortfolioTotals } from "@fundxi/core/domain/portfolio/portfolio_metrics";
 import {
   fetch_portfolio_history,
@@ -32,6 +34,27 @@ export const portfolio_api = {
   },
   list_trades(): Trade[] {
     return trades_repository.find_all();
+  },
+  /** When a position was first opened (earliest trade for the player), as raw
+   * date + time so each UI formats it. ``null`` when the player was never traded. */
+  opened_at(player_id: number): { date: string; time: string } | null {
+    let earliest: Trade | null = null;
+    for (const t of trades_repository.find_all()) {
+      if (t.player_id !== player_id) continue;
+      if (!earliest || t.date < earliest.date || (t.date === earliest.date && t.time < earliest.time)) earliest = t;
+    }
+    return earliest ? { date: earliest.date, time: earliest.time } : null;
+  },
+  /** Convert a canonical ownership fraction to the displayed share count
+   * (fraction × shares-per-player). The single place the UI turns a stored
+   * ``shares`` into the number it renders, so web and mobile never diverge. */
+  to_display_shares(ownership_fraction: number): number {
+    return to_display_shares(ownership_fraction, get_shares_per_player());
+  },
+  /** Convert a player's whole value (€M, mkt cap) to its per-share price
+   * (€M/share = value / N). Used for trade-history rows that hold a raw price. */
+  to_price_per_share(total_value: number): number {
+    return price_per_share(total_value, get_shares_per_player());
   },
   /** Portfolio value history. Served by the backend BFF — all math
    * and storage are server-side (``valuation.portfolio_value_snapshot``

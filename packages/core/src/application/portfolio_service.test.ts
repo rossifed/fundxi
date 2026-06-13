@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { portfolio_service } from "./portfolio_service";
 import { compute_holding_metrics } from "@fundxi/core/domain/portfolio/portfolio_metrics";
 import { _set_from_outcome } from "@fundxi/core/infrastructure/repositories/portfolio_repository";
+import { get_shares_per_player } from "@fundxi/core/infrastructure/runtime_config";
 
 // get_holding_metrics is the SINGLE source the per-player "Your position" card
 // uses on web AND mobile. These tests pin its contract: same formula as
@@ -41,7 +42,7 @@ describe("portfolio_service.get_holding_metrics", () => {
 
   it("computes exactly compute_holding_metrics(holding, price) — no divergent arithmetic", () => {
     const holding = portfolio_service.get_holding_for(1)!;
-    const expected = compute_holding_metrics(holding, holding.average_buy_price);
+    const expected = compute_holding_metrics(holding, holding.average_buy_price, get_shares_per_player());
     expect(portfolio_service.get_holding_metrics(1)).toEqual(expected);
   });
 
