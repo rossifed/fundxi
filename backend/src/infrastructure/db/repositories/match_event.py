@@ -76,7 +76,12 @@ class SqlAlchemyMatchEventRepository:
 
     async def list_by_fixture(self, fixture_id: int) -> list[MatchEvent]:
         result = await self._session.execute(
-            select(MatchEventORM).where(MatchEventORM.fixture_id == fixture_id).order_by(MatchEventORM.sequence)
+            # Chronological: `sequence` is Sportmonks `sort_order`, a per-type
+            # counter (nth sub / nth card), NOT a global timeline. Order by the
+            # minute, with sportmonks_id (monotonic) breaking same-minute ties.
+            select(MatchEventORM)
+            .where(MatchEventORM.fixture_id == fixture_id)
+            .order_by(MatchEventORM.minute, MatchEventORM.extra_minute.nulls_first(), MatchEventORM.sportmonks_id)
         )
         return [_to_domain(row) for row in result.scalars().all()]
 
@@ -86,7 +91,15 @@ class SqlAlchemyMatchEventRepository:
         result = await self._session.execute(
             select(MatchEventORM)
             .join(FixtureORM, MatchEventORM.fixture_id == FixtureORM.id)
-            .order_by(FixtureORM.kickoff_at, MatchEventORM.sequence)
+            # Per-fixture chronological order — see list_by_fixture: `sequence`
+            # (Sportmonks sort_order) is per-type, so order within a fixture by
+            # the minute, sportmonks_id breaking same-minute ties.
+            .order_by(
+                FixtureORM.kickoff_at,
+                MatchEventORM.minute,
+                MatchEventORM.extra_minute.nulls_first(),
+                MatchEventORM.sportmonks_id,
+            )
         )
         return [_to_domain(row) for row in result.scalars().all()]
 

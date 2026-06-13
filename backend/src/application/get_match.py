@@ -156,7 +156,15 @@ async def get_match_view(
     events_rows = (
         (
             await session.execute(
-                select(MatchEventORM).where(MatchEventORM.fixture_id == fixture_id).order_by(MatchEventORM.sequence)
+                # Chronological order: `sequence` mirrors Sportmonks `sort_order`,
+                # which is a PER-TYPE counter (nth sub, nth card), not a global
+                # timeline — ordering by it scrambles the feed. minute (+ stoppage)
+                # is the timeline; sportmonks_id is monotonic within a minute.
+                select(MatchEventORM)
+                .where(MatchEventORM.fixture_id == fixture_id)
+                .order_by(
+                    MatchEventORM.minute, MatchEventORM.extra_minute.nulls_first(), MatchEventORM.sportmonks_id
+                )
             )
         )
         .scalars()
