@@ -310,18 +310,32 @@ function fmt_news_ts(iso?: string): string {
 }
 
 function NewsRow({ item, divider }: { item: News; divider: boolean }) {
+  const router = useRouter();
   const icon = item.type === "postmatch" ? "🏁" : "📰";
   const meta = [item.fixture_label, fmt_news_ts(item.published_at)].filter(Boolean).join("  ·  ");
-  return (
-    <View style={[styles.news_row, divider && styles.row_divider]}>
+  const body = (
+    <>
       <Text style={styles.news_icon}>{icon}</Text>
       <View style={styles.news_body}>
         <Text style={styles.news_title}>{item.title}</Text>
         {meta !== "" && <Text style={styles.news_label}>{meta}</Text>}
       </View>
       <Text style={styles.news_kind}>{item.type === "prematch" ? "pre-match" : "post-match"}</Text>
-    </View>
+    </>
   );
+  // Most news cover a fixture → tapping opens its MatchView. League-level news
+  // (no fixture_id) stays non-interactive.
+  if (item.fixture_id !== undefined) {
+    return (
+      <Pressable
+        onPress={() => router.push(`/match/${item.fixture_id}`)}
+        style={({ pressed }) => [styles.news_row, divider && styles.row_divider, pressed && { opacity: 0.6 }]}
+      >
+        {body}
+      </Pressable>
+    );
+  }
+  return <View style={[styles.news_row, divider && styles.row_divider]}>{body}</View>;
 }
 
 const styles = StyleSheet.create({

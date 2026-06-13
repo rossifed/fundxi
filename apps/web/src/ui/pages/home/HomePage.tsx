@@ -59,6 +59,15 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match, on_op
   const top_up = useMemo(() => players_api.top_movers(5, "up"), [valuations_version]);
   const top_down = useMemo(() => players_api.top_movers(5, "down"), [valuations_version]);
 
+  // A news item carries the fixture it covers (most do). Clicking it opens that
+  // fixture's MatchView, reusing the same fixture_id → Match path as the
+  // Fixtures page. News without a fixture (league-level) stays non-clickable.
+  const open_news_fixture = async (fixture_id: number | undefined) => {
+    if (fixture_id === undefined) return;
+    const match = await matches_api.get_match_by_fixture_id(fixture_id);
+    if (match) on_open_match(match);
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24, animation: "fu .3s ease" }}>
       {/* Hero — only on Home, signals "welcome" */}
@@ -261,12 +270,16 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match, on_op
           {news_api.list().slice(0, 6).map((n, i) => (
             <div
               key={n.id}
+              onClick={n.fixture_id !== undefined ? () => void open_news_fixture(n.fixture_id) : undefined}
+              role={n.fixture_id !== undefined ? "button" : undefined}
+              title={n.fixture_id !== undefined ? "Open match" : undefined}
               style={{
                 padding: "14px 18px",
                 borderTop: i > 0 ? "1px solid rgba(255,255,255,.04)" : "none",
                 display: "flex",
                 gap: 14,
                 alignItems: "flex-start",
+                cursor: n.fixture_id !== undefined ? "pointer" : "default",
               }}
             >
               <span style={{ fontSize: 22, flexShrink: 0, marginTop: 1 }}>{news_icon(n.type)}</span>
