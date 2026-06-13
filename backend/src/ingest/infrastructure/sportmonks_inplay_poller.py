@@ -32,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.apply_did_not_play import apply_did_not_play
 from src.application.apply_lineup_drops import apply_lineup_drops
 from src.application.apply_suspensions import apply_suspensions
+from src.application.bootstrap import bootstrap_player_stats
 from src.application.reconcile_var_disallowed_goals import reconcile_var_disallowed_goals
 from src.application.settle_fixture import settle_fixture
 from src.domain.match.fixture import Fixture, FixtureStatus
@@ -41,7 +42,9 @@ from src.infrastructure.db.repositories.fixture import SqlAlchemyFixtureReposito
 from src.infrastructure.db.repositories.lineup import SqlAlchemyLineupRepository
 from src.infrastructure.db.repositories.match_comment import SqlAlchemyMatchCommentRepository
 from src.infrastructure.db.repositories.match_event import SqlAlchemyMatchEventRepository
+from src.infrastructure.db.repositories.player import SqlAlchemyPlayerRepository
 from src.infrastructure.db.repositories.player_match_stat import SqlAlchemyPlayerMatchStatRepository
+from src.infrastructure.db.repositories.player_tournament_stat import SqlAlchemyPlayerTournamentStatRepository
 from src.infrastructure.db.repositories.portfolio_snapshot_adapters import SqlAlchemyLatestPriceProvider
 from src.infrastructure.db.repositories.raw_sportmonks_event import SqlAlchemyRawSportmonksEventRepository
 from src.infrastructure.db.repositories.team_match_stat import SqlAlchemyTeamMatchStatRepository
@@ -246,6 +249,7 @@ class SportmonksInplayPoller:
         )
         # Full-time settlement runs AFTER live pricing so it reads each player's
         # final in-match price and applies the result event on top of it.
+        settled_before = self._settled
         settlement_notifs = await self._settle_if_finished(
             session=session, fixture=fixture, scores_payload=data.get("scores"), coefficients=coefficients
         )
@@ -286,6 +290,15 @@ class SportmonksInplayPoller:
         # are committed, in its own session, and never breaks the live feed (see
         # the helper): the value history is a secondary, self-healing projection.
         await self._materialize_value_snapshots(_ticked_player_ids_from(notifications))
+
+        # The instant a fixture settles at full-time, refresh the season-aggregate
+        # stats (core.player_tournament_stat) for its two teams. Sportmonks
+        # finalises season statistics within ~10 min of the whistle and we settle
+        # after a 7 min grace window, so the PlayerSheet Statistics panel goes from
+        # up to ~24 h stale (the daily ReferenceRefresher) to ~match-end fresh.
+        # Fires once per fixture (the _settled false->true edge).
+        if self._settled and not settled_before:
+            await self._refresh_tournament_stats(fixture)
 
         log.info(
             "ingest.inplay.tick",
@@ -391,6 +404,57 @@ class SportmonksInplayPoller:
         # poll would only re-log.
         self._settled = True
         return notifications
+
+    async def _refresh_tournament_stats(self, fixture: Fixture | None) -> None:
+        """Re-pull core.player_tournament_stat for THIS fixture's two teams right
+        after it settles at full-time, scoped to those teams (two squad calls).
+
+        Deliberately decoupled from the live tick path, exactly like
+        ``_materialize_value_snapshots``:
+        - runs in its OWN session, committed AFTER the settlement write, so a
+          squad-endpoint hiccup can never roll back the result;
+        - NEVER propagates an error to the ingest loop — the daily
+          ``ReferenceRefresher`` is the catch-all net (and Sportmonks keeps
+          refining the aggregate for days), so a transient failure here is
+          harmless and self-heals on the next reference tick.
+
+        ``bootstrap_player_stats`` only reads ``sportmonks_team_id`` from each
+        pair, so the internal id we attach is informational."""
+        if fixture is None or fixture.season_id is None:
+            return
+        sportmonks_by_internal = {internal: smk for smk, internal in self.id_maps.team_id_by_sportmonks.items()}
+        teams: list[tuple[int, str]] = []
+        for internal_team_id in (fixture.home_team_id, fixture.away_team_id):
+            smk = sportmonks_by_internal.get(internal_team_id)
+            if smk is not None:
+                teams.append((smk, internal_team_id))
+        if not teams:
+            return
+        try:
+            async with self.session_factory() as session:
+                count = await bootstrap_player_stats(
+                    client=self.client,
+                    raw_archive=SqlAlchemyRawSportmonksEventRepository(session),
+                    player_repo=SqlAlchemyPlayerRepository(session),
+                    stat_repo=SqlAlchemyPlayerTournamentStatRepository(session),
+                    teams=teams,
+                    season_id=fixture.season_id,
+                )
+                await session.commit()
+            log.info(
+                "ingest.inplay.tournament_stats_refreshed",
+                fixture_internal_id=self.fixture_internal_id,
+                teams=len(teams),
+                upserts=count,
+            )
+        except Exception as exc:
+            # Broad on purpose: a secondary projection must never break ingest;
+            # logged (not silently swallowed) so the failure stays visible.
+            log.warning(
+                "ingest.inplay.tournament_stats_refresh_failed",
+                fixture_internal_id=self.fixture_internal_id,
+                error=str(exc),
+            )
 
     async def _apply_lineup_drops_if_published(
         self, *, session: AsyncSession, fixture: Fixture | None, coefficients: PricingCoefficients

@@ -648,3 +648,106 @@ async def test_shutdown_noop_when_already_settled(monkeypatch: pytest.MonkeyPatc
     await poller._settle_on_shutdown()
 
     run_settlement.assert_not_awaited()
+
+
+# --- season-aggregate refresh on full-time settlement ---------------------
+#
+# The PlayerSheet Statistics panel reads core.player_tournament_stat, refreshed
+# daily by the ReferenceRefresher. To cut staleness from ~24h to ~match-end,
+# a fixture's two teams are re-pulled the instant it settles at full-time.
+
+
+def _finished_fixture_with_season(season_id: int | None = 26618) -> Fixture:
+    return Fixture(
+        id=42,
+        home_team_id="FRA",
+        away_team_id="ARG",
+        status=FixtureStatus.FINISHED,
+        group="D",
+        home_score=1,
+        away_score=0,
+        season_id=season_id,
+    )
+
+
+@pytest.mark.anyio
+async def test_refresh_tournament_stats_scopes_to_fixture_teams(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Only THIS fixture's two teams are re-pulled (two squad calls), mapped from
+    # internal id back to the sportmonks team id the squad endpoint needs.
+    captured: dict[str, Any] = {}
+
+    async def _fake_bootstrap(**kwargs: Any) -> int:
+        captured.update(kwargs)
+        return 46
+
+    monkeypatch.setattr(poller_mod, "bootstrap_player_stats", _fake_bootstrap)
+    poller = _settlement_poller()
+
+    await poller._refresh_tournament_stats(_finished_fixture_with_season())
+
+    # id_maps: {200: "FRA", 201: "ARG"} → reverse gives FRA→200, ARG→201.
+    assert captured["teams"] == [(200, "FRA"), (201, "ARG")]
+    assert captured["season_id"] == 26618
+
+
+@pytest.mark.anyio
+async def test_refresh_tournament_stats_noop_without_season(monkeypatch: pytest.MonkeyPatch) -> None:
+    bootstrap = AsyncMock(return_value=0)
+    monkeypatch.setattr(poller_mod, "bootstrap_player_stats", bootstrap)
+    poller = _settlement_poller()
+
+    await poller._refresh_tournament_stats(_finished_fixture_with_season(season_id=None))
+    await poller._refresh_tournament_stats(None)
+
+    bootstrap.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_refresh_tournament_stats_swallows_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Secondary projection: a squad-endpoint failure must never break ingest.
+    monkeypatch.setattr(poller_mod, "bootstrap_player_stats", AsyncMock(side_effect=RuntimeError("squad 503")))
+    poller = _settlement_poller()
+
+    # Must not raise.
+    await poller._refresh_tournament_stats(_finished_fixture_with_season())
+
+
+@pytest.mark.anyio
+async def test_settlement_edge_triggers_one_stats_refresh(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The false→true _settled edge fires the refresh exactly once.
+    refresh = AsyncMock()
+    monkeypatch.setattr(SportmonksInplayPoller, "_refresh_tournament_stats", refresh)  # slots → patch the class
+    monkeypatch.setattr(SportmonksInplayPoller, "_materialize_value_snapshots", AsyncMock())
+
+    async def _settle_flips(self: SportmonksInplayPoller, **_kwargs: Any) -> list[tuple[str, bytes]]:
+        self._settled = True
+        return []
+
+    monkeypatch.setattr(SportmonksInplayPoller, "_settle_if_finished", _settle_flips)
+    poller = _settlement_poller()
+
+    async with poller.session_factory() as session:
+        await poller._project_and_persist(
+            session=session, endpoint="/x", params={}, envelope=_envelope_with(include_fixture_envelope=True)
+        )
+
+    refresh.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_no_stats_refresh_when_already_settled(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A post-FT poll on an already-settled fixture must NOT re-trigger the refresh
+    # (no edge): the once-per-fixture guard mirrors the settlement guard.
+    refresh = AsyncMock()
+    monkeypatch.setattr(SportmonksInplayPoller, "_refresh_tournament_stats", refresh)  # slots → patch the class
+    monkeypatch.setattr(SportmonksInplayPoller, "_materialize_value_snapshots", AsyncMock())
+    monkeypatch.setattr(SportmonksInplayPoller, "_settle_if_finished", AsyncMock(return_value=[]))
+    poller = _settlement_poller()
+    poller._settled = True
+
+    async with poller.session_factory() as session:
+        await poller._project_and_persist(
+            session=session, endpoint="/x", params={}, envelope=_envelope_with(include_fixture_envelope=True)
+        )
+
+    refresh.assert_not_awaited()
