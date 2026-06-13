@@ -69,6 +69,13 @@ export interface TradePreview {
   // user they hit "the whole player" and shows the max still tradeable.
   capped: boolean;
   max_trade_display_shares: number; // headroom toward ±100%, in displayed shares
+
+  // Portfolio-level margin (leverage limit). ``buying_power`` is the €M still
+  // deployable; ``exceeds_margin`` is true when THIS trade's added gross
+  // exposure would breach it (so the server would reject it). Closing/covering
+  // a position reduces exposure and never exceeds.
+  buying_power: number;
+  exceeds_margin: boolean;
 }
 
 /** Pure orchestration: pulls the live state (portfolio, holding, price)
@@ -91,6 +98,12 @@ export function simulate_trade(input: TradePreviewInput): TradePreview {
   const short_quantity = compute_short_quantity(input.kind, shares, held_shares);
   const { insufficient, shortfall } = compute_buy_shortfall(input.kind, amount, cash_before);
   const shares_after = compute_shares_after(input.kind, held_shares, shares);
+
+  // Margin: only the gross-exposure INCREASE consumes buying power (closing or
+  // covering reduces exposure → never exceeds). Equity ≈ AUM, same base the
+  // backend margin rule uses, so the preview agrees with what the server accepts.
+  const added_exposure = Math.max(0, (Math.abs(shares_after) - Math.abs(held_shares)) * total_value);
+  const exceeds_margin = added_exposure > totals.buying_power + 1e-9;
 
   return {
     player_id: input.player.id,
@@ -116,5 +129,7 @@ export function simulate_trade(input: TradePreviewInput): TradePreview {
     realized_pnl: compute_realized_pnl(input.kind, shares, total_value, avg_buy, held_shares),
     capped,
     max_trade_display_shares: to_display_shares(trade_headroom_fraction(input.kind, held_shares), n),
+    buying_power: totals.buying_power,
+    exceeds_margin,
   };
 }

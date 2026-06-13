@@ -184,9 +184,14 @@ export function TradeDialog({
   // player-value cap (max_trade_display_shares = headroom toward ±100%).
   const safe_pps = price_per_share > 0 ? price_per_share : 1;
   const max_affordable = is_buy ? preview.cash_before / safe_pps : Infinity;
-  const slider_max = Math.max(1, Math.floor(Math.min(max_affordable, preview.max_trade_display_shares)));
+  // Buys also can't exceed the margin/leverage headroom (buying power).
+  const max_margin = is_buy ? preview.buying_power / safe_pps : Infinity;
+  const slider_max = Math.max(
+    1,
+    Math.floor(Math.min(max_affordable, max_margin, preview.max_trade_display_shares)),
+  );
 
-  const can_confirm = !preview.insufficient_capital && final_shares > 0;
+  const can_confirm = !preview.insufficient_capital && !preview.exceeds_margin && final_shares > 0;
 
   return (
     <Sheet
@@ -618,6 +623,26 @@ export function TradeDialog({
               <strong style={{ color: "var(--color-negative)" }}>Insufficient capital.</strong> You need{" "}
               <span className="mono" style={{ fontWeight: 700 }}>€{preview.shortfall.toLocaleString()}</span> more.
               You have <span className="mono">€{preview.cash_before.toLocaleString()}</span> available.
+            </span>
+          </div>
+        )}
+        {preview.exceeds_margin && !preview.insufficient_capital && (
+          <div
+            style={{
+              background: "color-mix(in srgb, var(--color-negative) 8%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--color-negative) 25%, transparent)",
+              borderRadius: 8,
+              padding: "10px 14px",
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 10,
+            }}
+          >
+            <span style={{ fontSize: 16, flexShrink: 0 }}>⛔</span>
+            <span style={{ fontSize: 12, color: "rgba(255,255,255,.7)", lineHeight: 1.45 }}>
+              <strong style={{ color: "var(--color-negative)" }}>Exceeds buying power.</strong> This trade adds more
+              exposure than your <span className="mono">{fmt_eur_m(preview.buying_power)}</span> of buying power allows.
+              Reduce the size.
             </span>
           </div>
         )}

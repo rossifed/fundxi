@@ -65,9 +65,12 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
   // canonical ownership fraction sent to the backend.
   const safe_pps = preview.price_per_share > 0 ? preview.price_per_share : 1;
   const max_affordable = is_buy ? preview.cash_before / safe_pps : Infinity;
-  const slider_max = Math.max(1, Math.floor(Math.min(max_affordable, preview.max_trade_display_shares)));
+  // Buys also can't exceed the margin/leverage headroom (buying power).
+  const max_margin = is_buy ? preview.buying_power / safe_pps : Infinity;
+  const slider_max = Math.max(1, Math.floor(Math.min(max_affordable, max_margin, preview.max_trade_display_shares)));
 
-  const can_confirm = phase === "form" && !preview.insufficient_capital && preview.shares > 0;
+  const can_confirm =
+    phase === "form" && !preview.insufficient_capital && !preview.exceeds_margin && preview.shares > 0;
 
   // Switching unit carries the value over instead of resetting to 0.
   const switch_mode = (next: TradeMode) => {
@@ -232,6 +235,12 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
               )}
               {preview.insufficient_capital && (
                 <Text style={styles.error}>Insufficient cash — short by {fmt_eur_m(preview.shortfall)}.</Text>
+              )}
+              {preview.exceeds_margin && !preview.insufficient_capital && (
+                <Text style={styles.error}>
+                  Exceeds buying power — adds more exposure than {fmt_eur_m(preview.buying_power)} allows. Reduce the
+                  size.
+                </Text>
               )}
               {error && <Text style={styles.error}>{error}</Text>}
 
