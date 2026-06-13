@@ -61,7 +61,10 @@ def _event_dto(ev: MatchEvent, player_names: dict[int, str]) -> MatchEventDTO:
     player_name = player_names.get(ev.player_id) if ev.player_id else None
     related_name = player_names.get(ev.related_player_id) if ev.related_player_id else None
     headline: str | None = None
-    if ev.type in (MatchEventType.GOAL, MatchEventType.PENALTY):
+    if ev.type is MatchEventType.OWN_GOAL:
+        if player_name:
+            headline = f"Own goal: {player_name}"
+    elif ev.type in (MatchEventType.GOAL, MatchEventType.PENALTY):
         if related_name and player_name:
             headline = f"Goal: {player_name} (assist {related_name})"
         elif player_name:
@@ -81,6 +84,7 @@ def _event_dto(ev: MatchEvent, player_names: dict[int, str]) -> MatchEventDTO:
         team_id=ev.team_id,
         headline=headline,
         info=ev.info,
+        is_own_goal=ev.type is MatchEventType.OWN_GOAL,
     )
 
 

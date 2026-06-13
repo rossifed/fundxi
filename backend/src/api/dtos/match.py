@@ -37,9 +37,16 @@ class MatchEventDTO(BaseModel):
     # substitution swap on the pitch and to attribute the assist.
     related_player_id: int | None
     related_player_name: str | None
+    # team_id is the team the event is CREDITED to. For an own goal this is
+    # the BENEFITING team (the opponent of the scorer), already normalised at
+    # ingest — so the scorer (player_name) belongs to the OTHER team.
     team_id: str | None
     headline: str | None
     info: str | None
+    # True when the event is an own goal. The glyph stays "⚽" (it is a goal in
+    # the feed) but the frontend renders it distinctly (red) and does not credit
+    # the scorer with a normal goal.
+    is_own_goal: bool = False
 
 
 class MatchResponse(BaseModel):

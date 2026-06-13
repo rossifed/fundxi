@@ -76,7 +76,13 @@ function ScorerColumn({ goals, align }: { goals: MatchEvent[]; align: "left" | "
       {goals.map((g, i) => (
         <div key={`${g.minute}-${g.player_name ?? "?"}-${i}`}>
           ⚽ {g.player_name ?? "?"}
-          {g.type === "🎯" ? " (p)" : ""}{" "}
+          {g.is_own_goal ? (
+            <span style={{ opacity: 0.7, fontWeight: 700 }}> (og)</span>
+          ) : g.type === "🎯" ? (
+            " (p)"
+          ) : (
+            ""
+          )}{" "}
           <span className="mono" style={{ color: "rgba(255,255,255,.55)", fontWeight: 700 }}>{g.minute}'</span>
         </div>
       ))}

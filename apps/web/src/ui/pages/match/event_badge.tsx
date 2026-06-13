@@ -19,18 +19,21 @@ import type { SubInfo } from "@fundxi/core/domain/match/substitutions";
 
 export interface MatchEventCounts {
   goals: number;
+  own_goals: number;
   yellow: number;
   red: number;
 }
 
-/** Tally goals + cards per player from the real match events feed.
- * Returns an empty map when there are no events. */
+/** Tally goals + cards per player from the real match events feed. Own goals
+ * are kept apart from normal goals (`own_goals`) so the scorer is NOT credited
+ * with a goal for his team. Returns an empty map when there are no events. */
 export function count_match_events(events: MatchEvent[]): Map<number, MatchEventCounts> {
   const m = new Map<number, MatchEventCounts>();
   for (const ev of events) {
     if (!ev.player_id) continue;
-    const c = m.get(ev.player_id) ?? { goals: 0, yellow: 0, red: 0 };
-    if (ev.type === "⚽" || ev.type === "🎯") c.goals += 1;
+    const c = m.get(ev.player_id) ?? { goals: 0, own_goals: 0, yellow: 0, red: 0 };
+    if (ev.is_own_goal) c.own_goals += 1;
+    else if (ev.type === "⚽" || ev.type === "🎯") c.goals += 1;
     else if (ev.type === "🟨") c.yellow += 1;
     else if (ev.type === "🟥") c.red += 1;
     m.set(ev.player_id, c);
@@ -63,13 +66,15 @@ const _base_style: CSSProperties = {
  * has no event yet. Same icons, same order, same title format on every
  * surface — coherence by construction. */
 export function MatchEventBadge({ events, variant }: MatchEventBadgeProps) {
-  if (!events || (events.goals === 0 && events.yellow === 0 && events.red === 0)) return null;
+  if (!events || (events.goals === 0 && events.own_goals === 0 && events.yellow === 0 && events.red === 0))
+    return null;
   const style: CSSProperties =
     variant === "corner"
       ? { ..._base_style, position: "absolute", top: -4, left: -6 }
       : _base_style;
   const title = [
     events.goals ? `${events.goals} goal${events.goals > 1 ? "s" : ""}` : null,
+    events.own_goals ? `${events.own_goals} own goal${events.own_goals > 1 ? "s" : ""}` : null,
     events.yellow ? "yellow card" : null,
     events.red ? "red card" : null,
   ]
@@ -79,6 +84,14 @@ export function MatchEventBadge({ events, variant }: MatchEventBadgeProps) {
     <span style={style} title={title}>
       {events.red > 0 ? "🟥" : events.yellow > 0 ? "🟨" : null}
       {events.goals > 0 ? (events.goals === 1 ? "⚽" : `⚽×${events.goals}`) : null}
+      {events.own_goals > 0 ? (
+        <>
+          ⚽
+          <span style={{ fontSize: 9, fontWeight: 700, opacity: 0.7, marginLeft: 1 }}>
+            (og){events.own_goals > 1 ? `×${events.own_goals}` : ""}
+          </span>
+        </>
+      ) : null}
     </span>
   );
 }

@@ -28,6 +28,7 @@ interface MatchEventDTO {
   team_id: string | null;
   headline: string | null;
   info: string | null;
+  is_own_goal?: boolean | null;
 }
 
 interface MatchResponseDTO {
@@ -77,6 +78,7 @@ function dto_event(e: MatchEventDTO): MatchEvent {
     team_id: e.team_id ?? undefined,
     headline: e.headline ?? undefined,
     comment: e.info ?? undefined,
+    is_own_goal: e.is_own_goal ?? false,
   };
 }
 

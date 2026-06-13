@@ -28,9 +28,15 @@ export interface MatchEvent {
   // assist provider on a goal. Drives the pitch swap + sub badges.
   related_player_id?: number;
   related_player_name?: string;
+  // The team the event is CREDITED to. For an own goal this is the
+  // benefiting team (the scorer's opponent), already normalised by the BFF —
+  // so the scorer (player_name) belongs to the OTHER team.
   team_id?: string;
   headline?: string;
   comment?: string;
+  // True for an own goal. The glyph stays "⚽" but it renders distinctly (red)
+  // and does not count as a normal goal for the scorer.
+  is_own_goal?: boolean;
 }
 
 export interface PlayerCurvePoint {

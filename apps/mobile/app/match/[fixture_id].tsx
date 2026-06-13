@@ -61,18 +61,22 @@ const STAT_ROWS: { code: string; label: string; pct?: boolean }[] = [
 
 interface EventCounts {
   goals: number;
+  own_goals: number;
   yellow: number;
   red: number;
 }
+// Own goals are kept apart from normal goals so the scorer is NOT credited with
+// a goal for his team (he is credited under the opponent in the score).
 function count_events(events: MatchEvent[]): Map<number, EventCounts> {
   const map = new Map<number, EventCounts>();
   const bump = (id: number, k: keyof EventCounts) => {
-    const c = map.get(id) ?? { goals: 0, yellow: 0, red: 0 };
+    const c = map.get(id) ?? { goals: 0, own_goals: 0, yellow: 0, red: 0 };
     c[k] += 1;
     map.set(id, c);
   };
   for (const e of events) {
-    if (GOAL_GLYPHS.has(e.type)) bump(e.player_id, "goals");
+    if (e.is_own_goal) bump(e.player_id, "own_goals");
+    else if (GOAL_GLYPHS.has(e.type)) bump(e.player_id, "goals");
     else if (e.type === "🟨") bump(e.player_id, "yellow");
     else if (e.type === "🟥") bump(e.player_id, "red");
   }
@@ -322,19 +326,25 @@ function Scorers({ goals, align }: { goals: MatchEvent[]; align: "center" }) {
   // ("Surname 12', 45'"), collapsing a hat-trick into one line. The minute is its
   // own non-shrinking element, so it is NEVER truncated — only the surname could
   // ellipsis as an absolute last resort (rare once it's just the surname).
-  const by_player: { name: string; mins: string[] }[] = [];
+  // Own-goal entries are grouped apart and tagged "(og)" — an own goal is
+  // listed under the BENEFITING team but the scorer plays for the other one.
+  const by_player: { name: string; mins: string[]; own: boolean }[] = [];
   for (const g of goals) {
     const name = g.player_name ?? "?";
+    const own = g.is_own_goal === true;
     const min = `${g.minute}'${g.type === "🎯" ? " (p)" : ""}`;
-    const row = by_player.find(p => p.name === name);
+    const row = by_player.find(p => p.name === name && p.own === own);
     if (row) row.mins.push(min);
-    else by_player.push({ name, mins: [min] });
+    else by_player.push({ name, mins: [min], own });
   }
   return (
     <View style={{ marginTop: 8, alignItems: align }}>
       {by_player.map((p, i) => (
         <View key={`${p.name}-${i}`} style={styles.scorer_row}>
-          <Text style={styles.scorer} numberOfLines={1}>⚽ {surname(p.name)}</Text>
+          <Text style={styles.scorer} numberOfLines={1}>
+            ⚽ {surname(p.name)}
+            {p.own ? <Text style={styles.scorer_og}> (og)</Text> : null}
+          </Text>
           <Text style={styles.scorer_min} numberOfLines={1}>{p.mins.join(", ")}</Text>
         </View>
       ))}
@@ -378,9 +388,17 @@ function RosterCard({
       <View style={styles.rc_meta}>
         <View style={styles.rc_name_row}>
           <Text style={styles.rc_name} numberOfLines={1}>{p.name}</Text>
-          {counts && (counts.goals > 0 || counts.yellow > 0 || counts.red > 0) && (
+          {counts && (counts.goals > 0 || counts.own_goals > 0 || counts.yellow > 0 || counts.red > 0) && (
             <Text style={styles.rc_badges}>
               {counts.goals > 0 ? `⚽${counts.goals > 1 ? counts.goals : ""}` : ""}
+              {/* Own goal: same ball glyph, tagged with a small "(og)" — the
+                  scorer is NOT credited a goal for his team. */}
+              {counts.own_goals > 0 ? (
+                <Text>
+                  {" ⚽"}
+                  <Text style={styles.rc_og}>(og){counts.own_goals > 1 ? counts.own_goals : ""}</Text>
+                </Text>
+              ) : ""}
               {counts.yellow > 0 ? "🟨" : ""}
               {counts.red > 0 ? "🟥" : ""}
             </Text>
@@ -598,6 +616,7 @@ const styles = StyleSheet.create({
   // sizes to its content (one line each, both flexShrink:0) and stays centered.
   scorer_row: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
   scorer: { fontSize: 10.5, color: "#fff", fontWeight: "600", flexShrink: 0 },
+  scorer_og: { fontSize: 8.5, color: text.secondary, fontWeight: "700" },
   scorer_min: { fontFamily: mono, fontSize: 10.5, color: text.secondary, fontWeight: "700", flexShrink: 0 },
 
   stat_head: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
@@ -644,6 +663,7 @@ const styles = StyleSheet.create({
   rc_name: { fontSize: 12, fontWeight: "600", color: "#fff", flexShrink: 1 },
   rc_pos: { fontSize: 9, fontWeight: "600", color: text.tertiary, letterSpacing: 0.2, marginTop: 1 },
   rc_badges: { fontSize: 10 },
+  rc_og: { fontSize: 7.5, fontWeight: "700", color: text.secondary },
   rc_stat_row: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: 1 },
   rc_price: { fontFamily: mono, fontSize: 11.5, fontWeight: "700", color: "rgba(255,255,255,0.78)" },
   rc_delta: { fontFamily: mono, fontSize: 10, fontWeight: "700" },
