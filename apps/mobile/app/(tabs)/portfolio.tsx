@@ -421,7 +421,11 @@ function PositionRow({ h, on_open }: { h: HoldingDetail; on_open: () => void }) 
         <StripCell label="Opened" value={opened_label} />
         <StripCell label="Shares" value={fmt_shares(Math.abs(h.display_shares))} />
         <StripCell label="Entry price" value={fmt_eur_from_m(h.avg_buy_per_share)} />
-        <StripCell label="% Port" value={`${Math.abs(h.portfolio_pct).toFixed(1)}%`} />
+        <StripCell
+          label="Exposure"
+          value={fmt_eur_m(Math.abs(h.market_value))}
+          sub={`${Math.abs(h.portfolio_pct).toFixed(1)}%`}
+        />
         <StripCell
           label="P&L"
           value={fmt_eur_m_signed(h.pnl)}
