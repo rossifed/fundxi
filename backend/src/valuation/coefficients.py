@@ -46,8 +46,8 @@ class PricingCoefficients:
     # FALLS when the rating falls (reversible by construction). Frozen v1
     # calibration items; tuned on the first real recorded match
     # (context/FUNDXI-VALUATION-MODEL.md).
-    rating_baseline: float = 6.0
-    k_rating: float = 0.04  # +4% of price per rating point above 6.0
+    rating_baseline: float = 6.5  # Sportmonks XI starting value; see config/pricing.toml for the rationale
+    k_rating: float = 0.04  # +4% of price per rating point above the baseline
     live_floor_frac: float = -0.30  # one match can't pull a player below -30%
     live_ceil_frac: float = 0.40  # ...nor above +40%
     multiplier_floor: float = 0.05  # price stays strictly positive

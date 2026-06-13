@@ -131,7 +131,7 @@ def _settle_player(
     """One player's persistent-event tick, or ``None`` when there is nothing to
     write: un-seeded (no base → never synthesised) or no visible price move.
     ``last_price`` falls back to the base value (his current worth IS his base
-    when he has no prior tick); ``rating`` to the neutral 6.0."""
+    when he has no prior tick); ``rating`` to the neutral baseline rating."""
     base = base_by_player.get(player_id)
     if base is None:
         return None
@@ -139,7 +139,9 @@ def _settle_player(
     settled = apply_result_event(last_price, impact_frac, base_value=base, coefficients=coefficients)
     if round(last_price, 2) == settled:
         return None
-    return SettlementTick(player_id=player_id, price=settled, rating=rating_by_player.get(player_id, 6.0))
+    return SettlementTick(
+        player_id=player_id, price=settled, rating=rating_by_player.get(player_id, coefficients.rating_baseline)
+    )
 
 
 def plan_impacts(
@@ -287,7 +289,7 @@ def plan_settlement(
 
     ``last_price_by_player`` falls back to the base value when a player has no
     prior tick (his current worth IS his base); ``rating_by_player`` falls back
-    to the neutral 6.0."""
+    to the neutral baseline rating."""
     home_impact, away_impact = per_side_impacts(is_group=is_group, winner=winner, coefficients=coefficients)
     impact_by_team = {home_team_id: home_impact, away_team_id: away_impact}
 

@@ -121,7 +121,7 @@ This is the calibration layer. Every event in the system maps to a base impact p
 | Penalty missed | −5% | Live event feed |
 | Own goal | −7% | Live event feed |
 | **Performance — match rating** | | |
-| Match rating delta from 6.0 | (rating − 6.0) × 4% | Sportmonks player rating, every minute |
+| Match rating delta from 6.5 | (rating − 6.5) × 4% | Sportmonks player rating, every minute |
 | **Tournament progression** | | |
 | Team wins group stage match | +2% | Match result |
 | Team qualifies for knockout round | +5% | Group stage final standings |
@@ -138,6 +138,8 @@ This is the calibration layer. Every event in the system maps to a base impact p
 | Manager praise / endorsement | +2% | News feed |
 
 These numbers are starting points. They will need calibration against real tournament data. Treat them as v1 defaults, not laws of physics.
+
+**On the 6.5 rating baseline.** The neutral point is **6.5**, not 6.0. Sportmonks documents 6.5 as the starting rating of a player in the XI; across 1.7M ratings their population mean is 6.72 and the modal rating is 6.45 (our own early WC2026 sample confirms it: mean 6.76, median 6.69). A 6.0 baseline sat near the 5th percentile, which had two bad consequences: (a) the median player accrued ~+2.8%/match of permanent value just for playing an average game — a ~+20% structural drift over a tournament — and (b) because most ratings clear 6.0, the rating term was almost always positive, so the "price falls when the rating falls" property rarely fired and a naked short of the field carried free positive EV against the typical sub-6.7 player. At 6.5 the neutral means "started, unremarkable", the median player keeps a small **deliberate** participation premium (~+0.8%/match, the positive counterpart to the −1%/−2% absence penalties), and shorting the field is correctly −EV.
 
 ### 4.2. Volatility multiplier
 
@@ -348,7 +350,7 @@ For the MVP, recommend option 1 supplemented by **manual editorial input** — a
 async function onLiveTick(matchId) {
   const fixture = await sportmonks.getFixture(matchId, { include: 'players.statistics' });
   for (const player of fixture.players) {
-    priceLive(player, ratingOf(player) ?? 6.0);   // null rating → neutral 6.0
+    priceLive(player, ratingOf(player) ?? 6.5);   // null rating → neutral baseline
   }
 }
 
@@ -361,7 +363,7 @@ function priceLive(player, rating) {
   // delta), bounded, then volatility- and pressure-scaled. There is NO separate
   // per-event %: a goal/card moves the price ONLY through the rating Sportmonks
   // raises/lowers (no double-count).
-  const ratingLevel = (rating - 6.0) * 0.04;                 // +4% per point above 6
+  const ratingLevel = (rating - 6.5) * 0.04;                 // +4% per point above the 6.5 baseline
   const core = clamp(ratingLevel + statBonus(player), -0.30, +0.40);
   const liveDelta = core * volatility(player.baseValue) * pressureMod(player);
 

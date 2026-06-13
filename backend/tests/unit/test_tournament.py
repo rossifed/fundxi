@@ -119,8 +119,8 @@ def test_knockout_elimination_crashes_loser_by_40pct_of_current_price() -> None:
     # Losers (ARG) eliminated: -40% of current.
     assert by_player[10].price == 120.00  # 200 * 0.6
     assert by_player[11].price == 30.00  # 50 * 0.6
-    # Settlement carries the neutral rating fallback when none is supplied.
-    assert all(t.rating == 6.0 for t in ticks)
+    # Settlement carries the neutral baseline rating fallback when none is supplied.
+    assert all(t.rating == C.rating_baseline for t in ticks)
 
 
 def test_elimination_is_floored_strictly_positive() -> None:

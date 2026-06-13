@@ -32,8 +32,8 @@ from src.valuation.strategies.layered_v1 import StatSnapshot, continuous_stat_de
 @dataclass(frozen=True, slots=True)
 class PriceSnapshot:
     """One poll's live inputs for ONE player. Every field degrades
-    safely: no rating → neutral (6.0 ⇒ 0 contribution); no pressure →
-    no-op modulator; not live → ``LiveDelta`` is 0."""
+    safely: no rating → neutral (a rating at the baseline ⇒ 0 contribution);
+    no pressure → no-op modulator; not live → ``LiveDelta`` is 0."""
 
     rating: float | None = None
     prev_stats: StatSnapshot = field(default_factory=StatSnapshot)
@@ -67,7 +67,7 @@ def volatility(base_value: float, coefficients: PricingCoefficients = DEFAULT_CO
 
 
 def rating_level(rating: float | None, coefficients: PricingCoefficients = DEFAULT_COEFFICIENTS) -> float:
-    """LEVEL (not a delta): ``(rating - 6.0) * k``. Recomputed from the
+    """LEVEL (not a delta): ``(rating - baseline) * k``. Recomputed from the
     CURRENT rating each poll → reversible. ``None`` ⇒ 0 (neutral)."""
     if rating is None:
         return 0.0

@@ -24,7 +24,15 @@ max_delta_pct_per_poll = 2.0
 min_delta_pct_per_poll = -2.0
 
 # === Model A: rating-driven live multiplier ===
-rating_baseline = 6.0
+# 6.5 = Sportmonks' documented starting value for a player in the XI
+# (population mean 6.72, mode 6.45). 6.0 was the old "average football
+# rating" assumption — wrong for this provider: it sits near the 5th
+# percentile, so it baked a structural long bias (the median player
+# drifted ~+20% over a tournament just for playing) and handed naked
+# shorts free EV against the typical sub-6.7 player. 6.5 keeps a small,
+# deliberate participation premium (~+0.8%/match for the median) while
+# leaving shorts -EV against the field. See FUNDXI-VALUATION-MODEL.md §4.1.
+rating_baseline = 6.5
 k_rating = 0.04                 # +4% of price per rating point above baseline
 live_floor_frac = -0.30         # one match can't pull a player below -30% (pre-volatility core clamp)
 live_ceil_frac = 0.40           # ...nor above +40% (pre-volatility core clamp)

@@ -58,11 +58,11 @@ def test_price_is_monotonic_in_rating(base: float, td: float, r1: float, r2: flo
     assert price(base, td, _snap(hi, pressure=p)).price >= price(base, td, _snap(lo, pressure=p)).price
 
 
-# 3. Rating baseline 6.0 ⇒ zero live contribution — spec §4.1 anchor.
+# 3. Rating baseline 6.5 ⇒ zero live contribution — spec §4.1 anchor.
 # Independent of base/pressure/td, except for rounding the price.
 @given(base=_base, p=_pressure)
 def test_neutral_rating_contributes_nothing(base: float, p: float | None) -> None:
-    assert live_delta(_snap(6.0, pressure=p), base) == 0.0
+    assert live_delta(_snap(6.5, pressure=p), base) == 0.0
 
 
 # 4. Settlement is a pure sum — no hidden state, no rounding side-effect.
@@ -118,13 +118,13 @@ def test_pressure_only_scales_within_clamp(base: float, r: float, p: float | Non
 
 
 # 9. Rating level scales linearly with the rating above baseline.
-# Independent property: doubling the (rating - 6) doubles the level.
+# Independent property: doubling the (rating - 6.5) doubles the level.
 # Catches a non-linear bug (e.g., squared, sigmoid) anywhere.
 # Float-aware comparison: arithmetic is associatively imprecise.
 @given(d=st.floats(min_value=-3.0, max_value=3.0, allow_nan=False))
 def test_rating_level_is_linear_in_rating_offset(d: float) -> None:
-    a = rating_level(6.0 + d)
-    b = rating_level(6.0 + 2.0 * d)
+    a = rating_level(6.5 + d)
+    b = rating_level(6.5 + 2.0 * d)
     assert math.isclose(b, 2.0 * a, rel_tol=1e-9, abs_tol=1e-12)
 
 
