@@ -416,11 +416,12 @@ function PositionRow({ h, on_open }: { h: HoldingDetail; on_open: () => void }) 
         </View>
       </View>
 
-      {/* Your position: date · shares · entry · P&L (amount over percent). */}
+      {/* Your position: date · shares · entry · % of portfolio · P&L. */}
       <View style={[styles.stats_row, styles.row_stats_mt]}>
         <StripCell label="Opened" value={opened_label} />
         <StripCell label="Shares" value={fmt_shares(Math.abs(h.display_shares))} />
         <StripCell label="Entry price" value={fmt_eur_from_m(h.avg_buy_per_share)} />
+        <StripCell label="% Port" value={`${Math.abs(h.portfolio_pct).toFixed(1)}%`} />
         <StripCell
           label="P&L"
           value={fmt_eur_m_signed(h.pnl)}
@@ -774,7 +775,7 @@ const styles = StyleSheet.create({
   trade_total: { fontFamily: mono, fontSize: 13, fontWeight: "700", color: "#fff" },
   trade_date: { fontSize: 11, color: text.tertiary, marginTop: 1 },
 
-  stats_row: { flexDirection: "row", columnGap: 22 },
+  stats_row: { flexDirection: "row", columnGap: 16 },
   strip_cell: {},
   strip_label: { fontSize: 8, fontWeight: "700", color: text.muted, letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 2 },
   strip_value: { fontFamily: mono, fontSize: 12, fontWeight: "700", color: "#fff" },
