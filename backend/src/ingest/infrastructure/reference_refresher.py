@@ -31,6 +31,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.bootstrap import bootstrap_fixtures, bootstrap_player_stats, bootstrap_squads, bootstrap_teams
+from src.application.derive_team_colors import derive_team_colors
 from src.infrastructure.db.repositories.coach import SqlAlchemyCoachRepository
 from src.infrastructure.db.repositories.fixture import SqlAlchemyFixtureRepository
 from src.infrastructure.db.repositories.player import SqlAlchemyPlayerRepository
@@ -112,6 +113,13 @@ class ReferenceRefresher:
             teams=team_pairs,
             season_id=self.season_id,
         )
+        # Re-derive team accent colours from the kit palettes. bootstrap_teams
+        # above carries an empty placeholder colour but no longer overwrites the
+        # stored one (the team upsert omits ``color``), so this is the single
+        # writer of core.team.color. Running it here keeps colours fresh as new
+        # fixtures expose kit palettes — without it the daily refresh left teams
+        # colourless even after a manual one-shot derive.
+        await derive_team_colors(session)
         # Reads see the session's pending writes (autoflush) — the maps
         # are consistent with what we are about to commit.
         new_maps = await load_sportmonks_id_maps(session)

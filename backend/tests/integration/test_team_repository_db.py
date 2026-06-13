@@ -47,6 +47,10 @@ async def _rows(session: AsyncSession) -> list[tuple[str, int, str]]:
     return [(r[0], r[1], r[2]) for r in result.all()]
 
 
+async def _color(session: AsyncSession, team_id: str) -> str | None:
+    return await session.scalar(text("SELECT color FROM core.team WHERE id = :id"), {"id": team_id})
+
+
 async def test_changed_short_code_updates_in_place_without_collision(isolated_session: AsyncSession) -> None:
     repo = SqlAlchemyTeamRepository(isolated_session)
 
@@ -73,3 +77,30 @@ async def test_same_id_resync_updates_normally(isolated_session: AsyncSession) -
     # Same id + same sportmonks_id ⇒ the ordinary on-conflict(id) path updates.
     await repo.upsert(_team("ZZ1", "Testland Updated"), sportmonks_id=_SMK)
     assert await _rows(isolated_session) == [("ZZ1", _SMK, "Testland Updated")]
+
+
+async def test_resync_preserves_derived_color(isolated_session: AsyncSession) -> None:
+    # color is a DERIVED column (set by derive_team_colors from kit palettes),
+    # not provider data. A provider re-sync carries only the empty placeholder,
+    # so the on-conflict(id) path must NOT clobber the stored colour — otherwise
+    # the daily refresh leaves every team colourless.
+    repo = SqlAlchemyTeamRepository(isolated_session)
+    await repo.upsert(_team("ZZ1", "Testland"), sportmonks_id=_SMK)
+    # Simulate derive_team_colors having computed an accent.
+    await isolated_session.execute(text("UPDATE core.team SET color = '#C40010' WHERE id = 'ZZ1'"))
+
+    # Provider re-sync with the empty placeholder colour.
+    await repo.upsert(_team("ZZ1", "Testland Updated"), sportmonks_id=_SMK)
+
+    assert await _color(isolated_session, "ZZ1") == "#C40010"
+
+
+async def test_changed_short_code_preserves_derived_color(isolated_session: AsyncSession) -> None:
+    # Same guarantee on the update-in-place (short_code changed) path.
+    repo = SqlAlchemyTeamRepository(isolated_session)
+    await repo.upsert(_team("ZZ1", "Testland"), sportmonks_id=_SMK)
+    await isolated_session.execute(text("UPDATE core.team SET color = '#009C3B' WHERE id = 'ZZ1'"))
+
+    await repo.upsert(_team("ZZ2", "Testland Renamed"), sportmonks_id=_SMK)
+
+    assert await _color(isolated_session, "ZZ1") == "#009C3B"

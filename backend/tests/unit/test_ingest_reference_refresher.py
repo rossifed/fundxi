@@ -47,7 +47,9 @@ def _fake_session_factory() -> Any:
     return MagicMock(side_effect=_ctx)
 
 
-def _patch_bootstrap(monkeypatch: pytest.MonkeyPatch, *, teams_fail: bool = False) -> None:
+def _patch_bootstrap(monkeypatch: pytest.MonkeyPatch, *, teams_fail: bool = False) -> AsyncMock:
+    """Patch the orchestrated services. Returns the derive_team_colors spy so a
+    test can assert it ran (it's the single writer of core.team.color)."""
     mod = "src.ingest.infrastructure.reference_refresher"
 
     async def _bootstrap_teams(**_: Any) -> list[tuple[int, str]]:
@@ -67,11 +69,14 @@ def _patch_bootstrap(monkeypatch: pytest.MonkeyPatch, *, teams_fail: bool = Fals
     async def _load_maps(_session: Any) -> SportmonksIdMaps:
         return _NEW_MAPS
 
+    derive_spy = AsyncMock(return_value=4)
     monkeypatch.setattr(f"{mod}.bootstrap_teams", _bootstrap_teams)
     monkeypatch.setattr(f"{mod}.bootstrap_fixtures", _bootstrap_fixtures)
     monkeypatch.setattr(f"{mod}.bootstrap_squads", _bootstrap_squads)
     monkeypatch.setattr(f"{mod}.bootstrap_player_stats", _bootstrap_player_stats)
+    monkeypatch.setattr(f"{mod}.derive_team_colors", derive_spy)
     monkeypatch.setattr(f"{mod}.load_sportmonks_id_maps", _load_maps)
+    return derive_spy
     # The repo constructors used inside are harmless with a MagicMock session,
     # but stub them to be safe.
     for name in (
@@ -111,6 +116,19 @@ async def test_refresh_runs_bootstrap_reloads_maps_and_publishes(monkeypatch: py
     subject, payload = publisher.log[0]
     assert subject == "fundxi.reference_refreshed"
     assert json.loads(payload) == {"kind": "reference_refreshed", "teams": 2}
+
+
+@pytest.mark.anyio
+async def test_refresh_rederives_team_colors(monkeypatch: pytest.MonkeyPatch) -> None:
+    # team.color is derived from kit palettes and is no longer written by the
+    # team upsert, so the daily refresh must re-derive it — otherwise colours
+    # stay empty even after a manual one-shot derive.
+    derive_spy = _patch_bootstrap(monkeypatch)
+    refresher = _refresher(_RecordingPublisher(), [])
+
+    await refresher.refresh_once()
+
+    derive_spy.assert_awaited_once()
 
 
 @pytest.mark.anyio

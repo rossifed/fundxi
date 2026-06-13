@@ -34,9 +34,7 @@ class SqlAlchemyTeamRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def upsert(
-        self, team: Team, *, sportmonks_id: int | None = None, coach_id: int | None = None
-    ) -> str:
+    async def upsert(self, team: Team, *, sportmonks_id: int | None = None, coach_id: int | None = None) -> str:
         # sportmonks_id is the team's stable identity; the internal id is the
         # provider short_code, which CAN change between syncs (e.g. Haiti
         # HTI→HAI). Keying the upsert on id alone then tries to INSERT a second
@@ -46,17 +44,15 @@ class SqlAlchemyTeamRepository:
         # existing FKs (fixtures, players, quotes) stay valid — instead of
         # creating a colliding new one.
         if sportmonks_id is not None:
-            existing_id = await self._session.scalar(
-                select(TeamORM.id).where(TeamORM.sportmonks_id == sportmonks_id)
-            )
+            existing_id = await self._session.scalar(select(TeamORM.id).where(TeamORM.sportmonks_id == sportmonks_id))
             if existing_id is not None and existing_id != team.id:
                 await self._session.execute(
                     update(TeamORM)
                     .where(TeamORM.sportmonks_id == sportmonks_id)
+                    # ``color`` is intentionally NOT updated — see update_payload below.
                     .values(
                         name=team.name,
                         flag=team.flag,
-                        color=team.color,
                         kind=team.kind.value,
                         continent=team.continent,
                         group=team.group,
@@ -82,7 +78,12 @@ class SqlAlchemyTeamRepository:
             "sportmonks_id": stmt.excluded.sportmonks_id,
             "name": stmt.excluded.name,
             "flag": stmt.excluded.flag,
-            "color": stmt.excluded.color,
+            # ``color`` is a DERIVED column owned solely by derive_team_colors
+            # (computed from kit palettes). project_team carries only an empty
+            # placeholder, so syncing it here on every provider refresh clobbered
+            # the derived accent back to "" — the daily ReferenceRefresher then
+            # left every team colourless. Omit it so the derived value survives;
+            # a brand-new team is INSERTed with "" and coloured on the next derive.
             "kind": stmt.excluded.kind,
             "continent": stmt.excluded.continent,
             "group": stmt.excluded.group,
@@ -95,17 +96,13 @@ class SqlAlchemyTeamRepository:
 
     async def list_all(self) -> list[Team]:
         result = await self._session.execute(
-            select(TeamORM, CoachORM)
-            .outerjoin(CoachORM, CoachORM.id == TeamORM.coach_id)
-            .order_by(TeamORM.name)
+            select(TeamORM, CoachORM).outerjoin(CoachORM, CoachORM.id == TeamORM.coach_id).order_by(TeamORM.name)
         )
         return [_to_domain(team, coach) for team, coach in result.all()]
 
     async def get_by_id(self, team_id: str) -> Team | None:
         result = await self._session.execute(
-            select(TeamORM, CoachORM)
-            .outerjoin(CoachORM, CoachORM.id == TeamORM.coach_id)
-            .where(TeamORM.id == team_id)
+            select(TeamORM, CoachORM).outerjoin(CoachORM, CoachORM.id == TeamORM.coach_id).where(TeamORM.id == team_id)
         )
         row = result.one_or_none()
         if row is None:
