@@ -416,17 +416,12 @@ function RosterCard({
   );
 }
 
-function is_light(hex: string): boolean {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return 0.299 * r + 0.587 * g + 0.114 * b > 200; // near-white → would read as a hard border
-}
-// Aura tint: the provider team hex when it is distinct enough, otherwise a side
-// default (blue home / warm-red away — the reference's home/away convention) so a
-// white kit never paints a hard white line. Provider hex inline (allowed).
+// Aura tint: the provider team hex whenever we have one — used as-is, even if
+// light (a light kit is the team's real colour; we don't drop it). Falls back to
+// a side default (blue home / warm-red away) only when no colour is available.
+// Provider hex inline (allowed — it's per-row provider data, not theme).
 function glow_color(hex: string | undefined, side: "left" | "right"): string {
-  if (hex && /^#[0-9a-fA-F]{6}$/.test(hex) && !is_light(hex)) return hex;
+  if (hex && /^#[0-9a-fA-F]{6}$/.test(hex)) return hex;
   return side === "left" ? palette.accentBlue : palette.negative;
 }
 
