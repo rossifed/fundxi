@@ -29,6 +29,7 @@ class PlayerTournamentStat:
     shots_off_target: int | None = None
     offsides: int | None = None
     big_chances_created: int | None = None
+    big_chances_missed: int | None = None
     # Passing / creation
     accurate_passes: int | None = None
     crosses_total: int | None = None
@@ -49,8 +50,11 @@ class PlayerTournamentStat:
     duels_won: int | None = None
     aerials_won: int | None = None
     shots_blocked: int | None = None
+    errors_leading_to_goal: int | None = None
     # Discipline
     fouls: int | None = None
+    own_goals: int | None = None
     # Goalkeeping
     saves: int | None = None
     goals_conceded: int | None = None
+    clean_sheets: int | None = None

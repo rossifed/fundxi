@@ -38,6 +38,7 @@ class PlayerTournamentStatORM(Base, AuditMixin):
     shots_off_target: Mapped[int | None]
     offsides: Mapped[int | None]
     big_chances_created: Mapped[int | None]
+    big_chances_missed: Mapped[int | None]
     accurate_passes: Mapped[int | None]
     crosses_total: Mapped[int | None]
     crosses_accurate: Mapped[int | None]
@@ -55,7 +56,10 @@ class PlayerTournamentStatORM(Base, AuditMixin):
     duels_won: Mapped[int | None]
     aerials_won: Mapped[int | None]
     shots_blocked: Mapped[int | None]
+    errors_leading_to_goal: Mapped[int | None]
     fouls: Mapped[int | None]
+    own_goals: Mapped[int | None]
     saves: Mapped[int | None]
     goals_conceded: Mapped[int | None]
+    clean_sheets: Mapped[int | None]
     raw_stats: Mapped[dict[str, Any] | None] = mapped_column(JSONB)

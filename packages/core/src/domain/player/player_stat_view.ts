@@ -91,6 +91,7 @@ export function build_tournament_stat_groups(s: PlayerTournamentStat): StatGroup
         kpi("Shots OT/Tot", shots.value, "neutral", shots.title),
         kpi("Shots off T", count(s.shots_off_target)),
         kpi("Big Chances", count(s.big_chances_created), pos(s.big_chances_created)),
+        kpi("BC Missed", count(s.big_chances_missed), "neutral", "Big chances missed"),
         kpi("Offsides", count(s.offsides)),
       ],
     },
@@ -125,6 +126,12 @@ export function build_tournament_stat_groups(s: PlayerTournamentStat): StatGroup
         kpi("Duels W/T", duels.value, "neutral", duels.title),
         kpi("Aerials Won", count(s.aerials_won)),
         kpi("Blocks", count(s.shots_blocked)),
+        kpi(
+          "Errors",
+          count(s.errors_leading_to_goal),
+          present(s.errors_leading_to_goal) && s.errors_leading_to_goal > 0 ? "warn" : "neutral",
+          "Errors leading to a goal",
+        ),
       ],
     },
     {
@@ -133,11 +140,16 @@ export function build_tournament_stat_groups(s: PlayerTournamentStat): StatGroup
         kpi("Fouls", count(s.fouls)),
         kpi("Yellow", count(s.yellow_cards), present(s.yellow_cards) && s.yellow_cards > 0 ? "warn" : "neutral"),
         kpi("Red", count(s.red_cards), present(s.red_cards) && s.red_cards > 0 ? "danger" : "neutral"),
+        kpi("Own Goals", count(s.own_goals), present(s.own_goals) && s.own_goals > 0 ? "danger" : "neutral"),
       ],
     },
     {
       title: "Goalkeeping",
-      items: [kpi("Saves", count(s.saves), pos(s.saves)), kpi("Conceded", count(s.goals_conceded))],
+      items: [
+        kpi("Saves", count(s.saves), pos(s.saves)),
+        kpi("Conceded", count(s.goals_conceded)),
+        kpi("Clean Sheets", count(s.clean_sheets), pos(s.clean_sheets)),
+      ],
     },
   ];
 }

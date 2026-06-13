@@ -38,8 +38,12 @@ against the provider catalog (fixtures/{id}?include=lineups.details.type):
 - 119  MINUTES_PLAYED
 - 122  LONG_BALLS
 - 124  THROUGH_BALLS
+- 194  CLEANSHEET
 - 321  APPEARANCES
+- 324  OWN_GOALS
+- 571  ERROR_LEAD_TO_GOAL
 - 580  BIG_CHANCES_CREATED
+- 581  BIG_CHANCES_MISSED
 - 1584 PASSES_ACCURACY (Accurate Passes Percentage; value: {total: 85.34})
 
 Anything else we receive lands in `raw_stats` as-is so we can surface
@@ -86,6 +90,10 @@ _STAT_SHOTS_BLOCKED = 58
 _STAT_FOULS = 56
 _STAT_SAVES = 57
 _STAT_GOALS_CONCEDED = 88
+_STAT_BIG_CHANCES_MISSED = 581
+_STAT_OWN_GOALS = 324
+_STAT_ERRORS_LEADING_TO_GOAL = 571
+_STAT_CLEAN_SHEETS = 194
 
 
 def _total(value: object) -> int | None:
@@ -196,9 +204,13 @@ def project_player_stat(
         duels_won=_total(by_type.get(_STAT_DUELS_WON)),
         aerials_won=_total(by_type.get(_STAT_AERIALS_WON)),
         shots_blocked=_total(by_type.get(_STAT_SHOTS_BLOCKED)),
+        errors_leading_to_goal=_total(by_type.get(_STAT_ERRORS_LEADING_TO_GOAL)),
         fouls=_total(by_type.get(_STAT_FOULS)),
+        own_goals=_total(by_type.get(_STAT_OWN_GOALS)),
         saves=_total(by_type.get(_STAT_SAVES)),
         goals_conceded=_total(by_type.get(_STAT_GOALS_CONCEDED)),
+        big_chances_missed=_total(by_type.get(_STAT_BIG_CHANCES_MISSED)),
+        clean_sheets=_total(by_type.get(_STAT_CLEAN_SHEETS)),
     )
     raw = {"details": block.get("details")}
     return stat, sportmonks_statistic_id, raw

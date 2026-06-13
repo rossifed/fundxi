@@ -22,6 +22,7 @@ function stat(overrides: Partial<PlayerTournamentStat>): PlayerTournamentStat {
     shots_off_target: null,
     offsides: null,
     big_chances_created: null,
+    big_chances_missed: null,
     accurate_passes: null,
     crosses_total: null,
     crosses_accurate: null,
@@ -39,9 +40,12 @@ function stat(overrides: Partial<PlayerTournamentStat>): PlayerTournamentStat {
     duels_won: null,
     aerials_won: null,
     shots_blocked: null,
+    errors_leading_to_goal: null,
     fouls: null,
+    own_goals: null,
     saves: null,
     goals_conceded: null,
+    clean_sheets: null,
     ...overrides,
   };
 }
@@ -114,5 +118,19 @@ describe("build_tournament_stat_groups", () => {
     const groups = build_tournament_stat_groups(stat({}));
     expect(item(groups, "Attacking", "Assists")?.value).toBe("—");
     expect(item(groups, "Defending", "Tackles")?.value).toBe("—");
+  });
+
+  it("surfaces the added metrics with the same absence semantics", () => {
+    const featured = build_tournament_stat_groups(stat({ appearances: 1, own_goals: 1, clean_sheets: 2 }));
+    expect(item(featured, "Attacking", "BC Missed")?.value).toBe("0"); // absent counting ⇒ 0 (featured)
+    expect(item(featured, "Defending", "Errors")?.value).toBe("0");
+    expect(item(featured, "Discipline", "Own Goals")?.value).toBe("1");
+    expect(item(featured, "Discipline", "Own Goals")?.semantic).toBe("danger");
+    expect(item(featured, "Goalkeeping", "Clean Sheets")?.value).toBe("2");
+    expect(item(featured, "Goalkeeping", "Clean Sheets")?.semantic).toBe("good");
+
+    const benched = build_tournament_stat_groups(stat({}));
+    expect(item(benched, "Discipline", "Own Goals")?.value).toBe("—");
+    expect(item(benched, "Goalkeeping", "Clean Sheets")?.value).toBe("—");
   });
 });

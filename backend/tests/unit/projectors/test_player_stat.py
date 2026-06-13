@@ -76,6 +76,10 @@ def test_projects_enriched_stats_into_typed_fields() -> None:
             {"type_id": 56, "value": {"total": 10}},  # fouls
             {"type_id": 57, "value": {"total": 15}},  # saves
             {"type_id": 88, "value": {"total": 6}},  # goals conceded
+            {"type_id": 581, "value": {"total": 2}},  # big chances missed
+            {"type_id": 324, "value": {"total": 1}},  # own goals
+            {"type_id": 571, "value": {"total": 1}},  # errors leading to a goal
+            {"type_id": 194, "value": {"total": 3}},  # clean sheets
         ]
     )
 
@@ -104,6 +108,10 @@ def test_projects_enriched_stats_into_typed_fields() -> None:
     assert stat.fouls == 10
     assert stat.saves == 15
     assert stat.goals_conceded == 6
+    assert stat.big_chances_missed == 2
+    assert stat.own_goals == 1
+    assert stat.errors_leading_to_goal == 1
+    assert stat.clean_sheets == 3
 
 
 def test_enriched_stats_default_to_none_when_absent() -> None:

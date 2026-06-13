@@ -25,6 +25,7 @@ export interface PlayerTournamentStat {
   shots_off_target: number | null;
   offsides: number | null;
   big_chances_created: number | null;
+  big_chances_missed: number | null;
   // Passing / creation
   accurate_passes: number | null;
   crosses_total: number | null;
@@ -45,11 +46,14 @@ export interface PlayerTournamentStat {
   duels_won: number | null;
   aerials_won: number | null;
   shots_blocked: number | null;
+  errors_leading_to_goal: number | null;
   // Discipline
   fouls: number | null;
+  own_goals: number | null;
   // Goalkeeping
   saves: number | null;
   goals_conceded: number | null;
+  clean_sheets: number | null;
 }
 
 const _cache = new Map<number, Promise<PlayerTournamentStat | null>>();
