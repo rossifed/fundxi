@@ -174,46 +174,63 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match, on_op
             const away = teams_api.get(fx.away_team_id);
             if (!home || !away) return null;
             const is_result = match_tab === "latest";
-            return (
+            const row_base: React.CSSProperties = {
+              padding: "10px 18px",
+              borderTop: i > 0 ? "1px solid rgba(255,255,255,.03)" : "none",
+              fontSize: 13,
+              cursor: "pointer",
+            };
+            const home_label = (
+              <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
+                <span style={{ fontWeight: 600 }}>{home.name}</span>
+                <span style={{ fontSize: 18 }}>{home.flag}</span>
+              </span>
+            );
+            const away_label = (
+              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 18 }}>{away.flag}</span>
+                <span style={{ fontWeight: 600 }}>{away.name}</span>
+              </span>
+            );
+            const hover_in = (e: React.MouseEvent<HTMLDivElement>) => (e.currentTarget.style.background = "rgba(255,255,255,.02)");
+            const hover_out = (e: React.MouseEvent<HTMLDivElement>) => (e.currentTarget.style.background = "transparent");
+
+            // Result rows keep the score line; upcoming rows centre the teams
+            // and put the kickoff date/time small underneath them.
+            return is_result ? (
               <div
                 key={fx.id}
                 onClick={() => void open_fixture(fx.id)}
                 role="button"
                 title="Open match"
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: is_result ? "44px 1fr 44px 1fr" : "84px 1fr 28px 1fr",
-                  alignItems: "center",
-                  padding: "10px 18px",
-                  borderTop: i > 0 ? "1px solid rgba(255,255,255,.03)" : "none",
-                  fontSize: 13,
-                  gap: 10,
-                  cursor: "pointer",
-                }}
-                onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.02)")}
-                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                style={{ ...row_base, display: "grid", gridTemplateColumns: "44px 1fr 44px 1fr", alignItems: "center", gap: 10 }}
+                onMouseEnter={hover_in}
+                onMouseLeave={hover_out}
               >
-                {is_result ? (
-                  <span style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,.35)", letterSpacing: 0.5 }}>FT</span>
-                ) : (
-                  <span style={{ fontSize: 11, color: "rgba(255,255,255,.45)", fontWeight: 600, letterSpacing: 0.3 }}>
-                    {fmt_fixture_datetime(fx.date)}
-                  </span>
-                )}
-                <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
-                  <span style={{ fontWeight: 600 }}>{home.name}</span>
-                  <span style={{ fontSize: 18 }}>{home.flag}</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,.35)", letterSpacing: 0.5 }}>FT</span>
+                {home_label}
+                <span className="mono" style={{ fontSize: 13, fontWeight: 800, textAlign: "center" }}>
+                  {fx.home_score ?? 0}–{fx.away_score ?? 0}
                 </span>
-                {is_result ? (
-                  <span className="mono" style={{ fontSize: 13, fontWeight: 800, textAlign: "center" }}>
-                    {fx.home_score ?? 0}–{fx.away_score ?? 0}
-                  </span>
-                ) : (
+                {away_label}
+              </div>
+            ) : (
+              <div
+                key={fx.id}
+                onClick={() => void open_fixture(fx.id)}
+                role="button"
+                title="Open match"
+                style={{ ...row_base, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}
+                onMouseEnter={hover_in}
+                onMouseLeave={hover_out}
+              >
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 28px 1fr", alignItems: "center", gap: 10, width: "100%" }}>
+                  {home_label}
                   <span style={{ fontSize: 11, color: "rgba(255,255,255,.2)", fontWeight: 600, textAlign: "center" }}>vs</span>
-                )}
-                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 18 }}>{away.flag}</span>
-                  <span style={{ fontWeight: 600 }}>{away.name}</span>
+                  {away_label}
+                </div>
+                <span style={{ fontSize: 10, color: "rgba(255,255,255,.4)", fontWeight: 600, letterSpacing: 0.3 }}>
+                  {fmt_fixture_datetime(fx.date)}
                 </span>
               </div>
             );
