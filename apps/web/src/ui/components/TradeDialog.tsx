@@ -1,34 +1,38 @@
+// TradeDialog — buy/sell order entry (form -> submitting -> done).
+//
+// DDD role: UI presentation. A faithful web counterpart of the native
+// TradeSheet (apps/mobile/components/TradeSheet.tsx): title + value line,
+// Buy/Sell toggle, Percent/Shares mode, one slider (+ percent presets), a flat
+// preview list, and a single confirm button; an inline "Bought/Sold -> Done"
+// success state. Numbers come from the shared ``simulate_trade`` (core) and the
+// order is placed via ``trades_api.execute`` — the same surface mobile uses, so
+// the two cannot diverge. Presented through the shared Sheet (centred modal on
+// desktop, bottom-sheet on phone).
+
 import { useEffect, useState } from "react";
-import { teams_api } from "@fundxi/core/api/teams_api";
 import { trades_api } from "@fundxi/core/api/trades_api";
 import { valuations_api } from "@fundxi/core/api/valuations_api";
 import { simulate_trade, type TradeMode } from "@fundxi/core/application/trade_service";
 import type { Player } from "@fundxi/core/domain/player/player";
-import { PlayerChip } from "@/ui/components/PlayerChip";
 import { Sheet } from "@/ui/components/Sheet";
-import { fmt_eur_from_m, fmt_eur_m, fmt_shares } from "@/ui/helpers/format";
+import { fmt_eur_from_m, fmt_eur_m, fmt_eur_m_signed, fmt_shares } from "@/ui/helpers/format";
 
-type TradeKindLocal = "buy" | "sell";
+type Kind = "buy" | "sell";
+type Phase = "form" | "submitting" | "done";
 
-interface ConfirmedTrade {
-  kind: TradeKindLocal;
-  display_shares: number; // shown to the user (ownership fraction × N)
-  price_per_share: number; // €M per share
-  amount: number; // €M total
-}
+const PCT_PRESETS = [10, 25, 50, 100];
 
 interface TradeDialogProps {
   open: boolean;
   player: Player;
-  initial_kind: TradeKindLocal;
+  initial_kind: Kind;
   on_close: () => void;
+  // Kept for call-site compatibility (PlayerSheet passes it); the native-style
+  // done view has a single "Done" action, so it is not used here.
   go_portfolio?: () => void;
-  // Optional snapshot overrides — used when caller already holds price data
+  // Optional snapshot override — used when the caller already holds price data
   // (e.g. MatchView passing a MatchPlayer's value for an inline-only sub).
   current_price?: number;
-  // % change to display next to the price (caller picks the relevant window;
-  // defaults to the player's since-inception change).
-  change_pct?: number;
 }
 
 export function TradeDialog({
@@ -36,32 +40,29 @@ export function TradeDialog({
   player,
   initial_kind,
   on_close,
-  go_portfolio,
   current_price: current_price_override,
-  change_pct: change_pct_override,
 }: TradeDialogProps) {
-  const team = teams_api.get(player.team_id);
   const valuation = valuations_api.get_for_player(player.id);
   const current_price = current_price_override ?? valuation?.current_price ?? 0;
-  const change_pct = change_pct_override ?? valuation?.change_since_inception ?? 0;
 
-  const [kind, set_kind] = useState<TradeKindLocal>(initial_kind);
+  const [kind, set_kind] = useState<Kind>(initial_kind);
   const [mode, set_mode] = useState<TradeMode>("percentage");
   const [percentage, set_percentage] = useState(10);
-  const [custom_shares, set_custom_shares] = useState(0);
-  const [confirmed, set_confirmed] = useState<ConfirmedTrade | null>(null);
-  const [submitting, set_submitting] = useState(false);
+  const [shares, set_shares] = useState(0);
+  const [phase, set_phase] = useState<Phase>("form");
   const [error, set_error] = useState<string | null>(null);
+  const [done_shares, set_done_shares] = useState(0);
+  const [done_price, set_done_price] = useState(0);
+  const [done_total, set_done_total] = useState(0);
 
-  // Reset state every time the dialog re-opens.
+  // Reset every time the dialog re-opens (or the requested side changes).
   useEffect(() => {
     if (open) {
       set_kind(initial_kind);
       set_mode("percentage");
       set_percentage(10);
-      set_custom_shares(0);
-      set_confirmed(null);
-      set_submitting(false);
+      set_shares(0);
+      set_phase("form");
       set_error(null);
     }
   }, [open, initial_kind]);
@@ -69,692 +70,277 @@ export function TradeDialog({
   if (!open) return null;
 
   const is_buy = kind === "buy";
-  const is_up = change_pct >= 0;
+  const accent = is_buy ? "var(--color-action-buy)" : "var(--color-action-sell)";
 
-  // ── Confirmed view ──
-  if (confirmed) {
-    const c = confirmed;
-    const c_is_buy = c.kind === "buy";
-    return (
-      <Sheet open={true} on_close={on_close} max_width={460}>
-        <div style={{ padding: "32px 24px 24px", textAlign: "center" }}>
-          <div style={{ fontSize: 56, marginBottom: 8 }}>{c_is_buy ? "✅" : "🔴"}</div>
-          <div style={{ fontSize: 20, fontWeight: 800, color: c_is_buy ? "var(--color-positive)" : "var(--color-negative)", marginBottom: 4 }}>
-            {c_is_buy ? "Bought" : "Sold"}!
-          </div>
-          <div style={{ fontSize: 13, color: "rgba(255,255,255,.55)", marginBottom: 22 }}>
-            {fmt_shares(c.display_shares)} shares of {player.name}
-          </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr",
-              gap: 8,
-              marginBottom: 22,
-            }}
-          >
-            <SummaryCell label="Shares" value={fmt_shares(c.display_shares)} />
-            <SummaryCell label="Price" value={fmt_eur_from_m(c.price_per_share)} />
-            <SummaryCell
-              label="Total"
-              value={fmt_eur_m(c.amount)}
-              color={c_is_buy ? "var(--color-positive)" : "var(--color-negative)"}
-            />
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              onClick={on_close}
-              style={{
-                flex: 2,
-                padding: "12px 0",
-                fontSize: 13,
-                fontWeight: 800,
-                borderRadius: 10,
-                // Solid accent fill (same prominence as the Confirm button) so
-                // the success state reads as a clear "OK", not a greyed-out one.
-                background: c_is_buy
-                  ? "linear-gradient(135deg,var(--color-action-buy),color-mix(in srgb, var(--color-action-buy), black 28%))"
-                  : "linear-gradient(135deg,var(--color-action-sell),color-mix(in srgb, var(--color-action-sell), black 18%))",
-                color: "#fff",
-                border: "none",
-                cursor: "pointer",
-                fontFamily: "inherit",
-                boxShadow: c_is_buy
-                  ? "0 4px 16px color-mix(in srgb, var(--color-positive) 25%, transparent)"
-                  : "0 4px 16px color-mix(in srgb, var(--color-negative) 25%, transparent)",
-              }}
-            >
-              Done ✓
-            </button>
-            <button
-              onClick={() => {
-                on_close();
-                go_portfolio?.();
-              }}
-              style={{
-                flex: 1,
-                padding: "12px 0",
-                fontSize: 12,
-                fontWeight: 700,
-                borderRadius: 10,
-                background: "rgba(255,255,255,.04)",
-                color: "rgba(255,255,255,.5)",
-                border: "1px solid rgba(255,255,255,.06)",
-                cursor: "pointer",
-                fontFamily: "inherit",
-              }}
-            >
-              Portfolio →
-            </button>
-          </div>
-        </div>
-      </Sheet>
-    );
-  }
+  const preview = simulate_trade({ player, kind, mode, percentage, shares, current_price });
 
-  // ── Trade form view ──
-  const preview = simulate_trade({
-    player,
-    kind,
-    mode,
-    percentage,
-    shares: custom_shares,
-    current_price,
-  });
-
-  // `shares` is the canonical ownership fraction (sent to the backend);
-  // `display_shares` is what the user sees and types (fraction × N).
-  const final_shares = preview.shares;
-  const final_display = preview.display_shares;
-  const final_amount = preview.amount;
-  const final_pct = preview.percentage_of_portfolio;
-  const price_per_share = preview.price_per_share;
-
-  // Switching unit carries the value over instead of resetting to 0.
-  const switch_mode = (next: TradeMode) => {
-    if (next === mode) return;
-    if (next === "shares") set_custom_shares(Math.round(final_display));
-    else set_percentage(Math.min(100, Math.max(1, final_pct)));
-    set_mode(next);
-  };
-  const is_short = preview.is_short;
-  const held_display = preview.held_display_shares;
-
-  // Max tradeable, in DISPLAY shares, bounded by BOTH cash (buys) and the
-  // player-value cap (max_trade_display_shares = headroom toward ±100%).
-  const safe_pps = price_per_share > 0 ? price_per_share : 1;
+  // Slider ceiling in shares mode, in DISPLAY shares — bounded by cash (buys),
+  // margin headroom (buys), and the player-value cap (±100%).
+  const safe_pps = preview.price_per_share > 0 ? preview.price_per_share : 1;
   const max_affordable = is_buy ? preview.cash_before / safe_pps : Infinity;
-  // Buys also can't exceed the margin/leverage headroom (buying power).
   const max_margin = is_buy ? preview.buying_power / safe_pps : Infinity;
   const slider_max = Math.max(
     1,
     Math.floor(Math.min(max_affordable, max_margin, preview.max_trade_display_shares)),
   );
 
-  const can_confirm = !preview.insufficient_capital && !preview.exceeds_margin && final_shares > 0;
+  const can_confirm =
+    phase === "form" && !preview.insufficient_capital && !preview.exceeds_margin && preview.shares > 0;
 
+  // Switching unit carries the value over instead of resetting to 0.
+  const switch_mode = (next: TradeMode) => {
+    if (next === mode) return;
+    if (next === "shares") set_shares(Math.round(preview.display_shares));
+    else set_percentage(Math.min(100, Math.max(1, preview.percentage_of_portfolio)));
+    set_mode(next);
+  };
+
+  const confirm = () => {
+    if (!can_confirm) return;
+    set_phase("submitting");
+    set_error(null);
+    trades_api
+      .execute({ player_id: player.id, kind, shares: preview.shares, price: current_price })
+      .then(() => {
+        set_done_shares(preview.display_shares);
+        set_done_price(preview.price_per_share);
+        set_done_total(preview.amount);
+        set_phase("done");
+      })
+      .catch((err: unknown) => {
+        set_error(err instanceof Error && err.message ? err.message : "Order failed. Please try again.");
+        set_phase("form");
+      });
+  };
+
+  // ── Done view ──
+  if (phase === "done") {
+    return (
+      <Sheet
+        open={true}
+        on_close={on_close}
+        max_width={460}
+        footer={
+          <button onClick={on_close} style={{ ...confirm_btn_style, background: accent }}>
+            Done
+          </button>
+        }
+      >
+        <div style={{ padding: "28px 24px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+          <div style={{ fontSize: 24, fontWeight: 900, color: accent }}>{is_buy ? "Bought" : "Sold"}</div>
+          <div style={{ fontSize: 14, color: "rgba(255,255,255,.55)", marginBottom: 8 }}>
+            {fmt_shares(done_shares)} shares of {player.name}
+          </div>
+          <div style={{ ...preview_box_style, alignSelf: "stretch" }}>
+            <PreviewRow label="Shares" value={fmt_shares(done_shares)} />
+            <PreviewRow label="Price" value={fmt_eur_from_m(done_price)} />
+            <PreviewRow label="Total" value={fmt_eur_m(done_total)} color={accent} />
+          </div>
+        </div>
+      </Sheet>
+    );
+  }
+
+  // ── Form view ──
   return (
     <Sheet
       open={true}
       on_close={on_close}
-      max_width={480}
+      max_width={460}
       footer={
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            onClick={on_close}
-            style={{
-              flex: 1,
-              padding: "12px 0",
-              fontSize: 13,
-              fontWeight: 700,
-              borderRadius: 10,
-              background: "rgba(255,255,255,.04)",
-              color: "rgba(255,255,255,.45)",
-              border: "1px solid rgba(255,255,255,.06)",
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => {
-              if (!can_confirm || submitting) return;
-              set_submitting(true);
-              set_error(null);
-              trades_api
-                .execute({
-                  player_id: player.id,
-                  kind,
-                  shares: final_shares,
-                  price: current_price,
-                })
-                .then(() => {
-                  set_confirmed({
-                    kind,
-                    display_shares: final_display,
-                    price_per_share,
-                    amount: final_amount,
-                  });
-                })
-                .catch((err: unknown) => {
-                  set_error(err instanceof Error ? err.message : String(err));
-                })
-                .finally(() => set_submitting(false));
-            }}
-            disabled={!can_confirm || submitting}
-            style={{
-              flex: 2,
-              padding: "12px 0",
-              fontSize: 13,
-              fontWeight: 800,
-              borderRadius: 10,
-              background: !can_confirm
-                ? "rgba(255,255,255,.04)"
-                : is_buy
-                  ? "linear-gradient(135deg,var(--color-action-buy),color-mix(in srgb, var(--color-action-buy), black 28%))"
-                  : "linear-gradient(135deg,var(--color-action-sell),color-mix(in srgb, var(--color-action-sell), black 18%))",
-              color: !can_confirm ? "rgba(255,255,255,.25)" : "#fff",
-              border: !can_confirm ? "1px solid rgba(255,255,255,.06)" : "none",
-              cursor: !can_confirm ? "not-allowed" : "pointer",
-              fontFamily: "inherit",
-              boxShadow: !can_confirm
-                ? "none"
-                : is_buy
-                  ? "0 4px 16px color-mix(in srgb, var(--color-positive) 25%, transparent)"
-                  : "0 4px 16px color-mix(in srgb, var(--color-negative) 25%, transparent)",
-            }}
-          >
-            Confirm {is_buy ? "Buy" : "Sell"}
-          </button>
-        </div>
+        <button
+          onClick={confirm}
+          disabled={!can_confirm}
+          style={{ ...confirm_btn_style, background: accent, opacity: can_confirm ? 1 : 0.4, cursor: can_confirm ? "pointer" : "default" }}
+        >
+          {phase === "submitting"
+            ? "Placing…"
+            : `${is_buy ? "Buy" : "Sell"} ${fmt_shares(preview.display_shares)} shares`}
+        </button>
       }
     >
-      <div style={{ padding: "8px 20px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
-        {/* Player strip */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            padding: "10px 12px",
-            background: "rgba(255,255,255,.025)",
-            border: "1px solid rgba(255,255,255,.05)",
-            borderRadius: 10,
-          }}
-        >
-          <PlayerChip jersey_number={player.jersey_number} team_color={team?.color ?? "#666"} size={36} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 800 }}>{player.name}</div>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,.4)", marginTop: 2 }}>
-              {team?.name ?? "—"} · #{player.jersey_number}
-            </div>
-          </div>
-          <div style={{ textAlign: "right" }}>
-            <div className="mono" style={{ fontSize: 14, fontWeight: 800 }}>€{current_price}M</div>
-            <div className="mono" style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,.4)" }}>
-              {fmt_eur_from_m(price_per_share)}/share
-            </div>
-            <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: is_up ? "var(--color-positive)" : "var(--color-negative)" }}>
-              {is_up ? "+" : ""}{change_pct}%
-            </div>
+      <div style={{ padding: "8px 20px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 20, fontWeight: 800 }}>{player.full_name ?? player.name}</div>
+          <div style={{ fontSize: 13, color: "rgba(255,255,255,.55)", marginTop: 2 }}>
+            Value {fmt_eur_m(current_price)} · {fmt_eur_from_m(preview.price_per_share)}/share
           </div>
         </div>
 
-        {/* Buy/Sell tabs */}
-        <div style={{ display: "flex", background: "rgba(255,255,255,.03)", borderRadius: 10, padding: 3 }}>
-          {([
-            { k: "buy" as TradeKindLocal, label: "Buy", color: "var(--color-action-buy)" },
-            { k: "sell" as TradeKindLocal, label: "Sell", color: "var(--color-action-sell)" },
-          ]).map(t => (
-            <button
-              key={t.k}
-              onClick={() => set_kind(t.k)}
-              style={{
-                flex: 1,
-                padding: "10px 0",
-                borderRadius: 8,
-                fontSize: 13,
-                fontWeight: 800,
-                border: "none",
-                cursor: "pointer",
-                fontFamily: "inherit",
-                background:
-                  kind === t.k
-                    ? t.k === "buy"
-                      ? "var(--color-action-buy)"
-                      : "var(--color-action-sell)"
-                    : "transparent",
-                color: kind === t.k ? "#fff" : "rgba(255,255,255,.35)",
-              }}
-            >
-              {t.label}
-            </button>
-          ))}
+        {/* Buy / Sell */}
+        <div style={{ display: "flex", gap: 8 }}>
+          {(["buy", "sell"] as Kind[]).map(k => {
+            const on = kind === k;
+            const c = k === "buy" ? "var(--color-action-buy)" : "var(--color-action-sell)";
+            return (
+              <button
+                key={k}
+                onClick={() => set_kind(k)}
+                style={{
+                  flex: 1,
+                  padding: "11px 0",
+                  borderRadius: 10,
+                  border: "1px solid " + (on ? c : "rgba(255,255,255,.12)"),
+                  background: on ? c : "rgba(255,255,255,.04)",
+                  color: on ? "var(--color-bg)" : "#fff",
+                  fontSize: 14,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                {k === "buy" ? "Buy" : "Sell"}
+              </button>
+            );
+          })}
         </div>
 
-        {/* Cash / holding strip */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            padding: "0 4px",
-            fontSize: 11,
-          }}
-        >
-          <span style={{ color: "rgba(255,255,255,.4)" }}>
-            CASH <span className="mono" style={{ color: "#fff", fontWeight: 700, marginLeft: 6 }}>{fmt_eur_m(preview.cash_before)}</span>
+        {/* Mode: percent of portfolio vs exact shares */}
+        <div style={{ display: "flex", gap: 8 }}>
+          {(["percentage", "shares"] as TradeMode[]).map(m => {
+            const on = mode === m;
+            return (
+              <button key={m} onClick={() => switch_mode(m)} style={mode_btn_style(on)}>
+                {m === "percentage" ? "Percent" : "Shares"}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Slider — fine control, with quick presets in percent mode */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,.4)" }}>
+            {mode === "percentage" ? "Amount" : "Shares"}
           </span>
-          {held_display !== 0 && (
-            <span style={{ color: "rgba(255,255,255,.4)" }}>
-              HOLDING{" "}
-              <span className="mono" style={{ color: "#fff", fontWeight: 700, marginLeft: 6 }}>
-                {fmt_shares(held_display)} shares ({Math.round(preview.pct_of_player_held)}%)
-              </span>
-            </span>
+          <span style={{ fontSize: 16, fontWeight: 800 }}>
+            {mode === "percentage" ? `${percentage}%` : fmt_shares(shares)}
+          </span>
+        </div>
+        {mode === "percentage" ? (
+          <input
+            type="range"
+            min={1}
+            max={100}
+            step={1}
+            value={percentage}
+            onChange={e => set_percentage(parseInt(e.target.value))}
+            style={{ width: "100%", accentColor: accent }}
+          />
+        ) : (
+          <input
+            type="range"
+            min={0}
+            max={slider_max}
+            step={1}
+            value={shares}
+            onChange={e => set_shares(Math.round(parseFloat(e.target.value)))}
+            style={{ width: "100%", accentColor: accent }}
+          />
+        )}
+        {mode === "percentage" && (
+          <div style={{ display: "flex", gap: 8 }}>
+            {PCT_PRESETS.map(p => {
+              const on = percentage === p;
+              return (
+                <button key={p} onClick={() => set_percentage(p)} style={mode_btn_style(on)}>
+                  {p === 100 ? "Max" : `${p}%`}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Preview */}
+        <div style={preview_box_style}>
+          <PreviewRow label="Shares" value={fmt_shares(preview.display_shares)} />
+          <PreviewRow label="Price / share" value={fmt_eur_from_m(preview.price_per_share)} />
+          <PreviewRow label="Amount" value={fmt_eur_m(preview.amount)} />
+          <PreviewRow label="Owned after" value={`${Math.round(preview.pct_of_player_after)}% of player`} />
+          <PreviewRow label="% of portfolio" value={`${preview.percentage_of_portfolio.toFixed(1)}%`} />
+          <PreviewRow label="Cash after" value={fmt_eur_m(preview.cash_after)} />
+          {preview.realized_pnl !== 0 && (
+            <PreviewRow
+              label="Realized P&L"
+              value={fmt_eur_m_signed(preview.realized_pnl)}
+              color={preview.realized_pnl >= 0 ? "var(--color-positive)" : "var(--color-negative)"}
+            />
           )}
         </div>
 
-        {/* Mode toggle */}
-        <div style={{ display: "flex", background: "rgba(255,255,255,.03)", borderRadius: 8, padding: 2 }}>
-          {([
-            { k: "percentage" as TradeMode, label: "% Portfolio" },
-            { k: "shares" as TradeMode, label: "Shares" },
-          ]).map(m => (
-            <button
-              key={m.k}
-              onClick={() => switch_mode(m.k)}
-              style={{
-                flex: 1,
-                padding: "8px 0",
-                borderRadius: 7,
-                fontSize: 12,
-                fontWeight: 700,
-                border: "none",
-                cursor: "pointer",
-                fontFamily: "inherit",
-                background: mode === m.k ? "rgba(255,255,255,.06)" : "transparent",
-                color: mode === m.k ? "#fff" : "rgba(255,255,255,.3)",
-              }}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Big value */}
-        <div style={{ textAlign: "center" }}>
-          <div className="mono" style={{ fontSize: 32, fontWeight: 800, lineHeight: 1 }}>
-            {mode === "percentage" ? (
-              <>
-                {percentage}
-                <span style={{ fontSize: 18, color: "rgba(255,255,255,.3)" }}>%</span>
-              </>
-            ) : (
-              <>
-                {custom_shares} <span style={{ fontSize: 14, fontWeight: 500, color: "rgba(255,255,255,.3)" }}>shares</span>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Shortcuts */}
-        <div style={{ display: "flex", justifyContent: "center", gap: 4 }}>
-          {mode === "percentage"
-            ? [10, 25, 50, 75, 100].map(v => (
-                <button
-                  key={v}
-                  onClick={() => set_percentage(v)}
-                  style={{
-                    fontSize: 12,
-                    fontWeight: percentage === v ? 700 : 500,
-                    color: percentage === v ? "#fff" : "rgba(255,255,255,.4)",
-                    cursor: "pointer",
-                    padding: "6px 12px",
-                    borderRadius: 6,
-                    background: percentage === v ? "rgba(255,255,255,.08)" : "rgba(255,255,255,.025)",
-                    border: "none",
-                    fontFamily: "inherit",
-                  }}
-                >
-                  {v}%
-                </button>
-              ))
-            : (() => {
-                // Shortcuts are whole displayed shares, bounded by what's both
-                // affordable AND within the player-value cap. A sell offers
-                // fractions of the held position (close 25/50/75/100%).
-                const q = (x: number) => Math.floor(x);
-                const max_aff = is_buy ? Math.min(max_affordable, preview.max_trade_display_shares) : preview.max_trade_display_shares;
-                const raw =
-                  !is_buy && held_display > 0
-                    ? [held_display * 0.25, held_display * 0.5, held_display * 0.75, held_display]
-                    : [max_aff * 0.1, max_aff * 0.25, max_aff * 0.5, max_aff];
-                // Drop zeros and duplicates so we never render a dead "0" chip.
-                const vals = [...new Set(raw.map(q).filter(v => v > 0))];
-                return vals.map(v => (
-                  <button
-                    key={v}
-                    onClick={() => set_custom_shares(v)}
-                    style={{
-                      fontSize: 12,
-                      fontWeight: custom_shares === v ? 700 : 500,
-                      color: custom_shares === v ? "#fff" : "rgba(255,255,255,.4)",
-                      cursor: "pointer",
-                      padding: "6px 12px",
-                      borderRadius: 6,
-                      background: custom_shares === v ? "rgba(255,255,255,.08)" : "rgba(255,255,255,.025)",
-                      border: "none",
-                      fontFamily: "inherit",
-                    }}
-                  >
-                    {fmt_shares(v)}
-                  </button>
-                ));
-              })()}
-        </div>
-
-        {/* Slider */}
-        {mode === "percentage" ? (
-          <div
-            style={{
-              background: "rgba(255,255,255,.025)",
-              border: "1px solid rgba(255,255,255,.05)",
-              borderRadius: 10,
-              padding: "12px 14px",
-            }}
-          >
-            <input
-              type="range"
-              min={1}
-              max={100}
-              step={1}
-              value={percentage}
-              onChange={e => set_percentage(parseInt(e.target.value))}
-              style={{ width: "100%" }}
-            />
-          </div>
-        ) : (
-          <div
-            style={{
-              background: "rgba(255,255,255,.025)",
-              border: "1px solid rgba(255,255,255,.05)",
-              borderRadius: 10,
-              padding: "12px 14px",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <button
-                onClick={() => set_custom_shares(Math.max(0, custom_shares - 1))}
-                style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: 8,
-                  background: "rgba(255,255,255,.06)",
-                  border: "1px solid rgba(255,255,255,.08)",
-                  color: "#fff",
-                  fontSize: 16,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  flexShrink: 0,
-                }}
-              >
-                −
-              </button>
-              <input
-                type="range"
-                min={0}
-                max={slider_max}
-                step={1}
-                value={custom_shares}
-                onChange={e => set_custom_shares(Math.round(parseFloat(e.target.value)))}
-                style={{ flex: 1 }}
-              />
-              <button
-                onClick={() => set_custom_shares(Math.min(slider_max, custom_shares + 1))}
-                style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: 8,
-                  background: "rgba(255,255,255,.06)",
-                  border: "1px solid rgba(255,255,255,.08)",
-                  color: "#fff",
-                  fontSize: 16,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  flexShrink: 0,
-                }}
-              >
-                +
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Player-value cap: a position can never exceed 100% of the player's
-            value, long or short. When the requested size would breach it we
-            clamp to the whole player and say so, rather than silently trimming. */}
         {preview.capped && (
-          <div
-            style={{
-              background: "rgba(255,255,255,.03)",
-              border: "1px solid rgba(255,255,255,.08)",
-              borderRadius: 10,
-              padding: "10px 12px",
-              fontSize: 12,
-              lineHeight: 1.4,
-              color: "rgba(255,255,255,.7)",
-            }}
-          >
-            Capped at the whole player: you can hold at most 100% of {player.name} (€{current_price}M = {fmt_shares(slider_max)} shares
-            here). This is the largest {is_buy ? "position" : "short"} you can still take.
+          <div style={hint_style}>
+            Capped at the whole player: a position can't exceed 100% of {player.name} ({fmt_eur_m(current_price)} ={" "}
+            {fmt_shares(slider_max)} shares). This is the largest {is_buy ? "position" : "short"} you can take.
           </div>
         )}
-
-        {/* Trade Preview (Summary + Impact unified) */}
-        <div
-          style={{
-            background: "rgba(255,255,255,.025)",
-            border: "1px solid rgba(255,255,255,.05)",
-            borderRadius: 10,
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              padding: "10px 14px 8px",
-              borderBottom: "1px solid rgba(255,255,255,.04)",
-              fontSize: 11,
-              fontWeight: 700,
-              color: "rgba(255,255,255,.55)",
-              letterSpacing: 0.5,
-              textTransform: "uppercase",
-            }}
-          >
-            Trade preview
-          </div>
-          <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: 5 }}>
-            <PreviewRow label="Shares" value={`${fmt_shares(final_display)} @ ${fmt_eur_from_m(price_per_share)}/sh`} />
-            <PreviewRow
-              label="Total"
-              value={fmt_eur_m(final_amount)}
-              accent={is_buy ? "var(--color-positive)" : "var(--color-negative)"}
-              bold
-            />
-            <PreviewRow
-              label="Position"
-              before={`${fmt_shares(held_display)} sh`}
-              after={`${fmt_shares(preview.shares_after_display)} sh (${Math.round(preview.pct_of_player_after)}%)`}
-              accent={is_buy ? "var(--color-positive)" : "var(--color-negative)"}
-            />
-            <PreviewRow
-              label="Cash"
-              before={fmt_eur_m(preview.cash_before)}
-              after={fmt_eur_m(preview.cash_after)}
-              accent={is_buy ? "var(--color-negative)" : "var(--color-positive)"}
-              warning={preview.cash_after < 0}
-            />
-            <PreviewRow
-              label="Type"
-              value={is_buy ? "📈 Long" : is_short ? `📉 Short (${fmt_shares(preview.short_display_shares)} naked)` : "Close position"}
-              accent={is_buy ? "var(--color-positive)" : is_short ? "rgba(255,255,255,.5)" : "var(--color-negative)"}
-            />
-          </div>
-        </div>
-
-        {/* Warnings */}
         {preview.insufficient_capital && (
-          <div
-            style={{
-              background: "color-mix(in srgb, var(--color-negative) 8%, transparent)",
-              border: "1px solid color-mix(in srgb, var(--color-negative) 25%, transparent)",
-              borderRadius: 8,
-              padding: "10px 14px",
-              display: "flex",
-              alignItems: "flex-start",
-              gap: 10,
-            }}
-          >
-            <span style={{ fontSize: 16, flexShrink: 0 }}>⛔</span>
-            <span style={{ fontSize: 12, color: "rgba(255,255,255,.7)", lineHeight: 1.45 }}>
-              <strong style={{ color: "var(--color-negative)" }}>Insufficient capital.</strong> You need{" "}
-              <span className="mono" style={{ fontWeight: 700 }}>€{preview.shortfall.toLocaleString()}</span> more.
-              You have <span className="mono">€{preview.cash_before.toLocaleString()}</span> available.
-            </span>
-          </div>
+          <div style={error_style}>Insufficient cash — short by {fmt_eur_m(preview.shortfall)}.</div>
         )}
         {preview.exceeds_margin && !preview.insufficient_capital && (
-          <div
-            style={{
-              background: "color-mix(in srgb, var(--color-negative) 8%, transparent)",
-              border: "1px solid color-mix(in srgb, var(--color-negative) 25%, transparent)",
-              borderRadius: 8,
-              padding: "10px 14px",
-              display: "flex",
-              alignItems: "flex-start",
-              gap: 10,
-            }}
-          >
-            <span style={{ fontSize: 16, flexShrink: 0 }}>⛔</span>
-            <span style={{ fontSize: 12, color: "rgba(255,255,255,.7)", lineHeight: 1.45 }}>
-              <strong style={{ color: "var(--color-negative)" }}>Exceeds buying power.</strong> This trade adds more
-              exposure than your <span className="mono">{fmt_eur_m(preview.buying_power)}</span> of buying power allows.
-              Reduce the size.
-            </span>
+          <div style={error_style}>
+            Exceeds buying power — adds more exposure than {fmt_eur_m(preview.buying_power)} allows. Reduce the size.
           </div>
         )}
-        {is_short && (
-          <div
-            style={{
-              background: "color-mix(in srgb, var(--color-card-yellow) 8%, transparent)",
-              border: "1px solid color-mix(in srgb, var(--color-card-yellow) 25%, transparent)",
-              borderRadius: 8,
-              padding: "10px 14px",
-              display: "flex",
-              alignItems: "flex-start",
-              gap: 10,
-            }}
-          >
-            <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
-            <span style={{ fontSize: 12, color: "rgba(255,255,255,.7)", lineHeight: 1.45 }}>
-              Selling {fmt_shares(final_display)} closes your {fmt_shares(held_display)} shares and opens a short of{" "}
-              {fmt_shares(preview.short_display_shares)}.
-            </span>
-          </div>
-        )}
+        {error && <div style={error_style}>{error}</div>}
       </div>
     </Sheet>
   );
 }
 
-function PreviewRow({
-  label,
-  value,
-  before,
-  after,
-  accent,
-  bold,
-  warning,
-}: {
-  label: string;
-  value?: string;
-  before?: string;
-  after?: string;
-  accent?: string;
-  bold?: boolean;
-  warning?: boolean;
-}) {
+function PreviewRow({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        fontSize: 12,
-      }}
-    >
-      <span style={{ color: "rgba(255,255,255,.4)" }}>{label}</span>
-      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        {before !== undefined && after !== undefined ? (
-          <>
-            <span className="mono" style={{ color: "rgba(255,255,255,.5)" }}>{before}</span>
-            <span style={{ color: "rgba(255,255,255,.2)", fontSize: 11 }}>→</span>
-            <span
-              className="mono"
-              style={{
-                fontWeight: 700,
-                color: warning ? "var(--color-negative)" : accent ?? "#fff",
-              }}
-            >
-              {after}
-            </span>
-          </>
-        ) : (
-          <span
-            className="mono"
-            style={{
-              fontWeight: bold ? 800 : 700,
-              fontSize: bold ? 14 : 12,
-              color: accent ?? "#fff",
-            }}
-          >
-            {value}
-          </span>
-        )}
-      </span>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,.4)" }}>{label}</span>
+      <span className="mono" style={{ fontSize: 13, fontWeight: 800, color: color ?? "#fff" }}>{value}</span>
     </div>
   );
 }
 
-function SummaryCell({
-  label,
-  value,
-  color,
-  mono = true,
-}: {
-  label: string;
-  value: string;
-  color?: string;
-  mono?: boolean;
-}) {
-  return (
-    <div
-      style={{
-        background: "rgba(255,255,255,.025)",
-        border: "1px solid rgba(255,255,255,.05)",
-        borderRadius: 8,
-        padding: "10px 8px",
-      }}
-    >
-      <div style={{ fontSize: 9, color: "rgba(255,255,255,.4)", textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 600 }}>
-        {label}
-      </div>
-      <div className={mono ? "mono" : ""} style={{ fontSize: 13, fontWeight: 800, color: color ?? "#fff", marginTop: 3 }}>
-        {value}
-      </div>
-    </div>
-  );
-}
+const mode_btn_style = (on: boolean): React.CSSProperties => ({
+  flex: 1,
+  padding: "9px 0",
+  borderRadius: 8,
+  border: "1px solid " + (on ? "rgba(255,255,255,.25)" : "rgba(255,255,255,.1)"),
+  background: on ? "rgba(255,255,255,.12)" : "rgba(255,255,255,.03)",
+  color: on ? "#fff" : "rgba(255,255,255,.55)",
+  fontSize: 13,
+  fontWeight: 700,
+  cursor: "pointer",
+  fontFamily: "inherit",
+});
+
+const preview_box_style: React.CSSProperties = {
+  background: "rgba(255,255,255,.03)",
+  borderRadius: 10,
+  padding: 12,
+  display: "flex",
+  flexDirection: "column",
+  gap: 7,
+};
+
+const hint_style: React.CSSProperties = {
+  fontSize: 12,
+  lineHeight: 1.4,
+  color: "rgba(255,255,255,.6)",
+  background: "rgba(255,255,255,.03)",
+  borderRadius: 8,
+  padding: 10,
+};
+
+const error_style: React.CSSProperties = {
+  fontSize: 13,
+  fontWeight: 600,
+  color: "var(--color-negative)",
+};
+
+const confirm_btn_style: React.CSSProperties = {
+  width: "100%",
+  padding: "14px 0",
+  borderRadius: 10,
+  border: "none",
+  color: "var(--color-bg)",
+  fontSize: 15,
+  fontWeight: 800,
+  cursor: "pointer",
+  fontFamily: "inherit",
+};
