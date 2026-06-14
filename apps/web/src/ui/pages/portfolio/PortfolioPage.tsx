@@ -7,6 +7,7 @@ import { POSITION_ABBR } from "@fundxi/core/domain/player/player";
 import type { Player } from "@fundxi/core/domain/player/player";
 import { compute_portfolio_breakdowns } from "@fundxi/core/domain/portfolio/portfolio_breakdown";
 import type { HoldingMetrics } from "@fundxi/core/domain/portfolio/portfolio_metrics";
+import type { HoldingDetail } from "@fundxi/core/application/portfolio_service";
 import type { Trade } from "@fundxi/core/domain/portfolio/trade";
 import { chart_category_ramp } from "@fundxi/core/design/palette";
 import { ClosePositionsDialog } from "@/ui/components/ClosePositionsDialog";
@@ -28,7 +29,10 @@ import { useLiveValuations } from "@/ui/hooks/use_live_valuations";
 import { pulse_class, usePulse } from "@/ui/hooks/use_pulse";
 import { useViewport } from "@/ui/hooks/use_viewport";
 
-type PositionsTab = "positions" | "trades";
+// Desktop uses only positions/trades (two tabs beside the breakdown rail). The
+// phone layout adds Stats + Allocation, folding the rail into tabs like native.
+type PositionsTab = "positions" | "trades" | "stats" | "allocation";
+type AllocTab = "team" | "role" | "age";
 
 type SortState = { key: string; dir: SortDir };
 type HoldingRow = HoldingMetrics & { player: Player };
@@ -156,6 +160,7 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
   const win_rate = breakdowns.win_rate;
 
   const [positions_tab, set_positions_tab] = useState<PositionsTab>("positions");
+  const [alloc_tab, set_alloc_tab] = useState<AllocTab>("team");
 
   // Real portfolio curve: served by the backend
   // (``GET /api/portfolio/history``). All math + storage are server-side
@@ -258,6 +263,168 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
     pct: a.pct,
     v: a.value,
   }));
+
+  // ── Phone: native-style single-column flow (hero -> chart -> KPI grid ->
+  // Positions/Trades/Stats/Allocation tabs). Mirrors apps/mobile portfolio. ──
+  if (is_mobile) {
+    const pnl_color = color_for_sign(pnl);
+    const top_position_pnl = holdings.length > 0 ? Math.max(...holdings.map(h => h.pnl)) : null;
+    const tabs: { k: PositionsTab; label: string; count?: number }[] = [
+      { k: "positions", label: "Positions", count: holdings.length },
+      { k: "trades", label: "Trades", count: trades.length },
+      { k: "stats", label: "Stats" },
+      { k: "allocation", label: "Allocation" },
+    ];
+    const alloc_tabs: { k: AllocTab; label: string }[] = [
+      { k: "team", label: "By team" },
+      { k: "role", label: "By role" },
+      { k: "age", label: "By age" },
+    ];
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        {/* Hero — Total value + Buying power */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <HeroCard label="Total value" value={fmt_eur_m(total_value)} delta={`${fmt_eur_m_signed(pnl)} (${fmt_signed_pct(return_pct, 1)})`} delta_color={pnl_color} note="Since open" />
+          <HeroCard label="Buying power" value={fmt_eur_m(totals.buying_power)} delta={`${fmt_eur_m(totals.cash)} cash`} delta_color="rgba(255,255,255,.5)" note="Deployable now" />
+        </div>
+
+        {/* Portfolio value chart */}
+        <div style={mobile_card_style}>
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 14, fontWeight: 800 }}>Portfolio value</div>
+            <div className="mono" style={{ fontSize: 13, fontWeight: 700, color: color_for_sign(period_return), marginTop: 2 }}>
+              {fmt_signed_pct(period_return, 1)}
+            </div>
+          </div>
+          {performance_data.length > 0 ? (
+            <PerformanceChart data={performance_data} height={176} format_axis={v => `€${v.toFixed(1)}M`} min_span_pct={5} show_axes show_last_value />
+          ) : (
+            <div style={{ padding: 24, textAlign: "center", color: "rgba(255,255,255,.3)", fontSize: 12 }}>No history yet</div>
+          )}
+        </div>
+
+        {/* Secondary KPI grid */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+          <KpiCard label="Invested" value={fmt_eur_m(totals.gross_cost)} />
+          <KpiCard label="Positions" value={String(holdings.length)} />
+          <KpiCard label="Trades" value={String(trades.length)} />
+          <KpiCard label="Win rate" value={win_rate == null ? "—" : `${win_rate.toFixed(0)}%`} />
+          <KpiCard
+            label="Top position"
+            value={top_position_pnl == null ? "—" : fmt_eur_m_signed(top_position_pnl)}
+            color={top_position_pnl == null ? undefined : color_for_sign(top_position_pnl)}
+          />
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display: "flex", gap: 4, background: "rgba(255,255,255,.03)", borderRadius: 10, padding: 3 }}>
+          {tabs.map(t => {
+            const on = positions_tab === t.k;
+            return (
+              <button
+                key={t.k}
+                onClick={() => set_positions_tab(t.k)}
+                style={{
+                  flex: 1,
+                  padding: "9px 0",
+                  borderRadius: 7,
+                  border: "none",
+                  background: on ? "rgba(255,255,255,.08)" : "transparent",
+                  color: on ? "#fff" : "rgba(255,255,255,.4)",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {t.label}
+                {t.count !== undefined && (
+                  <span style={{ color: on ? "rgba(255,255,255,.5)" : "rgba(255,255,255,.3)", fontWeight: 600 }}> {t.count}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Allocation sub-tabs */}
+        {positions_tab === "allocation" && (
+          <div style={{ display: "flex", gap: 6 }}>
+            {alloc_tabs.map(t => {
+              const on = alloc_tab === t.k;
+              return (
+                <button
+                  key={t.k}
+                  onClick={() => set_alloc_tab(t.k)}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: 8,
+                    border: "1px solid " + (on ? "rgba(255,255,255,.22)" : "rgba(255,255,255,.06)"),
+                    background: on ? "rgba(255,255,255,.08)" : "transparent",
+                    color: on ? "#fff" : "rgba(255,255,255,.45)",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Tab content */}
+        {positions_tab === "positions" ? (
+          holdings.length === 0 ? (
+            <MobileEmpty>No open positions.</MobileEmpty>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <button
+                onClick={close_all}
+                style={{ alignSelf: "flex-end", padding: "8px 14px", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--color-negative) 30%, transparent)", background: "color-mix(in srgb, var(--color-negative) 8%, transparent)", color: "var(--color-negative)", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+              >
+                Close all
+              </button>
+              {sorted_holdings.map(h => (
+                <MobilePositionCard
+                  key={h.player_id}
+                  h={h}
+                  opened={opened_by_player.get(h.player_id)}
+                  on_open={() => on_open_player(h.player)}
+                  on_open_team={on_open_team}
+                />
+              ))}
+            </div>
+          )
+        ) : positions_tab === "trades" ? (
+          trades.length === 0 ? (
+            <MobileEmpty>No trades yet.</MobileEmpty>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {sorted_trades.map(t => (
+                <MobileTradeCard key={t.id} t={t} on_open_team={on_open_team} />
+              ))}
+            </div>
+          )
+        ) : positions_tab === "stats" ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <ExposureCard long_value={totals.long_value} short_value={totals.short_value} />
+            <WinLossCard holdings={holdings} />
+          </div>
+        ) : (
+          <>
+            {alloc_tab === "team" && <BreakdownCard title="By team" items={team_items} chart="bars" on_open_team={on_open_team} />}
+            {alloc_tab === "role" && <BreakdownCard title="By position" items={position_items} chart="pie" />}
+            {alloc_tab === "age" && <BreakdownCard title="By age" items={age_items} chart="pie" />}
+          </>
+        )}
+
+        {close_targets && <ClosePositionsDialog open={true} positions={close_targets} on_close={dismiss_close_dialog} />}
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
@@ -1182,6 +1349,140 @@ function ExposureCell({ label, value, color }: { label: string; value: string; c
         {label}
       </div>
       <div className="mono" style={{ fontSize: 14, fontWeight: 800, color, marginTop: 2 }}>{value}</div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Phone-only presentation: hero cards + compact position / trade cards,
+// mirroring the native Portfolio (apps/mobile/app/(tabs)/portfolio.tsx). The
+// desktop two-pane layout above is untouched.
+// ---------------------------------------------------------------------------
+
+const mobile_card_style: CSSProperties = {
+  background: "rgba(255,255,255,.025)",
+  border: "1px solid rgba(255,255,255,.05)",
+  borderRadius: 14,
+  padding: "16px 16px",
+};
+
+function HeroCard({
+  label,
+  value,
+  delta,
+  delta_color,
+  note,
+}: {
+  label: string;
+  value: string;
+  delta: string;
+  delta_color: string;
+  note: string;
+}) {
+  return (
+    <div style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.06)", borderRadius: 14, padding: "14px 16px", minWidth: 0 }}>
+      <div style={{ fontSize: 11, color: "rgba(255,255,255,.4)", fontWeight: 600, letterSpacing: 0.3, textTransform: "uppercase" }}>{label}</div>
+      <div className="mono" style={{ fontSize: 22, fontWeight: 800, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value}</div>
+      <div className="mono" style={{ fontSize: 12, fontWeight: 700, color: delta_color, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{delta}</div>
+      <div style={{ fontSize: 10, color: "rgba(255,255,255,.3)", marginTop: 2 }}>{note}</div>
+    </div>
+  );
+}
+
+function MobileEmpty({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ ...mobile_card_style, textAlign: "center", color: "rgba(255,255,255,.3)", fontSize: 13, padding: 28 }}>{children}</div>
+  );
+}
+
+function StripCell({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
+  return (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ fontSize: 9, color: "rgba(255,255,255,.35)", fontWeight: 600, letterSpacing: 0.3, textTransform: "uppercase", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</div>
+      <div className="mono" style={{ fontSize: 12.5, fontWeight: 800, color: color ?? "#fff", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value}</div>
+      {sub && <div className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: color ?? "rgba(255,255,255,.45)", whiteSpace: "nowrap" }}>{sub}</div>}
+    </div>
+  );
+}
+
+function MobilePositionCard({
+  h,
+  opened,
+  on_open,
+  on_open_team,
+}: {
+  h: HoldingDetail;
+  opened?: string;
+  on_open: () => void;
+  on_open_team?: (team_id: string) => void;
+}) {
+  const team = teams_api.get(h.player.team_id);
+  const is_long = h.shares > 0;
+  return (
+    <div onClick={on_open} style={{ ...mobile_card_style, padding: "12px", cursor: "pointer" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+        <PlayerAvatar player={h.player} team_color={team?.color ?? "#666"} size={36} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+            <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,.45)", flexShrink: 0 }}>{h.player.jersey_number}</span>
+            <span style={{ fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{h.player.name}</span>
+            <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 800, letterSpacing: 0.4, padding: "1px 5px", borderRadius: 3, color: "var(--color-bg)", background: is_long ? "var(--color-positive)" : "var(--color-negative)" }}>
+              {is_long ? "LONG" : "SHORT"}
+            </span>
+          </div>
+          <TeamLink team_id={h.player.team_id} on_open_team={on_open_team} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "rgba(255,255,255,.4)", marginTop: 1, minWidth: 0 }}>
+            <span style={{ flexShrink: 0 }}>{team?.flag}</span>
+            <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{team?.name}</span>
+            <span style={{ color: position_color[h.player.position], fontWeight: 700, flexShrink: 0 }}>· {POSITION_ABBR[h.player.position]}</span>
+          </TeamLink>
+        </div>
+        <div style={{ textAlign: "right", flexShrink: 0 }}>
+          <div className="mono" style={{ fontSize: 13, fontWeight: 800 }}>{fmt_eur_m(h.current_price)}</div>
+          <div className="mono" style={{ fontSize: 10, color: "rgba(255,255,255,.4)" }}>{fmt_eur_from_m(h.price_per_share)}/sh</div>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 9, paddingTop: 9, borderTop: "1px solid rgba(255,255,255,.06)" }}>
+        <StripCell label="Opened" value={fmt_short_date(opened)} />
+        <StripCell label="Shares" value={fmt_shares(Math.abs(h.display_shares))} />
+        <StripCell label="Entry" value={fmt_eur_from_m(h.avg_buy_per_share)} />
+        <StripCell label="Exposure" value={fmt_eur_m(Math.abs(h.market_value))} sub={`${Math.abs(h.portfolio_pct).toFixed(1)}%`} />
+        <StripCell label="P&L" value={fmt_eur_m_signed(h.pnl)} sub={fmt_signed_pct(h.return_pct, 1)} color={color_for_sign(h.pnl)} />
+      </div>
+    </div>
+  );
+}
+
+function MobileTradeCard({ t, on_open_team }: { t: Trade; on_open_team?: (team_id: string) => void }) {
+  const team = teams_api.get(t.team_id);
+  const player = players_api.get(t.player_id);
+  const is_buy = t.kind === "buy";
+  return (
+    <div style={{ ...mobile_card_style, padding: "12px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+        {player && <PlayerAvatar player={player} team_color={team?.color ?? "#666"} size={32} />}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+            {player && <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,.45)", flexShrink: 0 }}>{player.jersey_number}</span>}
+            <span style={{ fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{t.player_name}</span>
+            <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 800, letterSpacing: 0.4, padding: "1px 5px", borderRadius: 3, color: "var(--color-bg)", background: is_buy ? "var(--color-action-buy)" : "var(--color-action-sell)" }}>
+              {t.kind.toUpperCase()}
+            </span>
+          </div>
+          <TeamLink team_id={t.team_id} on_open_team={on_open_team} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "rgba(255,255,255,.4)", marginTop: 1 }}>
+            <span>{team?.flag}</span>
+            <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{team?.name}</span>
+          </TeamLink>
+        </div>
+        <div style={{ textAlign: "right", flexShrink: 0 }}>
+          <div className="mono" style={{ fontSize: 13, fontWeight: 800 }}>{fmt_eur_m(t.total)}</div>
+          <div className="mono" style={{ fontSize: 10, color: "rgba(255,255,255,.4)" }}>{fmt_short_date(t.date)}</div>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 9, paddingTop: 9, borderTop: "1px solid rgba(255,255,255,.06)" }}>
+        <StripCell label="Shares" value={fmt_shares(portfolio_api.to_display_shares(t.shares))} />
+        <StripCell label="Price /sh" value={fmt_eur_from_m(portfolio_api.to_price_per_share(t.price))} />
+        <StripCell label="Total" value={fmt_eur_m(t.total)} />
+      </div>
     </div>
   );
 }
