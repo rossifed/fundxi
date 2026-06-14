@@ -395,6 +395,13 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match, on_op
 // (and own-goal — the BFF collapses both), "🎯" for a scored penalty.
 const _GOAL_GLYPHS = new Set(["⚽", "🎯"]);
 
+// Surname only (last whitespace token) — keeps each scorer compact so the
+// minute stays on the same line.
+function _surname(full: string): string {
+  const parts = full.trim().split(/\s+/);
+  return parts.length > 1 ? parts[parts.length - 1] : full;
+}
+
 function LiveMatchCard({
   match,
   on_open,
@@ -407,15 +414,21 @@ function LiveMatchCard({
   const home = teams_api.get(match.home_team_id);
   const away = teams_api.get(match.away_team_id);
 
-  // Scorers, in chronological order — name + minute.
-  const goals = useMemo(
-    () =>
-      match.events
-        .filter(e => _GOAL_GLYPHS.has(e.type))
-        .slice()
-        .sort((a, b) => a.minute - b.minute),
-    [match.events],
-  );
+  // Scorers grouped by player so a brace sits on ONE line ("Quiñones 9', 67'")
+  // and the surname + minute never split across lines.
+  const scorers = useMemo(() => {
+    const goals = match.events.filter(e => _GOAL_GLYPHS.has(e.type)).slice().sort((a, b) => a.minute - b.minute);
+    const by: { name: string; own: boolean; team_id: string; mins: string[] }[] = [];
+    for (const g of goals) {
+      const name = g.player_name ?? "?";
+      const own = g.is_own_goal === true;
+      const min = `${g.minute}'${g.type === "🎯" ? " (p)" : ""}`;
+      const row = by.find(s => s.name === name && s.own === own && s.team_id === g.team_id);
+      if (row) row.mins.push(min);
+      else by.push({ name, own, team_id: g.team_id ?? "", mins: [min] });
+    }
+    return by;
+  }, [match.events]);
 
   return (
     <div
@@ -460,16 +473,17 @@ function LiveMatchCard({
           </TeamLink>
         </div>
       </div>
-      {goals.length > 0 && (
-        <div style={{ display: "flex", justifyContent: "center", gap: 16, marginTop: 12, fontSize: 11, color: "rgba(255,255,255,.45)", flexWrap: "wrap" }}>
-          {goals.map((g, i) => {
-            const color = g.team_id === match.home_team_id ? home?.color : away?.color;
+      {scorers.length > 0 && (
+        <div style={{ display: "flex", justifyContent: "center", gap: 10, rowGap: 4, marginTop: 12, fontSize: 11, color: "rgba(255,255,255,.45)", flexWrap: "wrap" }}>
+          {scorers.map((s, i) => {
+            const color = s.team_id === match.home_team_id ? home?.color : away?.color;
             return (
-              <span key={`${g.minute}-${g.player_name ?? "?"}-${i}`}>
-                ⚽{" "}
-                <span style={{ color: color ?? "rgba(255,255,255,.8)", fontWeight: 700 }}>{g.player_name ?? "?"}</span>
-                {g.type === "🎯" ? " (p)" : ""}{" "}
-                <span className="mono" style={{ fontWeight: 700 }}>{g.minute}'</span>
+              // Each scorer is one non-wrapping unit, so the name + minute(s)
+              // never break across lines.
+              <span key={`${s.name}-${i}`} style={{ whiteSpace: "nowrap" }}>
+                ⚽ <span style={{ color: color ?? "rgba(255,255,255,.8)", fontWeight: 700 }}>{_surname(s.name)}</span>
+                {s.own ? <span style={{ opacity: 0.7, fontWeight: 700 }}> (og)</span> : null}{" "}
+                <span className="mono" style={{ fontWeight: 700 }}>{s.mins.join(", ")}</span>
               </span>
             );
           })}
