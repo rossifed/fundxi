@@ -45,7 +45,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "tc": "tsc --noEmit"
+    "tc": "tsc --noEmit",
+    "testflight": "bash scripts/testflight.sh"
   },
   "private": true
 }
