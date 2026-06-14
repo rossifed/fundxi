@@ -11,6 +11,7 @@ import { compute_pitch_positions, type PitchPosition } from "@fundxi/core/domain
 import { players_api } from "@fundxi/core/api/players_api";
 import { teams_api } from "@fundxi/core/api/teams_api";
 import { PlayerAvatar } from "@/ui/components/PlayerAvatar";
+import { useViewport } from "@/ui/hooks/use_viewport";
 import { fmt_eur_m, fmt_signed_pct } from "@/ui/helpers/format";
 import { count_match_events, MatchEventBadge, SubBadge, type MatchEventCounts } from "./event_badge";
 import { apply_subs, type SubInfo } from "@fundxi/core/domain/match/substitutions";
@@ -105,6 +106,11 @@ export function PitchView({
   home_color?: string;
   away_color?: string;
 }) {
+  const { is_mobile } = useViewport();
+  // Player tokens are a fixed pixel size; on a narrow phone pitch they would
+  // overlap, so shrink them (and give the pitch more height) on mobile.
+  const token_factor = is_mobile ? 0.58 : 1;
+
   const [team_select, set_team_select] = useState<"home" | "away">(() => {
     if (typeof window === "undefined") return "home";
     const v = window.localStorage.getItem(TEAM_SELECT_STORAGE_KEY);
@@ -193,7 +199,9 @@ export function PitchView({
         style={{
           position: "relative",
           width: "100%",
-          aspectRatio: `${SVG_W} / ${SVG_H}`,
+          // Taller (less wide) on a phone so the formation rows have vertical
+          // room once the tokens are scaled down.
+          aspectRatio: is_mobile ? "200 / 168" : `${SVG_W} / ${SVG_H}`,
           background: "rgba(255,255,255,.012)",
           border: "1px solid rgba(255,255,255,.05)",
           borderRadius: 14,
@@ -209,6 +217,7 @@ export function PitchView({
             events={event_counts.get(pos.player.id)}
             sub={effective_subs.get(pos.player.id)}
             on_open={on_open_player}
+            factor={token_factor}
           />
         ))}
         {selected_formation ? (
@@ -439,12 +448,16 @@ function PlayerToken({
   events,
   sub,
   on_open,
+  factor = 1,
 }: {
   pos: PitchPosition;
   color: string;
   events?: MatchEventCounts;
   sub?: SubInfo;
   on_open: (player_id: number) => void;
+  /** Extra uniform scale applied on top of the perspective scale (phones
+   * shrink the whole token so the XI doesn't overlap on a narrow pitch). */
+  factor?: number;
 }) {
   const p = pos.player;
   const ref = players_api.get(p.id);
@@ -468,7 +481,7 @@ function PlayerToken({
         position: "absolute",
         left: `${(screen_x / SVG_W) * 100}%`,
         top: `${(screen_y / SVG_H) * 100}%`,
-        transform: `translate(-50%, -50%) scale(${scale})`,
+        transform: `translate(-50%, -50%) scale(${scale * factor})`,
         transformOrigin: "50% 50%",
         display: "flex",
         flexDirection: "column",
