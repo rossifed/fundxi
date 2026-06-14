@@ -34,14 +34,16 @@ export function PlayerSheetHeader({
           alt={player.full_name ?? player.name}
         />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+          {/* paddingRight reserves room for the Sheet's close (X) button in the
+              top-right corner so the watch star never slides under it. */}
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10, paddingRight: 32 }}>
             <span
               className="mono"
-              style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1, letterSpacing: -0.5, color: "rgba(255,255,255,.55)" }}
+              style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1, letterSpacing: -0.5, color: "rgba(255,255,255,.55)", flexShrink: 0 }}
             >
               {player.jersey_number}
             </span>
-            <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1, letterSpacing: -0.5 }}>
+            <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1, letterSpacing: -0.5, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {player.full_name ?? player.name}
             </div>
             <button
