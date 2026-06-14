@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { ambient_gradient } from "@/ui/design/tokens";
 import { useViewport } from "@/ui/hooks/use_viewport";
 
@@ -17,7 +18,10 @@ interface SheetProps {
 export function Sheet({ open, on_close, children, footer, max_width = 720 }: SheetProps) {
   const { is_mobile } = useViewport();
   if (!open) return null;
-  return (
+  // Portal to <body> so the sheet escapes any ancestor stacking context (the
+  // app's centered container has its own z-index, which would otherwise trap
+  // the sheet *below* the fixed BottomNav and hide the footer buttons).
+  return createPortal(
     <div
       style={{
         position: "fixed",
@@ -99,6 +103,7 @@ export function Sheet({ open, on_close, children, footer, max_width = 720 }: She
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
