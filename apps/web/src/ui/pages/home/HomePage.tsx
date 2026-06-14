@@ -402,6 +402,31 @@ function _surname(full: string): string {
   return parts.length > 1 ? parts[parts.length - 1] : full;
 }
 
+interface _ScorerEntry {
+  name: string;
+  own: boolean;
+  team_id: string;
+  mins: string[];
+}
+
+// One team's scorers, stacked and left-anchored ("⚽ Surname 9', 67'" per line).
+function _ScorerList({ scorers, color }: { scorers: _ScorerEntry[]; color?: string }) {
+  if (scorers.length === 0) return <div />;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 11, color: "rgba(255,255,255,.5)", textAlign: "left", minWidth: 0 }}>
+      {scorers.map((s, i) => (
+        <div key={`${s.name}-${i}`} style={{ display: "flex", alignItems: "baseline", gap: 5, minWidth: 0 }}>
+          <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
+            ⚽ <span style={{ color: color ?? "rgba(255,255,255,.8)", fontWeight: 700 }}>{_surname(s.name)}</span>
+            {s.own ? <span style={{ opacity: 0.7, fontWeight: 700 }}> (og)</span> : null}
+          </span>
+          <span className="mono" style={{ flexShrink: 0, fontWeight: 700 }}>{s.mins.join(", ")}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function LiveMatchCard({
   match,
   on_open,
@@ -474,19 +499,11 @@ function LiveMatchCard({
         </div>
       </div>
       {scorers.length > 0 && (
-        <div style={{ display: "flex", justifyContent: "center", gap: 10, rowGap: 4, marginTop: 12, fontSize: 11, color: "rgba(255,255,255,.45)", flexWrap: "wrap" }}>
-          {scorers.map((s, i) => {
-            const color = s.team_id === match.home_team_id ? home?.color : away?.color;
-            return (
-              // Each scorer is one non-wrapping unit, so the name + minute(s)
-              // never break across lines.
-              <span key={`${s.name}-${i}`} style={{ whiteSpace: "nowrap" }}>
-                ⚽ <span style={{ color: color ?? "rgba(255,255,255,.8)", fontWeight: 700 }}>{_surname(s.name)}</span>
-                {s.own ? <span style={{ opacity: 0.7, fontWeight: 700 }}> (og)</span> : null}{" "}
-                <span className="mono" style={{ fontWeight: 700 }}>{s.mins.join(", ")}</span>
-              </span>
-            );
-          })}
+        // Each team's scorers under its own half, left-anchored — so it's clear
+        // who scored for whom (mirrors the native match scorer split).
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 12 }}>
+          <_ScorerList scorers={scorers.filter(s => s.team_id === match.home_team_id)} color={home?.color} />
+          <_ScorerList scorers={scorers.filter(s => s.team_id === match.away_team_id)} color={away?.color} />
         </div>
       )}
     </div>
