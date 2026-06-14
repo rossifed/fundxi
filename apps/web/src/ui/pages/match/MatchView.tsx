@@ -319,9 +319,13 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
         </div>
       </div>
 
-      {/* Live commentary ticker — keeps the most recent events in view above
-          the fold. Scrolls right-to-left continuously, pauses on hover. */}
-      <LiveTicker comments={commentaries ?? []} card_style={card} />
+      {/* Live commentary ticker — LIVE matches only. It is the same feed as the
+          Commentary panel below (sliced to the latest 30), so its sole value is
+          the ambient "freshest action" glance while a match is in play. On a
+          finished match it adds no information and just reads as a duplicate
+          feed, so we hide it then and keep the Commentary panel as the one
+          source. Scrolls right-to-left continuously, pauses on hover. */}
+      {is_live && <LiveTicker comments={commentaries ?? []} card_style={card} />}
 
       {/* Two-column grid on desktop: lineup on the left, sticky Stats +
           Commentary panel on the right. On mobile / narrow viewports the
