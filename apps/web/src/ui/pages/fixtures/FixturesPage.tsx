@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { matches_api } from "@fundxi/core/api/matches_api";
 import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import { standings_api, type GroupStanding } from "@fundxi/core/api/standings_api";
@@ -27,10 +27,10 @@ function read_view_mode(): ViewMode {
 }
 
 const STATUS_TABS: { key: StatusFilter; label: string }[] = [
-  { key: "all", label: "All" },
-  { key: "live", label: "Live" },
-  { key: "finished", label: "Completed" },
   { key: "upcoming", label: "Upcoming" },
+  { key: "finished", label: "Completed" },
+  { key: "live", label: "Live" },
+  { key: "all", label: "All" },
 ];
 
 // Presentational mapping of Sportmonks stage labels → short chip text.
@@ -133,7 +133,7 @@ function phase_chip(fixture: Fixture): string {
 
 export function FixturesPage({ on_open_match, on_open_team }: FixturesPageProps) {
   const { is_mobile } = useViewport();
-  const [filter, set_filter] = useState<StatusFilter>("all");
+  const [filter, set_filter] = useState<StatusFilter>("upcoming");
   const [view_mode, set_view_mode] = useState<ViewMode>(read_view_mode);
   useEffect(() => {
     if (typeof window !== "undefined") window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, view_mode);
@@ -170,23 +170,6 @@ export function FixturesPage({ on_open_match, on_open_team }: FixturesPageProps)
     ...(held_names_by_team.get(fx.home_team_id) ?? []),
     ...(held_names_by_team.get(fx.away_team_id) ?? []),
   ];
-
-  // Auto-scroll to today's section when the calendar opens — the WC
-  // calendar is a long list. Scrolls once per entry into the calendar
-  // view (reset when leaving), never on a live re-fetch.
-  const today_ref = useRef<HTMLElement | null>(null);
-  const did_scroll_to_today = useRef(false);
-  useEffect(() => {
-    if (view_mode !== "calendar") {
-      did_scroll_to_today.current = false;
-      return;
-    }
-    if (did_scroll_to_today.current) return;
-    if (today_ref.current) {
-      today_ref.current.scrollIntoView({ block: "start" });
-      did_scroll_to_today.current = true;
-    }
-  }, [view_mode, days]);
 
   const handle_open = async (fx: Fixture) => {
     const match = await matches_api.get_match_by_fixture_id(fx.id);
@@ -275,7 +258,6 @@ export function FixturesPage({ on_open_match, on_open_team }: FixturesPageProps)
         {days.map(day => (
           <section
             key={day.day_key}
-            ref={day.is_today ? today_ref : undefined}
             style={{
               background: day.is_today ? "color-mix(in srgb, var(--color-positive) 4%, transparent)" : "rgba(255,255,255,.025)",
               border: `1px solid ${day.is_today ? "color-mix(in srgb, var(--color-positive) 30%, transparent)" : "rgba(255,255,255,.07)"}`,
