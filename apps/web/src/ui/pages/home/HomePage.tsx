@@ -6,6 +6,7 @@ import { players_api } from "@fundxi/core/api/players_api";
 import { teams_api } from "@fundxi/core/api/teams_api";
 import { leagues_api } from "@fundxi/core/api/leagues_api";
 import type { Match } from "@fundxi/core/domain/match/match";
+import { default_match_tab, latest_results, next_fixtures, type MatchTab } from "@fundxi/core/domain/match/match_center";
 import type { Player } from "@fundxi/core/domain/player/player";
 import type { PlayerWithValuation } from "@fundxi/core/domain/market/player_valuation";
 import { Logo } from "@/ui/shell/Logo";
@@ -47,14 +48,13 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match, on_op
   // useLiveMatch hook — the SAME source/refresh path the RightRail ticker
   // uses, so the minute/score can never diverge between widgets/pages.
   const live = useLiveMatch();
-  const upcoming = matches_api.list_fixtures().filter(f => f.status === "upcoming").slice(0, 3);
-  // Latest results — the 2 most recently played matches, so the overnight /
-  // earlier-today results are visible on Home without going to Fixtures.
-  const recent = matches_api
-    .list_fixtures()
-    .filter(f => f.status === "finished")
-    .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""))
-    .slice(0, 2);
+  // Match Center toggle: the live match (if any) stays a persistent card above
+  // a Next | Latest toggle. "Latest" surfaces overnight / earlier-today scores
+  // without going to Fixtures; the default tab is contextual (see core).
+  const all_fixtures = matches_api.list_fixtures();
+  const upcoming = next_fixtures(all_fixtures, 2);
+  const recent = latest_results(all_fixtures, 2);
+  const [match_tab, set_match_tab] = useState<MatchTab>(() => default_match_tab(all_fixtures, Date.now()));
   const my_leagues = leagues_api.list_summaries();
 
   // Top gainers / losers: re-read after every live price tick.
@@ -134,98 +134,92 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match, on_op
             </div>
           )}
 
-          {recent.length > 0 && (
-            <>
-              <div style={{ padding: "12px 18px 4px", fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,.4)", letterSpacing: 0.5, textTransform: "uppercase" }}>
-                Latest results
-              </div>
-              {recent.map((fx, i) => {
-                const home = teams_api.get(fx.home_team_id);
-                const away = teams_api.get(fx.away_team_id);
-                if (!home || !away) return null;
-                return (
-                  <div
-                    key={fx.id}
-                    onClick={() => void open_fixture(fx.id)}
-                    role="button"
-                    title="Open match"
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "84px 1fr 44px 1fr",
-                      alignItems: "center",
-                      padding: "10px 18px",
-                      borderTop: i > 0 ? "1px solid rgba(255,255,255,.03)" : "none",
-                      fontSize: 13,
-                      gap: 10,
-                      cursor: "pointer",
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.02)")}
-                    onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                  >
-                    <span style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,.35)", letterSpacing: 0.5 }}>FT</span>
-                    <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
-                      <span style={{ fontWeight: 600 }}>{home.name}</span>
-                      <span style={{ fontSize: 18 }}>{home.flag}</span>
-                    </span>
-                    <span className="mono" style={{ fontSize: 13, fontWeight: 800, textAlign: "center" }}>
-                      {fx.home_score ?? 0}–{fx.away_score ?? 0}
-                    </span>
-                    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 18 }}>{away.flag}</span>
-                      <span style={{ fontWeight: 600 }}>{away.name}</span>
-                    </span>
-                  </div>
-                );
-              })}
-            </>
-          )}
-
-          <div style={{ padding: "12px 18px 4px", fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,.4)", letterSpacing: 0.5, textTransform: "uppercase" }}>
-            Up next
+          {/* Next | Latest toggle — the live match (above) is never tabbed. */}
+          <div style={{ display: "flex", gap: 4, padding: "12px 18px 8px" }}>
+            {(["next", "latest"] as const).map(t => {
+              const active = match_tab === t;
+              return (
+                <button
+                  key={t}
+                  onClick={() => set_match_tab(t)}
+                  style={{
+                    flex: 1,
+                    padding: "7px 0",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: 0.4,
+                    textTransform: "uppercase",
+                    color: active ? "#fff" : "rgba(255,255,255,.4)",
+                    background: active ? "rgba(255,255,255,.06)" : "transparent",
+                    border: "1px solid",
+                    borderColor: active ? "rgba(255,255,255,.1)" : "rgba(255,255,255,.04)",
+                    borderRadius: 8,
+                    cursor: "pointer",
+                  }}
+                >
+                  {t === "next" ? "Next" : "Latest"}
+                </button>
+              );
+            })}
           </div>
-          {upcoming.map((fx, i) => {
+
+          {(match_tab === "latest" ? recent : upcoming).map((fx, i) => {
             const home = teams_api.get(fx.home_team_id);
             const away = teams_api.get(fx.away_team_id);
             if (!home || !away) return null;
+            const is_result = match_tab === "latest";
             return (
               <div
                 key={fx.id}
+                onClick={() => void open_fixture(fx.id)}
+                role="button"
+                title="Open match"
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "84px 1fr 28px 1fr",
+                  gridTemplateColumns: is_result ? "44px 1fr 44px 1fr" : "84px 1fr 28px 1fr",
                   alignItems: "center",
                   padding: "10px 18px",
                   borderTop: i > 0 ? "1px solid rgba(255,255,255,.03)" : "none",
                   fontSize: 13,
                   gap: 10,
+                  cursor: "pointer",
                 }}
+                onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.02)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
               >
-                <span style={{ fontSize: 11, color: "rgba(255,255,255,.45)", fontWeight: 600, letterSpacing: 0.3 }}>
-                  {fmt_fixture_datetime(fx.date)}
-                </span>
-                <TeamLink
-                  team_id={fx.home_team_id}
-                  on_open_team={on_open_team}
-                  style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}
-                >
+                {is_result ? (
+                  <span style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,.35)", letterSpacing: 0.5 }}>FT</span>
+                ) : (
+                  <span style={{ fontSize: 11, color: "rgba(255,255,255,.45)", fontWeight: 600, letterSpacing: 0.3 }}>
+                    {fmt_fixture_datetime(fx.date)}
+                  </span>
+                )}
+                <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
                   <span style={{ fontWeight: 600 }}>{home.name}</span>
                   <span style={{ fontSize: 18 }}>{home.flag}</span>
-                </TeamLink>
-                <span style={{ fontSize: 11, color: "rgba(255,255,255,.2)", fontWeight: 600, textAlign: "center" }}>vs</span>
-                <TeamLink
-                  team_id={fx.away_team_id}
-                  on_open_team={on_open_team}
-                  style={{ display: "flex", alignItems: "center", gap: 8 }}
-                >
+                </span>
+                {is_result ? (
+                  <span className="mono" style={{ fontSize: 13, fontWeight: 800, textAlign: "center" }}>
+                    {fx.home_score ?? 0}–{fx.away_score ?? 0}
+                  </span>
+                ) : (
+                  <span style={{ fontSize: 11, color: "rgba(255,255,255,.2)", fontWeight: 600, textAlign: "center" }}>vs</span>
+                )}
+                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ fontSize: 18 }}>{away.flag}</span>
                   <span style={{ fontWeight: 600 }}>{away.name}</span>
-                </TeamLink>
+                </span>
               </div>
             );
           })}
-          {upcoming.length === 0 && (
+          {match_tab === "next" && upcoming.length === 0 && (
             <div style={{ padding: 20, textAlign: "center", fontSize: 12, color: "rgba(255,255,255,.3)" }}>
               No upcoming fixtures scheduled
+            </div>
+          )}
+          {match_tab === "latest" && recent.length === 0 && (
+            <div style={{ padding: 20, textAlign: "center", fontSize: 12, color: "rgba(255,255,255,.3)" }}>
+              No matches played yet
             </div>
           )}
         </div>

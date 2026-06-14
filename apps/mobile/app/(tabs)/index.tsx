@@ -8,6 +8,7 @@ import { teams_api } from "@fundxi/core/api/teams_api";
 import { news_api } from "@fundxi/core/api/news_api";
 import { leagues_api } from "@fundxi/core/api/leagues_api";
 import { compute_return_pct } from "@fundxi/core/domain/market/return";
+import { default_match_tab, latest_results, next_fixtures, type MatchTab } from "@fundxi/core/domain/match/match_center";
 import { compute_initials } from "@fundxi/core/domain/identity/avatar";
 import { spark_for_player } from "@fundxi/core/infrastructure/repositories/valuations_repository";
 import { themes } from "@fundxi/core/design/palette";
@@ -22,7 +23,7 @@ import { PlayerSheet, type PlayerSheetHandle } from "@/components/PlayerSheet";
 import { Logo } from "@/components/Logo";
 import { useAuth } from "@/components/AuthContext";
 import { useWatchlist } from "@/lib/watchlist";
-import { mono, surface, text, with_alpha } from "@/theme/tokens";
+import { mono, surface, with_alpha } from "@/theme/tokens";
 
 const palette = themes.dark;
 
@@ -43,29 +44,15 @@ export default function HomeScreen() {
     matches_api.refresh_fixtures().then(() => set_refresh_tag(t => t + 1)),
   );
 
-  const next_fx = useMemo(
-    () =>
-      matches_api
-        .list_fixtures()
-        .filter(f => f.status === "upcoming")
-        .sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""))[0],
-    [refresh_tag],
-  );
-  const live_fx = useMemo(
-    () => matches_api.list_fixtures().find(f => f.status === "live"),
-    [refresh_tag],
-  );
-  // Latest results — the 2 most recently played matches, so overnight /
-  // earlier-today scores show on Home without going to Fixtures.
-  const recent_fx = useMemo(
-    () =>
-      matches_api
-        .list_fixtures()
-        .filter(f => f.status === "finished")
-        .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""))
-        .slice(0, 2),
-    [refresh_tag],
-  );
+  const all_fixtures = useMemo(() => matches_api.list_fixtures(), [refresh_tag]);
+  const live_fx = useMemo(() => all_fixtures.find(f => f.status === "live"), [all_fixtures]);
+  // Next | Latest toggle below the (persistent) live card. "Latest" surfaces
+  // overnight / earlier-today scores without going to Fixtures; the default tab
+  // is contextual (see core/match_center).
+  const next_list = useMemo(() => next_fixtures(all_fixtures, 2), [all_fixtures]);
+  const recent_fx = useMemo(() => latest_results(all_fixtures, 2), [all_fixtures]);
+  const [match_tab, set_match_tab] = useState<MatchTab>(() => default_match_tab(all_fixtures, Date.now()));
+  const match_list = match_tab === "latest" ? recent_fx : next_list;
   const top_up = useMemo(() => players_api.top_movers(5, "up"), [refresh_tag]);
   const top_down = useMemo(() => players_api.top_movers(5, "down"), [refresh_tag]);
   const news = useMemo(() => news_api.list().slice(0, 20), [refresh_tag]);
@@ -99,20 +86,36 @@ export default function HomeScreen() {
 
         <SectionCard>
           <SectionHeader title="Match Center" cta="All fixtures →" on_cta={() => router.push("/fixtures")} />
-          {live_fx ? (
-            <LiveMatchCard fixture={live_fx} on_open={() => router.push(`/match/${live_fx.id}`)} />
-          ) : next_fx ? (
-            <NextMatchCard fixture={next_fx} on_open={() => router.push(`/match/${next_fx.id}`)} />
+          {live_fx && <LiveMatchCard fixture={live_fx} on_open={() => router.push(`/match/${live_fx.id}`)} />}
+          {/* Next | Latest toggle — the live card above is never tabbed. */}
+          <View style={styles.mc_toggle}>
+            {(["next", "latest"] as const).map(t => {
+              const active = match_tab === t;
+              return (
+                <Pressable
+                  key={t}
+                  style={[styles.mc_tab, active && styles.mc_tab_active]}
+                  onPress={() => set_match_tab(t)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t === "next" ? "Next matches" : "Latest results"}
+                >
+                  <Text style={[styles.mc_tab_text, active && styles.mc_tab_text_active]}>
+                    {t === "next" ? "NEXT" : "LATEST"}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          {match_list.length === 0 ? (
+            <Text style={styles.mc_empty}>{match_tab === "next" ? "No upcoming fixtures" : "No matches played yet"}</Text>
           ) : (
-            <EmptyMatchRow on_press={() => router.push("/fixtures")} />
-          )}
-          {recent_fx.length > 0 && (
-            <>
-              <Text style={styles.results_header}>LATEST RESULTS</Text>
-              {recent_fx.map((fx, i) => (
+            match_list.map((fx, i) =>
+              match_tab === "latest" ? (
                 <ResultRow key={fx.id} fixture={fx} divider={i > 0} on_open={() => router.push(`/match/${fx.id}`)} />
-              ))}
-            </>
+              ) : (
+                <NextRow key={fx.id} fixture={fx} divider={i > 0} on_open={() => router.push(`/match/${fx.id}`)} />
+              ),
+            )
           )}
         </SectionCard>
 
@@ -213,46 +216,32 @@ function SectionHeader({
 }
 
 function fmt_kickoff(iso?: string): string {
-  if (!iso) return "Date TBD";
+  if (!iso) return "TBD";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString(undefined, { weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
-}
-function fmt_venue(fixture: Fixture): string {
-  return [fixture.venue_name, fixture.venue_city].filter(Boolean).join(", ");
+  return d.toLocaleString(undefined, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
-function EmptyMatchRow({ on_press }: { on_press: () => void }) {
-  return (
-    <Pressable style={styles.empty_match} onPress={on_press} accessibilityRole="button" accessibilityLabel="View fixtures">
-      <Text style={styles.empty_match_text}>No upcoming fixtures</Text>
-      <View style={styles.view_fixtures}>
-        <Text style={styles.view_fixtures_text}>View fixtures →</Text>
-      </View>
-    </Pressable>
-  );
-}
-
-function NextMatchCard({ fixture, on_open }: { fixture: Fixture; on_open: () => void }) {
+function NextRow({ fixture, divider, on_open }: { fixture: Fixture; divider: boolean; on_open: () => void }) {
   const home = teams_api.get(fixture.home_team_id);
   const away = teams_api.get(fixture.away_team_id);
-  const venue = fmt_venue(fixture);
   return (
-    <Pressable style={styles.next_card} onPress={on_open} accessibilityRole="button" accessibilityLabel="Open next match">
-      <Text style={styles.next_kicker}>NEXT MATCH</Text>
-      <View style={styles.next_teams}>
-        <View style={styles.next_team}>
-          <Text style={styles.next_flag}>{home?.flag}</Text>
-          <Text style={styles.next_name} numberOfLines={1}>{home?.name ?? fixture.home_team_id}</Text>
-        </View>
-        <Text style={styles.next_vs}>vs</Text>
-        <View style={[styles.next_team, { justifyContent: "flex-end" }]}>
-          <Text style={styles.next_name} numberOfLines={1}>{away?.name ?? fixture.away_team_id}</Text>
-          <Text style={styles.next_flag}>{away?.flag}</Text>
-        </View>
+    <Pressable
+      style={[styles.result_row, divider && styles.row_divider]}
+      onPress={on_open}
+      accessibilityRole="button"
+      accessibilityLabel="Open match"
+    >
+      <Text style={styles.next_row_time} numberOfLines={1}>{fmt_kickoff(fixture.date)}</Text>
+      <View style={styles.result_side}>
+        <Text style={styles.result_name} numberOfLines={1}>{home?.name ?? fixture.home_team_id}</Text>
+        <Text style={styles.result_flag}>{home?.flag}</Text>
       </View>
-      <Text style={styles.next_meta}>{fmt_kickoff(fixture.date)}</Text>
-      {venue !== "" && <Text style={styles.next_venue}>{venue}</Text>}
+      <Text style={styles.next_row_vs}>vs</Text>
+      <View style={[styles.result_side, { justifyContent: "flex-start" }]}>
+        <Text style={styles.result_flag}>{away?.flag}</Text>
+        <Text style={styles.result_name} numberOfLines={1}>{away?.name ?? fixture.away_team_id}</Text>
+      </View>
     </Pressable>
   );
 }
@@ -410,24 +399,12 @@ const styles = StyleSheet.create({
   empty: { color: "rgba(255,255,255,0.3)", fontSize: 12, textAlign: "center", paddingVertical: 20 },
   row_divider: { borderTopColor: "rgba(255,255,255,0.05)", borderTopWidth: 1 },
 
-  empty_match: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
-  },
-  empty_match_text: { color: text.secondary, fontSize: 13, fontWeight: "600", flexShrink: 1 },
-  view_fixtures: {
-    backgroundColor: surface.active,
-    borderColor: "rgba(255,255,255,0.08)",
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  view_fixtures_text: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  mc_toggle: { flexDirection: "row", gap: 4, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
+  mc_tab: { flex: 1, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: "rgba(255,255,255,0.05)", alignItems: "center" },
+  mc_tab_active: { backgroundColor: "rgba(255,255,255,0.06)", borderColor: "rgba(255,255,255,0.12)" },
+  mc_tab_text: { fontSize: 11, fontWeight: "800", letterSpacing: 0.5, color: "rgba(255,255,255,0.4)" },
+  mc_tab_text_active: { color: "#fff" },
+  mc_empty: { color: "rgba(255,255,255,0.3)", fontSize: 12, textAlign: "center", paddingVertical: 18 },
 
   movers_toggle: { flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
   mtoggle: {
@@ -479,32 +456,14 @@ const styles = StyleSheet.create({
   live_card_team: { flex: 1, color: "#fff", fontSize: 13, fontWeight: "700" },
   live_card_score: { fontFamily: mono, fontSize: 22, fontWeight: "900", color: "#fff", letterSpacing: -0.5 },
 
-  next_card: {
-    marginHorizontal: 12,
-    marginTop: 12,
-    marginBottom: 12,
-    padding: 14,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.03)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.07)",
-    gap: 8,
-  },
-  next_kicker: { fontSize: 9, fontWeight: "800", letterSpacing: 1, color: "rgba(255,255,255,0.4)", textTransform: "uppercase" },
-  next_teams: { flexDirection: "row", alignItems: "center", gap: 10 },
-  next_team: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
-  next_flag: { fontSize: 24 },
-  next_name: { color: "#fff", fontSize: 15, fontWeight: "800", flexShrink: 1 },
-  next_vs: { color: "rgba(255,255,255,0.3)", fontSize: 12, fontWeight: "700" },
-  next_meta: { fontFamily: mono, color: "rgba(255,255,255,0.75)", fontSize: 13, fontWeight: "700" },
-  results_header: { fontSize: 9, fontWeight: "800", letterSpacing: 1, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", paddingHorizontal: 16, paddingTop: 12, paddingBottom: 2 },
   result_row: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 10 },
   result_ft: { fontFamily: mono, fontSize: 10, fontWeight: "800", color: "rgba(255,255,255,0.35)", width: 20 },
   result_side: { flex: 1, flexDirection: "row", alignItems: "center", gap: 6, justifyContent: "flex-end" },
   result_name: { color: "#fff", fontSize: 13, fontWeight: "700", flexShrink: 1 },
   result_flag: { fontSize: 18 },
   result_score: { fontFamily: mono, fontSize: 15, fontWeight: "900", color: "#fff", minWidth: 44, textAlign: "center" },
-  next_venue: { color: "rgba(255,255,255,0.45)", fontSize: 12 },
+  next_row_time: { fontFamily: mono, fontSize: 10, fontWeight: "700", color: "rgba(255,255,255,0.5)", width: 84 },
+  next_row_vs: { fontSize: 11, fontWeight: "700", color: "rgba(255,255,255,0.25)", minWidth: 44, textAlign: "center" },
 
   mover_row: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingVertical: 11 },
   mover_rank: { fontFamily: mono, width: 16, textAlign: "center", color: "rgba(255,255,255,0.4)", fontSize: 12, fontWeight: "800" },
