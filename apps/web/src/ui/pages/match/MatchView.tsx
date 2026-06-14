@@ -904,6 +904,11 @@ function RosterCard({
           gap: 7,
           padding: "6px 7px",
           minWidth: 0,
+          // Fixed height so every card is identical — the two columns stay
+          // aligned row by row and each card ends at the same level.
+          height: 54,
+          boxSizing: "border-box",
+          overflow: "hidden",
           background: sub ? "rgba(255,255,255,.012)" : "rgba(255,255,255,.028)",
           border: "1px solid rgba(255,255,255,.035)",
           borderRadius: 11,
