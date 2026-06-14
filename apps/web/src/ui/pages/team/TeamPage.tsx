@@ -225,12 +225,16 @@ export function TeamPage({ team, on_open_player, on_open_match, on_open_team, on
                       {players.length}
                     </span>
                   </header>
+                  {/* One horizontally-scrolling row per position group — the
+                      cards keep their style but are smaller, so a whole
+                      position line scans at a glance and scrolls sideways. */}
                   <div
+                    className="scroll-visible"
                     style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(auto-fill, minmax(165px, 1fr))",
+                      display: "flex",
                       gap: 10,
                       padding: 12,
+                      overflowX: "auto",
                     }}
                   >
                     {players.map(p => {
@@ -239,23 +243,24 @@ export function TeamPage({ team, on_open_player, on_open_match, on_open_team, on
                       // snapshot only seeds the fallback.
                       const live = valuations_api.get_for_player(p.id);
                       return (
-                        <PlayerCard
-                          key={p.id}
-                          name={p.name}
-                          jersey_number={p.jersey_number}
-                          position={p.position as Position}
-                          image_path={p.image_path}
-                          team_color={team.color}
-                          age={p.age}
-                          height={p.height}
-                          weight={p.weight}
-                          current_price={live?.current_price ?? p.valuation.current_price}
-                          change_pct={live?.change_since_inception ?? p.valuation.change_since_inception}
-                          stats={p.stats}
-                          spark_data={valuations_api.get_sparkline(p.id)}
-                          on_click={() => on_open_player(p.id)}
-                          on_trade={kind => open_trade(p.id, kind)}
-                        />
+                        <div key={p.id} style={{ flexShrink: 0, width: 146 }}>
+                          <PlayerCard
+                            name={p.name}
+                            jersey_number={p.jersey_number}
+                            position={p.position as Position}
+                            image_path={p.image_path}
+                            team_color={team.color}
+                            age={p.age}
+                            height={p.height}
+                            weight={p.weight}
+                            current_price={live?.current_price ?? p.valuation.current_price}
+                            change_pct={live?.change_since_inception ?? p.valuation.change_since_inception}
+                            stats={p.stats}
+                            spark_data={valuations_api.get_sparkline(p.id)}
+                            on_click={() => on_open_player(p.id)}
+                            on_trade={kind => open_trade(p.id, kind)}
+                          />
+                        </div>
                       );
                     })}
                   </div>
