@@ -7,6 +7,7 @@ import { ApiError } from "@fundxi/core/infrastructure/api_client";
 import { Avatar } from "@/ui/components/Avatar";
 import { useAuth } from "@/ui/shell/AuthContext";
 import { useLiveRefetch, usePricesLiveVersion } from "@/ui/hooks/use_live_updates";
+import { useViewport } from "@/ui/hooks/use_viewport";
 import type { League } from "@fundxi/core/domain/league/league";
 
 type View = "board" | "create" | "join";
@@ -17,6 +18,9 @@ interface LeaguesPageProps {
 
 export function LeaguesPage({ initial_join_code }: LeaguesPageProps = {}) {
   const { status } = useAuth();
+  const { is_mobile } = useViewport();
+  // Narrower Value/Return columns on a phone so the trader name has room.
+  const board_cols = is_mobile ? "26px 1fr 76px 60px" : "40px 1fr 110px 90px";
   const [, force] = useState(0);
   const [view, set_view] = useState<View>(initial_join_code ? "join" : "board");
   const [active_id, set_active_id] = useState<string | null>(null);
@@ -279,7 +283,7 @@ export function LeaguesPage({ initial_join_code }: LeaguesPageProps = {}) {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "40px 1fr 110px 90px",
+                gridTemplateColumns: board_cols,
                 padding: "8px 16px",
                 borderBottom: "1px solid rgba(255,255,255,.04)",
                 fontSize: 10,
@@ -300,7 +304,7 @@ export function LeaguesPage({ initial_join_code }: LeaguesPageProps = {}) {
                 key={entry.rank}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "40px 1fr 110px 90px",
+                  gridTemplateColumns: board_cols,
                   padding: "10px 16px",
                   borderBottom: "1px solid rgba(255,255,255,.025)",
                   alignItems: "center",
@@ -316,23 +320,16 @@ export function LeaguesPage({ initial_join_code }: LeaguesPageProps = {}) {
                     {entry.rank}
                   </span>
                 )}
-                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                   <Avatar seed={entry.name} name={entry.name} size={26} />
-                  <span style={{ fontWeight: entry.is_me ? 700 : 500 }}>
+                  {/* minWidth:0 + ellipsis so a long name truncates instead of
+                      blowing out the grid and shoving Value/Return off-screen. */}
+                  <span style={{ fontWeight: entry.is_me ? 700 : 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
                     {entry.name}
-                    {entry.is_me && (
-                      <span
-                        style={{
-                          fontSize: 10,
-                          color: "var(--color-positive)",
-                          marginLeft: 6,
-                          fontWeight: 700,
-                        }}
-                      >
-                        YOU
-                      </span>
-                    )}
                   </span>
+                  {entry.is_me && (
+                    <span style={{ fontSize: 10, color: "var(--color-positive)", fontWeight: 700, flexShrink: 0 }}>YOU</span>
+                  )}
                 </span>
                 <span className="mono" style={{ textAlign: "right", color: "rgba(255,255,255,.55)" }}>
                   {fmt_eur_m(entry.value)}
