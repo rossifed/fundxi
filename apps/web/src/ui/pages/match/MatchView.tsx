@@ -834,8 +834,12 @@ function DualRoster({
       )}
 
       <div style={{ position: "relative", padding: "10px 12px 12px" }}>
-        {home_color ? <ColumnGlow color={home_color} side="left" /> : null}
-        {away_color ? <ColumnGlow color={away_color} side="right" /> : null}
+        {/* Team-colour glow on each column's outer edge. Falls back to a generic
+            home/away tint (blue / red) when the provider gives no kit colour —
+            same convention as the native lineup (it's a side marker, not an
+            invented team colour). */}
+        <ColumnGlow color={home_color || "var(--color-accent-blue)"} side="left" />
+        <ColumnGlow color={away_color || "var(--color-negative)"} side="right" />
         {POSITION_GROUPS.map(g => {
           const home_ps = groups_home[g.key];
           const away_ps = groups_away[g.key];
@@ -1079,9 +1083,9 @@ function ColumnGlow({ color, side }: { color: string; side: "left" | "right" }) 
         top: 8,
         bottom: 8,
         ...(side === "left" ? { left: 0 } : { right: 0 }),
-        width: 3,
+        width: 4,
         background: color,
-        opacity: 0.5,
+        opacity: 0.7,
         borderRadius: 2,
         filter: "blur(3px)",
         pointerEvents: "none",
