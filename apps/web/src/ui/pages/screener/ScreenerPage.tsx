@@ -16,31 +16,20 @@ import {
 import { useLiveRefetch, usePricesLiveVersion } from "@/ui/hooks/use_live_updates";
 import { pulse_class, usePulse } from "@/ui/hooks/use_pulse";
 import { spark_for_player } from "@fundxi/core/infrastructure/repositories/valuations_repository";
-import { filter_screener_entries, type ScreenerSortKey } from "@fundxi/core/application/screener_filter";
-import { color_for_sign, fmt_signed_pct, price_label } from "@/ui/helpers/format";
+import {
+  filter_screener_entries,
+  screener_bounds,
+  type Range,
+  type ScreenerSortKey,
+} from "@fundxi/core/application/screener_filter";
+import { color_for_sign, fmt_signed_pct } from "@/ui/helpers/format";
 import { toggle_set } from "@/ui/helpers/state";
-import { color, position_color } from "@/ui/design/tokens";
+import { color } from "@/ui/design/tokens";
 import { useViewport } from "@/ui/hooks/use_viewport";
+import { ScreenerFilters, type ActiveChip } from "./ScreenerFilters";
 
-// Preset ranges for the Performance (since-start %) and Age filters. Web uses
-// preset chips (its established filter pattern, like Price) where mobile uses
-// continuous sliders — same filtering capability, platform-native input. The
-// shared predicate lives in @fundxi/core/application/screener_filter.
-const PERF_PRESETS: { label: string; range: [number, number] }[] = [
-  { label: "-20–0%", range: [-20, 0] },
-  { label: "0–10%", range: [0, 10] },
-  { label: "10–30%", range: [10, 30] },
-  { label: "30%+", range: [30, 999] },
-];
-const AGE_PRESETS: { label: string; range: [number, number] }[] = [
-  { label: "U21", range: [0, 20] },
-  { label: "21-25", range: [21, 25] },
-  { label: "26-30", range: [26, 30] },
-  { label: "31+", range: [31, 99] },
-];
-
-const range_eq = (a: [number, number] | null, b: [number, number]): boolean =>
-  a != null && a[0] === b[0] && a[1] === b[1];
+const PRICE_STEP = 5;
+const PERF_STEP = 5;
 
 type Tab = "valuation" | "statistics" | "personal";
 type SortDir = "asc" | "desc";
@@ -142,10 +131,11 @@ export function ScreenerPage({ on_open_player, on_open_team, watchlist, toggle_w
   const { is_mobile } = useViewport();
   const [position_filters, set_position_filters] = useState<Set<Position>>(new Set());
   const [team_filters, set_team_filters] = useState<Set<string>>(new Set());
-  const [price_range, set_price_range] = useState<[number, number]>([0, 999]);
-  // null ⇒ filter inactive. Same union as mobile, fed to the shared predicate.
-  const [perf_range, set_perf_range] = useState<[number, number] | null>(null);
-  const [age_range, set_age_range] = useState<[number, number] | null>(null);
+  // null ⇒ filter inactive (full range). Sliders read the computed bounds.
+  // Same union as mobile, fed to the shared predicate.
+  const [price_range, set_price_range] = useState<Range | null>(null);
+  const [perf_range, set_perf_range] = useState<Range | null>(null);
+  const [age_range, set_age_range] = useState<Range | null>(null);
   const [held_only, set_held_only] = useState(false);
   const [watch_only, set_watch_only] = useState(false);
   const [search, set_search] = useState("");
@@ -177,6 +167,22 @@ export function ScreenerPage({ on_open_player, on_open_team, watchlist, toggle_w
   const my_holdings = useMemo(() => portfolio_api.get_holdings(), []);
   const held_ids = useMemo(() => new Set(my_holdings.map(h => h.player_id)), [my_holdings]);
 
+  // Slider bounds derived from the live dataset — never hardcoded ranges
+  // (same approach as the native filter sheet).
+  const price_max = useMemo(() => {
+    const m = all_entries.reduce((a, e) => Math.max(a, e.current_price), 0);
+    return Math.max(PRICE_STEP, Math.ceil(m / PRICE_STEP) * PRICE_STEP);
+  }, [all_entries]);
+  const price_bounds: Range = [0, price_max];
+  const perf_bounds = useMemo<Range>(
+    () => screener_bounds(all_entries, e => e.since_start_pct, PERF_STEP, [-50, 100]),
+    [all_entries],
+  );
+  const age_bounds = useMemo<Range>(
+    () => screener_bounds(all_entries, e => e.age, 1, [16, 45]),
+    [all_entries],
+  );
+
   const filtered = useMemo(
     () =>
       filter_screener_entries(
@@ -190,12 +196,50 @@ export function ScreenerPage({ on_open_player, on_open_team, watchlist, toggle_w
   const active_count =
     position_filters.size +
     team_filters.size +
-    (price_range[0] > 0 || price_range[1] < 999 ? 1 : 0) +
+    (price_range ? 1 : 0) +
     (perf_range ? 1 : 0) +
     (age_range ? 1 : 0) +
     (held_only ? 1 : 0) +
     (watch_only ? 1 : 0);
   const has_filters = active_count > 0;
+
+  const reset_filters = () => {
+    set_position_filters(new Set());
+    set_team_filters(new Set());
+    set_price_range(null);
+    set_perf_range(null);
+    set_age_range(null);
+    set_held_only(false);
+    set_watch_only(false);
+  };
+
+  // Removable chips surfaced on the main screen + inside the filter sheet.
+  const active_chips: ActiveChip[] = [
+    ...Array.from(position_filters).map(p => ({
+      key: `pos:${p}`,
+      label: POSITION_LABEL[p],
+      clear: () => toggle_set(position_filters, set_position_filters, p),
+    })),
+    ...(price_range
+      ? [{ key: "price", label: `€${price_range[0]}M–€${price_range[1]}M`, clear: () => set_price_range(null) }]
+      : []),
+    ...(perf_range
+      ? [{ key: "perf", label: `${perf_range[0] >= 0 ? "+" : ""}${perf_range[0]}%–${perf_range[1] >= 0 ? "+" : ""}${perf_range[1]}%`, clear: () => set_perf_range(null) }]
+      : []),
+    ...(age_range ? [{ key: "age", label: `${age_range[0]}–${age_range[1]} yrs`, clear: () => set_age_range(null) }] : []),
+    ...Array.from(team_filters).map(id => {
+      const t = teams_api.get(id);
+      return {
+        key: `team:${id}`,
+        label: t?.name ?? id,
+        flag: t?.flag,
+        flag_url: t?.flag_url,
+        clear: () => toggle_set(team_filters, set_team_filters, id),
+      };
+    }),
+    ...(held_only ? [{ key: "held", label: "In portfolio", clear: () => set_held_only(false) }] : []),
+    ...(watch_only ? [{ key: "watch", label: "★ Watchlist", clear: () => set_watch_only(false) }] : []),
+  ];
 
   const columns = TABS[tab];
   // Every column except the star is a proportional ``minmax(0, Nfr)``
@@ -298,196 +342,71 @@ export function ScreenerPage({ on_open_player, on_open_team, watchlist, toggle_w
         </div>
       </div>
 
-      {/* Filter panel: header (title + Reset on right) then Position+Price
-          on a row, then all teams alphabetically as a single flat list. */}
-      {show_filters && (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 14,
-            padding: "14px 16px",
-            background: "rgba(255,255,255,.02)",
-            border: "1px solid rgba(255,255,255,.04)",
-            borderRadius: 12,
-          }}
-        >
-          {/* Header — title left + Reset all right (always rendered) */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,.55)", letterSpacing: 0.5, textTransform: "uppercase" }}>
-              Filters
-            </span>
+      {/* Active filter chips on the main screen (removable). */}
+      {active_chips.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {active_chips.map(c => (
             <button
-              onClick={() => {
-                set_position_filters(new Set());
-                set_team_filters(new Set());
-                set_price_range([0, 999]);
-                set_perf_range(null);
-                set_age_range(null);
-                set_held_only(false);
-                set_watch_only(false);
-              }}
-              disabled={!has_filters}
+              key={c.key}
+              type="button"
+              onClick={c.clear}
               style={{
-                background: has_filters ? "rgba(255,255,255,.04)" : "transparent",
-                border: "1px solid rgba(255,255,255,.06)",
-                color: has_filters ? "rgba(255,255,255,.7)" : "rgba(255,255,255,.2)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                padding: "6px 9px",
+                borderRadius: 8,
+                border: "1px solid rgba(47,107,255,.6)",
+                background: color.accentBlueSoft,
+                color: "#fff",
                 fontSize: 11,
-                fontWeight: 600,
-                cursor: has_filters ? "pointer" : "default",
+                fontWeight: 700,
+                cursor: "pointer",
                 fontFamily: "inherit",
-                padding: "5px 12px",
-                borderRadius: 6,
               }}
             >
-              Reset all{has_filters ? ` (${active_count})` : ""}
+              {c.flag_url ? (
+                <img src={c.flag_url} alt="" style={{ width: 14, height: 14, objectFit: "contain" }} />
+              ) : c.flag ? (
+                <span style={{ fontSize: 12 }}>{c.flag}</span>
+              ) : null}
+              <span>{c.label}</span>
+              <span style={{ fontSize: 10, opacity: 0.7 }}>✕</span>
             </button>
-          </div>
-
-          {/* Position + Price on one row */}
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 28, flexWrap: "wrap" }}>
-            <div>
-              <FilterLabel>Position</FilterLabel>
-              <div style={{ display: "flex", gap: 6 }}>
-                {(["FW", "MF", "DF", "GK"] as Position[]).map(p => {
-                  const on = position_filters.has(p);
-                  return (
-                    <button
-                      key={p}
-                      onClick={() => toggle_set(position_filters, set_position_filters, p)}
-                      style={{
-                        padding: "6px 10px",
-                        borderRadius: 8,
-                        fontSize: 12,
-                        fontWeight: 600,
-                        border: on ? "1px solid rgba(255,255,255,.22)" : "1px solid rgba(255,255,255,.06)",
-                        cursor: "pointer",
-                        fontFamily: "inherit",
-                        background: on ? position_color[p] + "22" : "rgba(255,255,255,.02)",
-                        color: on ? "#fff" : "rgba(255,255,255,.4)",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 6,
-                      }}
-                    >
-                      <div style={{ width: 6, height: 6, borderRadius: 2, background: position_color[p], opacity: on ? 1 : 0.4 }} />
-                      {POSITION_LABEL[p]}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div>
-              <FilterLabel>Price range</FilterLabel>
-              <div style={{ display: "flex", gap: 4 }}>
-                {([[0, 30], [30, 60], [60, 100], [100, 150], [150, 999]] as [number, number][]).map(([lo, hi]) => {
-                  const active = price_range[0] === lo && price_range[1] === hi;
-                  return (
-                    <button
-                      key={lo}
-                      onClick={() => set_price_range(active ? [0, 999] : [lo, hi])}
-                      style={{
-                        padding: "6px 10px",
-                        borderRadius: 6,
-                        fontSize: 12,
-                        fontWeight: 600,
-                        border: "1px solid " + (active ? "rgba(255,255,255,.22)" : "rgba(255,255,255,.06)"),
-                        cursor: "pointer",
-                        fontFamily: "inherit",
-                        background: active ? "rgba(255,255,255,.08)" : "transparent",
-                        color: active ? "#fff" : "rgba(255,255,255,.4)",
-                      }}
-                    >
-                      {price_label(lo)}–{price_label(hi)}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          {/* Performance + Age presets + ownership toggles (parity with mobile) */}
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 28, flexWrap: "wrap" }}>
-            <div>
-              <FilterLabel>Performance</FilterLabel>
-              <div style={{ display: "flex", gap: 4 }}>
-                {PERF_PRESETS.map(p => (
-                  <Chip
-                    key={p.label}
-                    active={range_eq(perf_range, p.range)}
-                    onClick={() => set_perf_range(range_eq(perf_range, p.range) ? null : p.range)}
-                  >
-                    {p.label}
-                  </Chip>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <FilterLabel>Age</FilterLabel>
-              <div style={{ display: "flex", gap: 4 }}>
-                {AGE_PRESETS.map(a => (
-                  <Chip
-                    key={a.label}
-                    active={range_eq(age_range, a.range)}
-                    onClick={() => set_age_range(range_eq(age_range, a.range) ? null : a.range)}
-                  >
-                    {a.label}
-                  </Chip>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <FilterLabel>Ownership</FilterLabel>
-              <div style={{ display: "flex", gap: 4 }}>
-                <Chip active={held_only} onClick={() => set_held_only(!held_only)}>
-                  Held
-                </Chip>
-                <Chip active={watch_only} onClick={() => set_watch_only(!watch_only)}>
-                  ★ Watchlist
-                </Chip>
-              </div>
-            </div>
-          </div>
-
-          {/* Teams — flat alphabetical list, no confederation grouping */}
-          <div>
-            <FilterLabel>Teams</FilterLabel>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-              {sorted_team_ids.map(id => {
-                const team = teams_api.get(id);
-                if (!team) return null;
-                const on = team_filters.has(id);
-                return (
-                  <button
-                    key={id}
-                    onClick={() => toggle_set(team_filters, set_team_filters, id)}
-                    style={{
-                      padding: "4px 8px",
-                      borderRadius: 5,
-                      fontSize: 11,
-                      fontWeight: 600,
-                      border: "1px solid " + (on ? "rgba(255,255,255,.22)" : "rgba(255,255,255,.06)"),
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                      background: on ? "rgba(255,255,255,.08)" : "transparent",
-                      color: on ? "#fff" : "rgba(255,255,255,.55)",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 5,
-                    }}
-                  >
-                    <span style={{ fontSize: 12 }}>{team.flag}</span>
-                    <span>{team.name}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          ))}
         </div>
       )}
+
+      {/* Filter sheet (centred modal on desktop, bottom-sheet on phone) —
+          sliders + chips + country search, mirroring the native filter. */}
+      <ScreenerFilters
+        open={show_filters}
+        on_close={() => set_show_filters(false)}
+        result_count={filtered.length}
+        active_count={active_count}
+        has_filters={has_filters}
+        on_reset={reset_filters}
+        active_chips={active_chips}
+        position_filters={position_filters}
+        set_position_filters={set_position_filters}
+        price_bounds={price_bounds}
+        price_max={price_max}
+        price_range={price_range}
+        set_price_range={set_price_range}
+        perf_bounds={perf_bounds}
+        perf_range={perf_range}
+        set_perf_range={set_perf_range}
+        age_bounds={age_bounds}
+        age_range={age_range}
+        set_age_range={set_age_range}
+        team_filters={team_filters}
+        set_team_filters={set_team_filters}
+        sorted_team_ids={sorted_team_ids}
+        held_only={held_only}
+        set_held_only={set_held_only}
+        watch_only={watch_only}
+        set_watch_only={set_watch_only}
+      />
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 4 }}>
@@ -940,46 +859,6 @@ function ScreenerCell({ entry: e, column: c }: { entry: ScreenerEntry; column: C
     default:
       return <span style={base_style}>—</span>;
   }
-}
-
-function FilterLabel({ children, inline }: { children: React.ReactNode; inline?: boolean }) {
-  return (
-    <div
-      style={{
-        fontSize: 10,
-        fontWeight: 700,
-        color: "rgba(255,255,255,.35)",
-        letterSpacing: 0.5,
-        textTransform: "uppercase",
-        marginBottom: inline ? 0 : 8,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-/** A toggleable filter chip — the shared look for the Price / Performance /
- * Age presets and the Held / Watchlist toggles. */
-function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        padding: "6px 10px",
-        borderRadius: 6,
-        fontSize: 12,
-        fontWeight: 600,
-        border: "1px solid " + (active ? "rgba(255,255,255,.22)" : "rgba(255,255,255,.06)"),
-        cursor: "pointer",
-        fontFamily: "inherit",
-        background: active ? "rgba(255,255,255,.08)" : "transparent",
-        color: active ? "#fff" : "rgba(255,255,255,.4)",
-      }}
-    >
-      {children}
-    </button>
-  );
 }
 
 function ColumnHeader({
