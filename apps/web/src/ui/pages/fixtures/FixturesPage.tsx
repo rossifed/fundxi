@@ -195,42 +195,14 @@ export function FixturesPage({ on_open_match, on_open_team }: FixturesPageProps)
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, width: "100%" }}>
-      {/* flexWrap lets the view switcher drop below the status filters on a
-          narrow phone; on desktop everything fits so it stays one row. */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        {/* The status filter only makes sense for the calendar list — the
-            bracket and groups views show the whole tournament, so it is hidden
-            there (empty slot keeps the view switcher right-aligned). */}
-        {view_mode === "calendar" ? (
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {STATUS_TABS.map(tab => (
-              <button
-                key={tab.key}
-                onClick={() => set_filter(tab.key)}
-                style={{
-                  padding: "8px 16px",
-                  borderRadius: 10,
-                  fontSize: 12,
-                  fontWeight: filter === tab.key ? 700 : 500,
-                  border: "1px solid rgba(255,255,255,.06)",
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  background: filter === tab.key ? "rgba(255,255,255,.08)" : "rgba(255,255,255,.02)",
-                  color: filter === tab.key ? "#fff" : "rgba(255,255,255,.45)",
-                }}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        ) : (
-          <div />
-        )}
-
+      {/* View switcher (Calendar / Bracket / Groups) on top; the status filter
+          (calendar view only) sits below it. */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <div
           role="tablist"
           style={{
             display: "inline-flex",
+            alignSelf: "flex-start",
             background: "rgba(255,255,255,.03)",
             border: "1px solid rgba(255,255,255,.06)",
             borderRadius: 8,
@@ -266,6 +238,32 @@ export function FixturesPage({ on_open_match, on_open_team }: FixturesPageProps)
             );
           })}
         </div>
+
+        {/* Status filter — calendar view only (bracket/groups show the whole
+            tournament). Wraps on a narrow phone. */}
+        {view_mode === "calendar" && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {STATUS_TABS.map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => set_filter(tab.key)}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: 10,
+                  fontSize: 12,
+                  fontWeight: filter === tab.key ? 700 : 500,
+                  border: "1px solid rgba(255,255,255,.06)",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  background: filter === tab.key ? "rgba(255,255,255,.08)" : "rgba(255,255,255,.02)",
+                  color: filter === tab.key ? "#fff" : "rgba(255,255,255,.45)",
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {view_mode === "bracket" ? (
