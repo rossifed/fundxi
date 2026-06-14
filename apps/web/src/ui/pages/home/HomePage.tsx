@@ -6,7 +6,7 @@ import { players_api } from "@fundxi/core/api/players_api";
 import { teams_api } from "@fundxi/core/api/teams_api";
 import { leagues_api } from "@fundxi/core/api/leagues_api";
 import type { Match } from "@fundxi/core/domain/match/match";
-import { default_match_tab, latest_results, next_fixtures, type MatchTab } from "@fundxi/core/domain/match/match_center";
+import { latest_results, next_fixtures, type MatchTab } from "@fundxi/core/domain/match/match_center";
 import type { Player } from "@fundxi/core/domain/player/player";
 import type { PlayerWithValuation } from "@fundxi/core/domain/market/player_valuation";
 import { Logo } from "@/ui/shell/Logo";
@@ -56,7 +56,8 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match, on_op
   const all_fixtures = matches_api.list_fixtures();
   const upcoming = next_fixtures(all_fixtures, 2);
   const recent = latest_results(all_fixtures, 2);
-  const [match_tab, set_match_tab] = useState<MatchTab>(() => default_match_tab(all_fixtures, Date.now()));
+  // Default to the upcoming fixtures (Next), not the latest results.
+  const [match_tab, set_match_tab] = useState<MatchTab>("next");
   const my_leagues = leagues_api.list_summaries();
 
   // Top gainers / losers: re-read after every live price tick.
