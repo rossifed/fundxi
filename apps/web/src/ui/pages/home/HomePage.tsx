@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { color_for_sign, fmt_fixture_datetime } from "@/ui/helpers/format";
+import { color_for_sign, fmt_fixture_datetime, fmt_live_minute } from "@/ui/helpers/format";
 import { compute_return_pct } from "@fundxi/core/domain/market/return";
 import { matches_api } from "@fundxi/core/api/matches_api";
 import { players_api } from "@fundxi/core/api/players_api";
@@ -497,7 +497,7 @@ function LiveMatchCard({
       />
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <LiveBadge />
-        <span className="mono" style={{ fontSize: 12, color: "rgba(255,255,255,.5)", fontWeight: 700 }}>{match.minute}'</span>
+        <span className="mono" style={{ fontSize: 12, color: "rgba(255,255,255,.5)", fontWeight: 700 }}>{fmt_live_minute(match.minute)}</span>
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 20 }}>
         <div style={{ textAlign: "right", flex: 1 }}>

@@ -316,7 +316,8 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
               }}
             >
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--color-negative)", animation: "pulse 1.5s infinite" }} />
-              LIVE <span className="mono" style={{ fontWeight: 700 }}>{match.minute}'</span>
+              LIVE
+              {match.minute ? <span className="mono" style={{ fontWeight: 700, marginLeft: 7 }}>{match.minute}'</span> : null}
             </span>
           </div>
         )}

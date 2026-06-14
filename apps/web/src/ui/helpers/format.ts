@@ -45,3 +45,9 @@ export const color_for_sign = (v: number | null | undefined): string => {
   if (v == null) return "rgba(255,255,255,.3)";
   return v >= 0 ? "var(--color-positive)" : "var(--color-negative)";
 };
+
+// Live match clock. The Match maps a missing provider minute to 0, so for a
+// live match a falsy minute means "no clock yet" — show "LIVE" rather than a
+// misleading "0'".
+export const fmt_live_minute = (minute: number | null | undefined): string =>
+  minute ? `${minute}'` : "LIVE";

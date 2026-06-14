@@ -7,6 +7,7 @@ import { PlayerAvatar } from "@/ui/components/PlayerAvatar";
 import { SectionHeader } from "@/ui/components/SectionHeader";
 import { TeamLink } from "@/ui/components/TeamLink";
 import { TickValue } from "@/ui/components/TickValue";
+import { fmt_live_minute } from "@/ui/helpers/format";
 import { useLiveMatch } from "@/ui/hooks/use_live_match";
 
 interface RightRailProps {
@@ -65,7 +66,7 @@ export function RightRail({ watchlist, on_open_player, on_open_match, on_open_te
             }}
           />
           <span style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,.55)", letterSpacing: 0.5 }}>LIVE</span>
-          <span className="mono" style={{ fontSize: 11, color: "rgba(255,255,255,.45)", fontWeight: 700 }}>{live.minute}'</span>
+          <span className="mono" style={{ fontSize: 11, color: "rgba(255,255,255,.45)", fontWeight: 700 }}>{fmt_live_minute(live.minute)}</span>
           <span style={{ flex: 1, textAlign: "center", fontSize: 12, fontWeight: 700 }}>
             <TeamLink team_id={live.home_team_id} on_open_team={on_open_team} style={{ marginRight: 4 }}>
               {live_home.flag}
