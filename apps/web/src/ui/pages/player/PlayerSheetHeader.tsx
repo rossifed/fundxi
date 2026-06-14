@@ -35,15 +35,17 @@ export function PlayerSheetHeader({
         />
         <div style={{ flex: 1, minWidth: 0 }}>
           {/* paddingRight reserves room for the Sheet's close (X) button in the
-              top-right corner so the watch star never slides under it. */}
-          <div style={{ display: "flex", alignItems: "baseline", gap: 10, paddingRight: 32 }}>
+              top-right corner so the watch star never slides under it. The name
+              wraps to a second line rather than truncating, so even long names
+              (e.g. "Gabriel Gudmundsson") show in full. */}
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 10, paddingRight: 32 }}>
             <span
               className="mono"
-              style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1, letterSpacing: -0.5, color: "rgba(255,255,255,.55)", flexShrink: 0 }}
+              style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.15, letterSpacing: -0.5, color: "rgba(255,255,255,.55)", flexShrink: 0 }}
             >
               {player.jersey_number}
             </span>
-            <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1, letterSpacing: -0.5, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.15, letterSpacing: -0.5, minWidth: 0, flex: 1, overflowWrap: "anywhere" }}>
               {player.full_name ?? player.name}
             </div>
             <button
