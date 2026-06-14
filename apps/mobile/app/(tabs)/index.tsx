@@ -55,6 +55,17 @@ export default function HomeScreen() {
     () => matches_api.list_fixtures().find(f => f.status === "live"),
     [refresh_tag],
   );
+  // Latest results — the 2 most recently played matches, so overnight /
+  // earlier-today scores show on Home without going to Fixtures.
+  const recent_fx = useMemo(
+    () =>
+      matches_api
+        .list_fixtures()
+        .filter(f => f.status === "finished")
+        .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""))
+        .slice(0, 2),
+    [refresh_tag],
+  );
   const top_up = useMemo(() => players_api.top_movers(5, "up"), [refresh_tag]);
   const top_down = useMemo(() => players_api.top_movers(5, "down"), [refresh_tag]);
   const news = useMemo(() => news_api.list().slice(0, 20), [refresh_tag]);
@@ -94,6 +105,14 @@ export default function HomeScreen() {
             <NextMatchCard fixture={next_fx} on_open={() => router.push(`/match/${next_fx.id}`)} />
           ) : (
             <EmptyMatchRow on_press={() => router.push("/fixtures")} />
+          )}
+          {recent_fx.length > 0 && (
+            <>
+              <Text style={styles.results_header}>LATEST RESULTS</Text>
+              {recent_fx.map((fx, i) => (
+                <ResultRow key={fx.id} fixture={fx} divider={i > 0} on_open={() => router.push(`/match/${fx.id}`)} />
+              ))}
+            </>
           )}
         </SectionCard>
 
@@ -234,6 +253,30 @@ function NextMatchCard({ fixture, on_open }: { fixture: Fixture; on_open: () => 
       </View>
       <Text style={styles.next_meta}>{fmt_kickoff(fixture.date)}</Text>
       {venue !== "" && <Text style={styles.next_venue}>{venue}</Text>}
+    </Pressable>
+  );
+}
+
+function ResultRow({ fixture, divider, on_open }: { fixture: Fixture; divider: boolean; on_open: () => void }) {
+  const home = teams_api.get(fixture.home_team_id);
+  const away = teams_api.get(fixture.away_team_id);
+  return (
+    <Pressable
+      style={[styles.result_row, divider && styles.row_divider]}
+      onPress={on_open}
+      accessibilityRole="button"
+      accessibilityLabel="Open match"
+    >
+      <Text style={styles.result_ft}>FT</Text>
+      <View style={styles.result_side}>
+        <Text style={styles.result_name} numberOfLines={1}>{home?.name ?? fixture.home_team_id}</Text>
+        <Text style={styles.result_flag}>{home?.flag}</Text>
+      </View>
+      <Text style={styles.result_score}>{fixture.home_score ?? 0}–{fixture.away_score ?? 0}</Text>
+      <View style={[styles.result_side, { justifyContent: "flex-start" }]}>
+        <Text style={styles.result_flag}>{away?.flag}</Text>
+        <Text style={styles.result_name} numberOfLines={1}>{away?.name ?? fixture.away_team_id}</Text>
+      </View>
     </Pressable>
   );
 }
@@ -454,6 +497,13 @@ const styles = StyleSheet.create({
   next_name: { color: "#fff", fontSize: 15, fontWeight: "800", flexShrink: 1 },
   next_vs: { color: "rgba(255,255,255,0.3)", fontSize: 12, fontWeight: "700" },
   next_meta: { fontFamily: mono, color: "rgba(255,255,255,0.75)", fontSize: 13, fontWeight: "700" },
+  results_header: { fontSize: 9, fontWeight: "800", letterSpacing: 1, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", paddingHorizontal: 16, paddingTop: 12, paddingBottom: 2 },
+  result_row: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 10 },
+  result_ft: { fontFamily: mono, fontSize: 10, fontWeight: "800", color: "rgba(255,255,255,0.35)", width: 20 },
+  result_side: { flex: 1, flexDirection: "row", alignItems: "center", gap: 6, justifyContent: "flex-end" },
+  result_name: { color: "#fff", fontSize: 13, fontWeight: "700", flexShrink: 1 },
+  result_flag: { fontSize: 18 },
+  result_score: { fontFamily: mono, fontSize: 15, fontWeight: "900", color: "#fff", minWidth: 44, textAlign: "center" },
   next_venue: { color: "rgba(255,255,255,0.45)", fontSize: 12 },
 
   mover_row: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingVertical: 11 },

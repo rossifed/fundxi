@@ -48,6 +48,13 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match, on_op
   // uses, so the minute/score can never diverge between widgets/pages.
   const live = useLiveMatch();
   const upcoming = matches_api.list_fixtures().filter(f => f.status === "upcoming").slice(0, 3);
+  // Latest results — the 2 most recently played matches, so the overnight /
+  // earlier-today results are visible on Home without going to Fixtures.
+  const recent = matches_api
+    .list_fixtures()
+    .filter(f => f.status === "finished")
+    .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""))
+    .slice(0, 2);
   const my_leagues = leagues_api.list_summaries();
 
   // Top gainers / losers: re-read after every live price tick.
@@ -59,10 +66,10 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match, on_op
   const top_up = useMemo(() => players_api.top_movers(5, "up"), [valuations_version]);
   const top_down = useMemo(() => players_api.top_movers(5, "down"), [valuations_version]);
 
-  // A news item carries the fixture it covers (most do). Clicking it opens that
-  // fixture's MatchView, reusing the same fixture_id → Match path as the
-  // Fixtures page. News without a fixture (league-level) stays non-clickable.
-  const open_news_fixture = async (fixture_id: number | undefined) => {
+  // Open a fixture's MatchView from its id, reusing the same fixture_id → Match
+  // path as the Fixtures page. Shared by the news rows and the Latest results
+  // rows. A missing fixture (league-level news) is a no-op.
+  const open_fixture = async (fixture_id: number | undefined) => {
     if (fixture_id === undefined) return;
     const match = await matches_api.get_match_by_fixture_id(fixture_id);
     if (match) on_open_match(match);
@@ -125,6 +132,52 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match, on_op
               />
               No match in progress right now
             </div>
+          )}
+
+          {recent.length > 0 && (
+            <>
+              <div style={{ padding: "12px 18px 4px", fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,.4)", letterSpacing: 0.5, textTransform: "uppercase" }}>
+                Latest results
+              </div>
+              {recent.map((fx, i) => {
+                const home = teams_api.get(fx.home_team_id);
+                const away = teams_api.get(fx.away_team_id);
+                if (!home || !away) return null;
+                return (
+                  <div
+                    key={fx.id}
+                    onClick={() => void open_fixture(fx.id)}
+                    role="button"
+                    title="Open match"
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "84px 1fr 44px 1fr",
+                      alignItems: "center",
+                      padding: "10px 18px",
+                      borderTop: i > 0 ? "1px solid rgba(255,255,255,.03)" : "none",
+                      fontSize: 13,
+                      gap: 10,
+                      cursor: "pointer",
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.02)")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                  >
+                    <span style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,.35)", letterSpacing: 0.5 }}>FT</span>
+                    <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
+                      <span style={{ fontWeight: 600 }}>{home.name}</span>
+                      <span style={{ fontSize: 18 }}>{home.flag}</span>
+                    </span>
+                    <span className="mono" style={{ fontSize: 13, fontWeight: 800, textAlign: "center" }}>
+                      {fx.home_score ?? 0}–{fx.away_score ?? 0}
+                    </span>
+                    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 18 }}>{away.flag}</span>
+                      <span style={{ fontWeight: 600 }}>{away.name}</span>
+                    </span>
+                  </div>
+                );
+              })}
+            </>
           )}
 
           <div style={{ padding: "12px 18px 4px", fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,.4)", letterSpacing: 0.5, textTransform: "uppercase" }}>
@@ -270,7 +323,7 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match, on_op
           {news_api.list().slice(0, 6).map((n, i) => (
             <div
               key={n.id}
-              onClick={n.fixture_id !== undefined ? () => void open_news_fixture(n.fixture_id) : undefined}
+              onClick={n.fixture_id !== undefined ? () => void open_fixture(n.fixture_id) : undefined}
               role={n.fixture_id !== undefined ? "button" : undefined}
               title={n.fixture_id !== undefined ? "Open match" : undefined}
               style={{
