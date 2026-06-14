@@ -67,6 +67,8 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match, on_op
   });
   const top_up = useMemo(() => players_api.top_movers(5, "up"), [valuations_version]);
   const top_down = useMemo(() => players_api.top_movers(5, "down"), [valuations_version]);
+  // Gainers | Losers toggle (one list at a time), mirroring the native Home.
+  const [movers_dir, set_movers_dir] = useState<"up" | "down">("up");
 
   // Open a fixture's MatchView from its id, reusing the same fixture_id → Match
   // path as the Fixtures page. Shared by the news rows and the Latest results
@@ -301,13 +303,42 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match, on_op
         }}
       >
         <SectionHeader title="Top movers · since tournament start" cta="Open screener →" on_cta={() => on_navigate_tab("screener")} />
-        {/* Two columns on desktop; stacked on a phone so both lists are full
-            width and the losers are actually visible (side by side they were
-            too narrow to render). */}
-        <div style={{ display: "grid", gridTemplateColumns: is_mobile ? "1fr" : "1fr 1fr" }}>
-          <MoversColumn label="Top gainers" players={top_up} on_open_player={on_open_player} on_open_team={on_open_team} />
-          <MoversColumn label="Top losers" players={top_down} on_open_player={on_open_player} on_open_team={on_open_team} divider stacked={is_mobile} />
+        {/* Gainers | Losers toggle — one list at a time, same section, on every
+            device (mirrors the native Home). Reuses the Match Center toggle
+            look for consistency. */}
+        <div style={{ display: "flex", gap: 4, padding: "12px 18px 8px" }}>
+          {([["up", "Gainers"], ["down", "Losers"]] as const).map(([dir, label]) => {
+            const active = movers_dir === dir;
+            return (
+              <button
+                key={dir}
+                onClick={() => set_movers_dir(dir)}
+                style={{
+                  flex: 1,
+                  padding: "7px 0",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: 0.4,
+                  textTransform: "uppercase",
+                  color: active ? "#fff" : "rgba(255,255,255,.4)",
+                  background: active ? "rgba(255,255,255,.06)" : "transparent",
+                  border: "1px solid",
+                  borderColor: active ? "rgba(255,255,255,.1)" : "rgba(255,255,255,.04)",
+                  borderRadius: 8,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
+        <MoversColumn
+          players={movers_dir === "up" ? top_up : top_down}
+          on_open_player={on_open_player}
+          on_open_team={on_open_team}
+        />
       </div>
 
       {/* Market news */}
@@ -448,33 +479,19 @@ function LiveMatchCard({
   );
 }
 
+// The Gainers / Losers list for the Top movers section. Which list is shown
+// is driven by the section's toggle, so the column itself carries no label.
 function MoversColumn({
-  label,
   players,
   on_open_player,
   on_open_team,
-  divider,
-  stacked,
 }: {
-  label: string;
   players: PlayerWithValuation[];
   on_open_player: (player: Player) => void;
   on_open_team?: (team_id: string) => void;
-  divider?: boolean;
-  // When the two columns are stacked (phone), the separator is a top border
-  // instead of a left border.
-  stacked?: boolean;
 }) {
-  const separator: React.CSSProperties = divider
-    ? stacked
-      ? { borderTop: "1px solid rgba(255,255,255,.06)" }
-      : { borderLeft: "1px solid rgba(255,255,255,.04)" }
-    : {};
   return (
-    <div style={separator}>
-      <div style={{ padding: "12px 18px 8px", fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,.4)", letterSpacing: 0.5, textTransform: "uppercase" }}>
-        {label}
-      </div>
+    <div>
       {players.map((p, i) => {
         const team = teams_api.get(p.team_id);
         const tournament_return = compute_return_pct(p.valuation.current_price, p.valuation.base_value);
