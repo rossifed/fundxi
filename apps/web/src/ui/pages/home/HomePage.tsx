@@ -24,6 +24,7 @@ import {
   usePricesLiveVersion,
 } from "@/ui/hooks/use_live_updates";
 import { useLiveMatch } from "@/ui/hooks/use_live_match";
+import { useViewport } from "@/ui/hooks/use_viewport";
 
 function news_icon(type: "prematch" | "postmatch"): string {
   return type === "postmatch" ? "🏁" : "📰";
@@ -44,6 +45,7 @@ interface HomePageProps {
 }
 
 export function HomePage({ on_open_player, on_navigate_tab, on_open_match, on_open_team }: HomePageProps) {
+  const { is_mobile } = useViewport();
   // The Match Center card mirrors the in-play match via the shared
   // useLiveMatch hook — the SAME source/refresh path the RightRail ticker
   // uses, so the minute/score can never diverge between widgets/pages.
@@ -92,8 +94,10 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match, on_op
         <Logo size={52} tagline />
       </header>
 
-      {/* Match Center + Leagues */}
-      <div style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: 16 }}>
+      {/* Match Center + Leagues — side by side on desktop; on a phone the
+          Match Center takes the full width and Leagues stacks below it so the
+          match rows aren't squeezed. */}
+      <div style={{ display: "grid", gridTemplateColumns: is_mobile ? "1fr" : "3fr 2fr", gap: 16 }}>
         {/* Match Center */}
         <div
           style={{
@@ -297,9 +301,12 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match, on_op
         }}
       >
         <SectionHeader title="Top movers · since tournament start" cta="Open screener →" on_cta={() => on_navigate_tab("screener")} />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
+        {/* Two columns on desktop; stacked on a phone so both lists are full
+            width and the losers are actually visible (side by side they were
+            too narrow to render). */}
+        <div style={{ display: "grid", gridTemplateColumns: is_mobile ? "1fr" : "1fr 1fr" }}>
           <MoversColumn label="Top gainers" players={top_up} on_open_player={on_open_player} on_open_team={on_open_team} />
-          <MoversColumn label="Top losers" players={top_down} on_open_player={on_open_player} on_open_team={on_open_team} divider />
+          <MoversColumn label="Top losers" players={top_down} on_open_player={on_open_player} on_open_team={on_open_team} divider stacked={is_mobile} />
         </div>
       </div>
 
@@ -447,15 +454,24 @@ function MoversColumn({
   on_open_player,
   on_open_team,
   divider,
+  stacked,
 }: {
   label: string;
   players: PlayerWithValuation[];
   on_open_player: (player: Player) => void;
   on_open_team?: (team_id: string) => void;
   divider?: boolean;
+  // When the two columns are stacked (phone), the separator is a top border
+  // instead of a left border.
+  stacked?: boolean;
 }) {
+  const separator: React.CSSProperties = divider
+    ? stacked
+      ? { borderTop: "1px solid rgba(255,255,255,.06)" }
+      : { borderLeft: "1px solid rgba(255,255,255,.04)" }
+    : {};
   return (
-    <div style={{ borderLeft: divider ? "1px solid rgba(255,255,255,.04)" : "none" }}>
+    <div style={separator}>
       <div style={{ padding: "12px 18px 8px", fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,.4)", letterSpacing: 0.5, textTransform: "uppercase" }}>
         {label}
       </div>
