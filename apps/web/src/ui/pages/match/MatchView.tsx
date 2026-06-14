@@ -58,32 +58,40 @@ function only_match_players(xs: (number | MatchPlayer)[]): MatchPlayer[] {
   return xs.filter((x): x is MatchPlayer => typeof x !== "number");
 }
 
+// Surname only (last whitespace token) — saves width so the minute always fits
+// on the same line as the name (matches the native Scorers).
+function _surname(full: string): string {
+  const parts = full.trim().split(/\s+/);
+  return parts.length > 1 ? parts[parts.length - 1] : full;
+}
+
 function ScorerColumn({ goals, align }: { goals: MatchEvent[]; align: "left" | "right" }) {
   if (goals.length === 0) return null;
+  // Group goals by scorer so a player's minutes sit on the SAME line as the
+  // name ("Surname 12', 45'"), collapsing a brace into one line. The minute is
+  // its own non-shrinking element, so it is never pushed to a second line —
+  // only the surname could ellipsis as a last resort. Mirrors native.
+  const by_player: { name: string; mins: string[]; own: boolean }[] = [];
+  for (const g of goals) {
+    const name = g.player_name ?? "?";
+    const own = g.is_own_goal === true;
+    const min = `${g.minute}'${g.type === "🎯" ? " (p)" : ""}`;
+    const row = by_player.find(p => p.name === name && p.own === own);
+    if (row) row.mins.push(min);
+    else by_player.push({ name, mins: [min], own });
+  }
   return (
-    <div
-      style={{
-        marginTop: 12,
-        display: "flex",
-        flexDirection: "column",
-        gap: 2,
-        fontSize: 11,
-        textAlign: align,
-        color: "#fff",
-        fontWeight: 600,
-      }}
-    >
-      {goals.map((g, i) => (
-        <div key={`${g.minute}-${g.player_name ?? "?"}-${i}`}>
-          ⚽ {g.player_name ?? "?"}
-          {g.is_own_goal ? (
-            <span style={{ opacity: 0.7, fontWeight: 700 }}> (og)</span>
-          ) : g.type === "🎯" ? (
-            " (p)"
-          ) : (
-            ""
-          )}{" "}
-          <span className="mono" style={{ color: "rgba(255,255,255,.55)", fontWeight: 700 }}>{g.minute}'</span>
+    <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 3, fontSize: 11, color: "#fff", fontWeight: 600 }}>
+      {by_player.map((p, i) => (
+        <div
+          key={`${p.name}-${i}`}
+          style={{ display: "flex", alignItems: "baseline", gap: 5, minWidth: 0, justifyContent: align === "right" ? "flex-end" : "flex-start" }}
+        >
+          <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
+            ⚽ {_surname(p.name)}
+            {p.own ? <span style={{ opacity: 0.7, fontWeight: 700 }}> (og)</span> : null}
+          </span>
+          <span className="mono" style={{ flexShrink: 0, color: "rgba(255,255,255,.55)", fontWeight: 700 }}>{p.mins.join(", ")}</span>
         </div>
       ))}
     </div>
