@@ -701,14 +701,17 @@ function DualRoster({
 }) {
   const home_by_pos = useMemo(() => _group_by_position(home_xi), [home_xi]);
   const away_by_pos = useMemo(() => _group_by_position(away_xi), [away_xi]);
-  const home_subs = useMemo(
-    () => [...home_bench].sort((a, b) => (a.jersey_number || 99) - (b.jersey_number || 99)),
-    [home_bench],
-  );
-  const away_subs = useMemo(
-    () => [...away_bench].sort((a, b) => (a.jersey_number || 99) - (b.jersey_number || 99)),
-    [away_bench],
-  );
+  // Bench is grouped by position too (GK / DF / MF / FW), like the starting XI —
+  // matching the native lineup. Shown behind the Starting XI / Substitutes
+  // toggle rather than stacked below the XI.
+  const home_bench_by_pos = useMemo(() => _group_by_position(home_bench), [home_bench]);
+  const away_bench_by_pos = useMemo(() => _group_by_position(away_bench), [away_bench]);
+
+  const [compos_view, set_compos_view] = useState<"xi" | "bench">("xi");
+  const has_bench = home_bench.length > 0 || away_bench.length > 0;
+  const on_bench = compos_view === "bench";
+  const groups_home = on_bench ? home_bench_by_pos : home_by_pos;
+  const groups_away = on_bench ? away_bench_by_pos : away_by_pos;
 
   const grid_2col: CSSProperties = {
     display: "grid",
@@ -767,12 +770,44 @@ function DualRoster({
       {/* Column glow — team identity carried by a soft edge halo per column
           (home on the left, away on the right), replacing the per-card left
           bar that pulled every row's weight to the left. */}
-      <div style={{ position: "relative", padding: "0 12px 12px" }}>
+      {/* Starting XI / Substitutes toggle — one section at a time, like the
+          native lineup (the bench was previously stacked under the XI). */}
+      {has_bench && (
+        <div style={{ display: "flex", gap: 6, padding: "10px 12px 0" }}>
+          {(["xi", "bench"] as const).map(v => {
+            const active = compos_view === v;
+            return (
+              <button
+                key={v}
+                type="button"
+                onClick={() => set_compos_view(v)}
+                style={{
+                  flex: 1,
+                  padding: "8px 0",
+                  borderRadius: 8,
+                  border: "1px solid " + (active ? "rgba(255,255,255,.14)" : "rgba(255,255,255,.06)"),
+                  background: active ? "rgba(255,255,255,.07)" : "transparent",
+                  color: active ? "#fff" : "rgba(255,255,255,.45)",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  letterSpacing: 0.3,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                {v === "xi" ? "Starting XI" : "Substitutes"}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div style={{ position: "relative", padding: "10px 12px 12px" }}>
         {home_color ? <ColumnGlow color={home_color} side="left" /> : null}
         {away_color ? <ColumnGlow color={away_color} side="right" /> : null}
         {POSITION_GROUPS.map(g => {
-          const home_ps = home_by_pos[g.key];
-          const away_ps = away_by_pos[g.key];
+          const home_ps = groups_home[g.key];
+          const away_ps = groups_away[g.key];
           if (home_ps.length === 0 && away_ps.length === 0) return null;
           return (
             <div key={g.key}>
@@ -780,35 +815,18 @@ function DualRoster({
               <div style={grid_2col}>
                 <div style={col_stack}>
                   {home_ps.map(p => (
-                    <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={home_color} events={event_counts.get(p.id)} sub_info={subs.get(p.id)} />
+                    <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={home_color} events={event_counts.get(p.id)} sub_info={subs.get(p.id)} sub={on_bench} />
                   ))}
                 </div>
                 <div style={col_stack}>
                   {away_ps.map(p => (
-                    <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={away_color} events={event_counts.get(p.id)} sub_info={subs.get(p.id)} />
+                    <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={away_color} events={event_counts.get(p.id)} sub_info={subs.get(p.id)} sub={on_bench} />
                   ))}
                 </div>
               </div>
             </div>
           );
         })}
-        {(home_subs.length > 0 || away_subs.length > 0) && (
-          <>
-            <SectionDivider label="Substitutes" />
-            <div style={grid_2col}>
-              <div style={col_stack}>
-                {home_subs.map(p => (
-                  <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={home_color} events={event_counts.get(p.id)} sub_info={subs.get(p.id)} sub />
-                ))}
-              </div>
-              <div style={col_stack}>
-                {away_subs.map(p => (
-                  <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={away_color} events={event_counts.get(p.id)} sub_info={subs.get(p.id)} sub />
-                ))}
-              </div>
-            </div>
-          </>
-        )}
       </div>
     </div>
   );
