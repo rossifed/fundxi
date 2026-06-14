@@ -29,6 +29,7 @@ import { PlayerValuationRibbon } from "@/ui/pages/player/PlayerValuationRibbon";
 import { YourPositionCard } from "@/ui/pages/player/YourPositionCard";
 import { SectionCard, SmallKpi } from "@/ui/pages/player/player_sheet_ui";
 import { useAuth } from "@/ui/shell/AuthContext";
+import { useViewport } from "@/ui/hooks/use_viewport";
 
 interface PlayerSheetProps {
   player: Player;
@@ -60,6 +61,7 @@ export function PlayerSheet({
   const current_price = valuation?.current_price ?? 0;
   const performance_rating = valuation?.performance_rating ?? 0;
 
+  const { is_mobile } = useViewport();
   const [trade_dialog_kind, set_trade_dialog_kind] = useState<"buy" | "sell" | null>(null);
   const [auth_prompt_open, set_auth_prompt_open] = useState(false);
   const { status: auth_status } = useAuth();
@@ -120,16 +122,148 @@ export function PlayerSheet({
     };
   }, [player.id]);
 
+  // Sections reused by both the desktop two-pane layout and the single-column
+  // phone layout (so the desktop render is unchanged and nothing is duplicated).
+  const header = (
+    <PlayerSheetHeader
+      player={player}
+      team={team}
+      is_watched={is_watched}
+      on_toggle_watch={() => toggle_watch?.(player.id)}
+      on_open_team={on_open_team}
+    />
+  );
+
+  const personal_card = (
+    <SectionCard title="Personal">
+      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr", gap: 0 }}>
+        <SmallKpi label="Position" value={player.detailed_position ?? POSITION_LABEL[player.position]} mono={false} />
+        <SmallKpi label="Age" value={String(player.age ?? "—")} />
+        <SmallKpi label="Foot" value={player.foot ?? "—"} mono={false} />
+        <SmallKpi label="Height" value={player.height ?? "—"} />
+        <SmallKpi label="Weight" value={player.weight ?? "—"} />
+      </div>
+    </SectionCard>
+  );
+
+  // Skills — real provider tags only. No tags → no card (a synthesised skill
+  // list would violate the data-sourcing rule).
+  const skills_card =
+    player.tags && player.tags.length > 0 ? (
+      <SectionCard title="Skills">
+        <div style={{ display: "flex", gap: 0, flexWrap: "wrap", background: "rgba(255,255,255,.025)", border: "1px solid rgba(255,255,255,.05)", padding: "6px" }}>
+          {player.tags.map(t => (
+            <span key={t} style={{ margin: 2, padding: "5px 10px", borderRadius: 5, fontSize: 12, fontWeight: 800, background: "rgba(255,255,255,.06)", color: "#fff", border: "1px solid rgba(255,255,255,.1)" }}>
+              {t}
+            </span>
+          ))}
+        </div>
+      </SectionCard>
+    ) : null;
+
+  const buy_sell = (
+    <div style={{ display: "flex", gap: 8 }}>
+      <button
+        onClick={() => handle_trade_click("buy")}
+        style={{ flex: 1, padding: "13px 0", fontSize: 14, fontWeight: 800, borderRadius: 10, background: "var(--color-action-buy)", color: "#fff", border: "none", cursor: "pointer", fontFamily: "inherit", boxShadow: "0 4px 16px color-mix(in srgb, var(--color-positive) 25%, transparent)" }}
+      >
+        Buy
+      </button>
+      <button
+        onClick={() => handle_trade_click("sell")}
+        style={{ flex: 1, padding: "13px 0", fontSize: 14, fontWeight: 800, borderRadius: 10, background: "var(--color-action-sell)", color: "#fff", border: "none", cursor: "pointer", fontFamily: "inherit", boxShadow: "0 4px 16px color-mix(in srgb, var(--color-negative) 25%, transparent)" }}
+      >
+        Sell
+      </button>
+    </div>
+  );
+
+  // Fixtures | Statistics tab buttons (the long stat families live behind a tab
+  // so they don't push the trade buttons off-screen).
+  const tab_buttons = (
+    <div style={{ display: "flex", gap: 4, padding: is_mobile ? 0 : "0 24px 8px", flexShrink: 0 }}>
+      {(["fixtures", "statistics"] as const).map(tab => {
+        const active = left_tab === tab;
+        return (
+          <button
+            key={tab}
+            onClick={() => set_left_tab(tab)}
+            style={{ background: active ? "rgba(255,255,255,.06)" : "transparent", border: "1px solid rgba(255,255,255,.06)", color: active ? "#fff" : "rgba(255,255,255,.45)", padding: "4px 12px", fontSize: 11, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", borderRadius: 5, cursor: "pointer", fontFamily: "inherit" }}
+          >
+            {tab === "fixtures" ? "Fixtures" : "Statistics"}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  const stats_block =
+    tournament_stats === undefined ? (
+      <div style={{ padding: "12px 2px", fontSize: 12, color: "rgba(255,255,255,.4)" }}>loading…</div>
+    ) : tournament_stats === null ? (
+      <div style={{ padding: "12px 2px", fontSize: 12, color: "rgba(255,255,255,.4)" }}>
+        No stats yet — this player hasn&apos;t featured.
+      </div>
+    ) : (
+      <PlayerStatistics stats={tournament_stats} embedded />
+    );
+
+  const ribbon = (
+    <PlayerValuationRibbon
+      player_id={player.id}
+      current_price={current_price}
+      performance_rating={performance_rating}
+      price_history={price_history}
+      tournament_stats={tournament_stats}
+    />
+  );
+
+  // ── Phone: one scrolling column (the Sheet scrolls). The chart, the
+  // Fixtures/Statistics tab and the match log are all visible — the desktop
+  // two-pane layout hid the whole left column on a narrow screen. Buy/Sell
+  // live in a sticky footer (mirrors the native PlayerSheet). ──
+  if (is_mobile) {
+    return (
+      <Sheet open={true} on_close={on_close} max_width={1080} footer={buy_sell}>
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {header}
+          <div style={{ padding: "16px 16px 8px", display: "flex", flexDirection: "column", gap: 16 }}>
+            {ribbon}
+            <PlayerPriceChart price_history={price_history} />
+            {personal_card}
+            {skills_card}
+            <YourPositionCard player={player} />
+          </div>
+          <div style={{ padding: "0 24px 8px" }}>{tab_buttons}</div>
+          {left_tab === "fixtures" ? (
+            <div style={{ height: 360, display: "flex", flexDirection: "column" }}>
+              <PlayerMatchLog player_id={player.id} on_open_match={go_match} embedded />
+            </div>
+          ) : (
+            <div style={{ padding: "0 24px 20px" }}>{stats_block}</div>
+          )}
+        </div>
+
+        <TradeDialog
+          open={trade_dialog_kind !== null}
+          player={player}
+          initial_kind={trade_dialog_kind ?? "buy"}
+          on_close={() => set_trade_dialog_kind(null)}
+          go_portfolio={() => {
+            set_trade_dialog_kind(null);
+            on_close();
+            go_portfolio?.();
+          }}
+        />
+        {auth_prompt_open && <AuthDialog initial_mode="register" on_close={() => set_auth_prompt_open(false)} />}
+      </Sheet>
+    );
+  }
+
   return (
     <Sheet open={true} on_close={on_close} max_width={1080}>
       <div style={{ display: "flex", flexDirection: "column", height: "100%", maxHeight: "92vh" }}>
-        <PlayerSheetHeader
-          player={player}
-          team={team}
-          is_watched={is_watched}
-          on_toggle_watch={() => toggle_watch?.(player.id)}
-          on_open_team={on_open_team}
-        />
+        {header}
 
         <div
           style={{
