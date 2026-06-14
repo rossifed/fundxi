@@ -742,13 +742,15 @@ function DualRoster({
   const groups_home = on_bench ? home_bench_by_pos : home_by_pos;
   const groups_away = on_bench ? away_bench_by_pos : away_by_pos;
 
-  const grid_2col: CSSProperties = {
+  // One row = a home/away pair. `stretch` makes both cells (cards) take the
+  // row's height, so the pair always ends at the same level.
+  const pair_row: CSSProperties = {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
     gap: is_mobile ? 8 : 10,
-    alignItems: "start",
+    alignItems: "stretch",
   };
-  const col_stack: CSSProperties = { display: "flex", flexDirection: "column", gap: is_mobile ? 4 : 6 };
+  const rows_stack: CSSProperties = { display: "flex", flexDirection: "column", gap: is_mobile ? 4 : 6 };
 
   return (
     <div style={card}>
@@ -838,20 +840,31 @@ function DualRoster({
           const home_ps = groups_home[g.key];
           const away_ps = groups_away[g.key];
           if (home_ps.length === 0 && away_ps.length === 0) return null;
+          // Pair players row by row (home[i] | away[i]); an empty cell when one
+          // side has fewer players in this position group.
+          const row_count = Math.max(home_ps.length, away_ps.length);
           return (
             <div key={g.key}>
               <SectionDivider label={g.label} />
-              <div style={grid_2col}>
-                <div style={col_stack}>
-                  {home_ps.map(p => (
-                    <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={home_color} events={event_counts.get(p.id)} sub_info={subs.get(p.id)} sub={on_bench} compact={is_mobile} />
-                  ))}
-                </div>
-                <div style={col_stack}>
-                  {away_ps.map(p => (
-                    <RosterCard key={p.id} p={p} on_open={on_open_player} team_color={away_color} events={event_counts.get(p.id)} sub_info={subs.get(p.id)} sub={on_bench} compact={is_mobile} />
-                  ))}
-                </div>
+              <div style={rows_stack}>
+                {Array.from({ length: row_count }, (_, i) => {
+                  const hp = home_ps[i];
+                  const ap = away_ps[i];
+                  return (
+                    <div key={i} style={pair_row}>
+                      {hp ? (
+                        <RosterCard p={hp} on_open={on_open_player} team_color={home_color} events={event_counts.get(hp.id)} sub_info={subs.get(hp.id)} sub={on_bench} compact={is_mobile} />
+                      ) : (
+                        <div />
+                      )}
+                      {ap ? (
+                        <RosterCard p={ap} on_open={on_open_player} team_color={away_color} events={event_counts.get(ap.id)} sub_info={subs.get(ap.id)} sub={on_bench} compact={is_mobile} />
+                      ) : (
+                        <div />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           );
@@ -904,11 +917,10 @@ function RosterCard({
           gap: 7,
           padding: "6px 7px",
           minWidth: 0,
-          // Fixed height so every card is identical — the two columns stay
-          // aligned row by row and each card ends at the same level.
-          height: 54,
+          // Fill the row's height so a home/away pair always ends at the same
+          // level (the row grid stretches both cells — see DualRoster).
+          height: "100%",
           boxSizing: "border-box",
-          overflow: "hidden",
           background: sub ? "rgba(255,255,255,.012)" : "rgba(255,255,255,.028)",
           border: "1px solid rgba(255,255,255,.035)",
           borderRadius: 11,
@@ -962,6 +974,8 @@ function RosterCard({
         alignItems: "center",
         gap: 12,
         padding: "10px 12px",
+        height: "100%",
+        boxSizing: "border-box",
         // Same card shape for starters and subs; subs are simply dimmed —
         // subtle but clearly secondary to the eye.
         background: sub ? "rgba(255,255,255,.012)" : "rgba(255,255,255,.035)",
