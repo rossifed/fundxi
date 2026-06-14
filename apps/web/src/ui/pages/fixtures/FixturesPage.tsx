@@ -13,6 +13,7 @@ import {
   useMatchesLiveVersion,
   useStandingsLiveVersion,
 } from "@/ui/hooks/use_live_updates";
+import { useViewport } from "@/ui/hooks/use_viewport";
 
 type StatusFilter = "all" | FixtureStatus;
 type ViewMode = "calendar" | "bracket" | "groups";
@@ -131,6 +132,7 @@ function phase_chip(fixture: Fixture): string {
 }
 
 export function FixturesPage({ on_open_match, on_open_team }: FixturesPageProps) {
+  const { is_mobile } = useViewport();
   const [filter, set_filter] = useState<StatusFilter>("all");
   const [view_mode, set_view_mode] = useState<ViewMode>(read_view_mode);
   useEffect(() => {
@@ -193,12 +195,14 @@ export function FixturesPage({ on_open_match, on_open_team }: FixturesPageProps)
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, width: "100%" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+      {/* flexWrap lets the view switcher drop below the status filters on a
+          narrow phone; on desktop everything fits so it stays one row. */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         {/* The status filter only makes sense for the calendar list — the
             bracket and groups views show the whole tournament, so it is hidden
             there (empty slot keeps the view switcher right-aligned). */}
         {view_mode === "calendar" ? (
-          <div style={{ display: "flex", gap: 6 }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {STATUS_TABS.map(tab => (
               <button
                 key={tab.key}
@@ -351,7 +355,15 @@ export function FixturesPage({ on_open_match, on_open_team }: FixturesPageProps)
                       gap: 12,
                       padding: 12,
                     }
-                  : { display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12, padding: 12 }
+                  : {
+                      display: "grid",
+                      // One full-width card per row on a phone so team names fit
+                      // (two narrow columns truncate them to nothing); two
+                      // columns on desktop as before.
+                      gridTemplateColumns: is_mobile ? "1fr" : "repeat(2, 1fr)",
+                      gap: 12,
+                      padding: 12,
+                    }
               }
             >
               {day.fixtures.map(fx => {
@@ -1046,14 +1058,14 @@ function FixtureCard({
       </div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, justifyContent: "flex-end" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0, justifyContent: "flex-end" }}>
           <TeamLink
             team_id={fixture.home_team_id}
             on_open_team={on_open_team}
-            style={{ display: "inline-flex", alignItems: "center", gap: 10 }}
+            style={{ display: "inline-flex", alignItems: "center", gap: 10, minWidth: 0, overflow: "hidden" }}
           >
-            <span style={{ fontSize: 13, fontWeight: 700 }}>{home_name}</span>
-            <span style={{ fontSize: 28 }}>{home_flag}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{home_name}</span>
+            <span style={{ fontSize: 28, flexShrink: 0 }}>{home_flag}</span>
           </TeamLink>
         </div>
         {fixture.status !== "upcoming" ? (
@@ -1065,14 +1077,14 @@ function FixtureCard({
             VS
           </div>
         )}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
           <TeamLink
             team_id={fixture.away_team_id}
             on_open_team={on_open_team}
-            style={{ display: "inline-flex", alignItems: "center", gap: 10 }}
+            style={{ display: "inline-flex", alignItems: "center", gap: 10, minWidth: 0, overflow: "hidden" }}
           >
-            <span style={{ fontSize: 28 }}>{away_flag}</span>
-            <span style={{ fontSize: 13, fontWeight: 700 }}>{away_name}</span>
+            <span style={{ fontSize: 28, flexShrink: 0 }}>{away_flag}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{away_name}</span>
           </TeamLink>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { ambient_gradient } from "@/ui/design/tokens";
+import { useViewport } from "@/ui/hooks/use_viewport";
 
 interface SheetProps {
   open: boolean;
@@ -9,9 +10,12 @@ interface SheetProps {
   max_width?: number;
 }
 
-// Centered modal on desktop. The mobile (RN) version will reimplement this as
-// a bottom sheet — same content, same flow, different presentation.
+// Centered modal on desktop, anchored bottom-sheet on phone — same content,
+// same flow, different presentation (the web parity of the native RN bottom
+// sheets). The slideUp keyframe (translateY 100% -> 0) reads as a sheet rising
+// from the bottom edge in both modes.
 export function Sheet({ open, on_close, children, footer, max_width = 720 }: SheetProps) {
+  const { is_mobile } = useViewport();
   if (!open) return null;
   return (
     <div
@@ -20,9 +24,9 @@ export function Sheet({ open, on_close, children, footer, max_width = 720 }: She
         inset: 0,
         zIndex: 200,
         display: "flex",
-        alignItems: "center",
+        alignItems: is_mobile ? "flex-end" : "center",
         justifyContent: "center",
-        padding: 24,
+        padding: is_mobile ? 0 : 24,
       }}
       onClick={on_close}
     >
@@ -40,10 +44,11 @@ export function Sheet({ open, on_close, children, footer, max_width = 720 }: She
         style={{
           position: "relative",
           width: "100%",
-          maxWidth: max_width,
-          maxHeight: "92vh",
+          maxWidth: is_mobile ? "100%" : max_width,
+          maxHeight: is_mobile ? "94vh" : "92vh",
           background: ambient_gradient,
-          borderRadius: 16,
+          // Rounded top corners only when anchored to the bottom edge.
+          borderRadius: is_mobile ? "16px 16px 0 0" : 16,
           display: "flex",
           flexDirection: "column",
           border: "1px solid rgba(255,255,255,.08)",
@@ -83,7 +88,9 @@ export function Sheet({ open, on_close, children, footer, max_width = 720 }: She
           <div
             style={{
               flexShrink: 0,
-              padding: "14px 20px",
+              padding: is_mobile
+                ? "14px 20px calc(14px + env(safe-area-inset-bottom))"
+                : "14px 20px",
               borderTop: "1px solid rgba(255,255,255,.06)",
               background: "#020109",
             }}

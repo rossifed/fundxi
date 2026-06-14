@@ -26,6 +26,7 @@ function fmt_short_date(iso: string | undefined): string {
 }
 import { useLiveValuations } from "@/ui/hooks/use_live_valuations";
 import { pulse_class, usePulse } from "@/ui/hooks/use_pulse";
+import { useViewport } from "@/ui/hooks/use_viewport";
 
 type PositionsTab = "positions" | "trades";
 
@@ -90,6 +91,11 @@ const POSITIONS_GRID =
   "34px minmax(0,2.4fr) minmax(0,0.75fr) minmax(0,0.95fr) minmax(0,0.7fr) " +
   "minmax(0,0.95fr) minmax(0,0.95fr) minmax(0,0.95fr) minmax(0,1.15fr)";
 
+// Minimum widths the positions / trades tables hold on a phone, where they
+// scroll horizontally inside their panel instead of crushing every column.
+const POSITIONS_MIN_W = 720;
+const TRADES_MIN_W = 560;
+
 // Allocation breakdown ramp — shared brand-blue categorical token
 // (packages/core/src/design/palette.ts), aligned with the logo's blue.
 const CHART_PALETTE = chart_category_ramp;
@@ -117,6 +123,7 @@ interface PortfolioPageProps {
 }
 
 export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPageProps) {
+  const { is_mobile } = useViewport();
   // Live data feeds one ``data_version`` counter that every memo below
   // depends on. It is bumped by:
   //  - the shared live-valuations stream (one SSE + one debounced
@@ -254,8 +261,8 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-      {/* KPI row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 12 }}>
+      {/* KPI row — 8 across on desktop, 2 across on a phone (4 rows). */}
+      <div style={{ display: "grid", gridTemplateColumns: is_mobile ? "repeat(2, 1fr)" : "repeat(8, 1fr)", gap: is_mobile ? 8 : 12 }}>
         <KpiCard
           label="Total Value"
           value={fmt_eur_m(total_value)}
@@ -294,7 +301,9 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) 340px",
+          // Single column on a phone: the breakdown rail stacks below the
+          // positions panel instead of sitting beside it.
+          gridTemplateColumns: is_mobile ? "1fr" : "minmax(0, 1fr) 340px",
           columnGap: 16,
           rowGap: 16,
           alignItems: "stretch",
@@ -420,10 +429,15 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
                 </div>
               </div>
             )}
+            {/* On a phone the 8-column table scrolls horizontally so each
+                column keeps a readable width (display:contents = desktop
+                unchanged). */}
+            <div style={is_mobile ? { overflowX: "auto" } : { display: "contents" }}>
             <div
               style={{
                 display: "grid",
                 gridTemplateColumns: POSITIONS_GRID,
+                minWidth: is_mobile ? POSITIONS_MIN_W : undefined,
                 padding: "10px 18px",
                 borderBottom: "1px solid rgba(255,255,255,.04)",
                 fontSize: 10,
@@ -467,7 +481,15 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
                 />
               ))}
             </div>
-            <div className="scroll-visible" style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+            <div
+              className="scroll-visible"
+              style={{
+                flex: is_mobile ? "none" : 1,
+                minHeight: is_mobile ? undefined : 0,
+                minWidth: is_mobile ? POSITIONS_MIN_W : undefined,
+                overflowY: is_mobile ? "visible" : "auto",
+              }}
+            >
             {sorted_holdings.map(h => {
               const team = teams_api.get(h.player.team_id);
               return (
@@ -571,13 +593,16 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
               );
             })}
             </div>
+            </div>
           </>
         ) : (
           <>
+            <div style={is_mobile ? { overflowX: "auto" } : { display: "contents" }}>
             <div
               style={{
                 display: "grid",
                 gridTemplateColumns: "minmax(0, 1fr) 52px 74px 76px 92px 90px",
+                minWidth: is_mobile ? TRADES_MIN_W : undefined,
                 padding: "10px 14px",
                 borderBottom: "1px solid rgba(255,255,255,.04)",
                 fontSize: 10,
@@ -609,7 +634,15 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
                 />
               ))}
             </div>
-            <div className="scroll-visible" style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+            <div
+              className="scroll-visible"
+              style={{
+                flex: is_mobile ? "none" : 1,
+                minHeight: is_mobile ? undefined : 0,
+                minWidth: is_mobile ? TRADES_MIN_W : undefined,
+                overflowY: is_mobile ? "visible" : "auto",
+              }}
+            >
             {sorted_trades.map(t => {
                 const team = teams_api.get(t.team_id);
                 const player = players_api.get(t.player_id);
@@ -684,6 +717,7 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
                   </div>
                 );
               })}
+            </div>
             </div>
           </>
         )}

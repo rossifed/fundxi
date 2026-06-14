@@ -18,9 +18,11 @@ import { AuthDialog } from "@/ui/components/AuthDialog";
 import { MatchView } from "@/ui/pages/match/MatchView";
 import { TeamPage } from "@/ui/pages/team/TeamPage";
 import { PlayerSheet } from "@/ui/pages/player/PlayerSheet";
+import { useViewport } from "@/ui/hooks/use_viewport";
 import { Header } from "./Header";
 import { PortfolioBar } from "./PortfolioBar";
 import { Sidebar, NAV_TABS } from "./Sidebar";
+import { BottomNav } from "./BottomNav";
 import { RightRail } from "./RightRail";
 
 type TabId = "home" | "screener" | "fixtures" | "portfolio" | "leagues" | "profile";
@@ -57,6 +59,7 @@ function read_reset_token(): string | null {
 }
 
 export function App() {
+  const { is_mobile, rail_ok } = useViewport();
   const [initial_join_code] = useState<string | null>(consume_join_code);
   const [reset_token, set_reset_token] = useState<string | null>(read_reset_token);
   const [show_login, set_show_login] = useState(false);
@@ -182,7 +185,9 @@ export function App() {
   }
 
   const current_tab_label = tab === "profile" ? "Profile" : NAV_TABS.find(t => t.id === tab)?.label ?? "";
-  const show_rail = !selected_match && !selected_team && PAGES_WITH_RAIL.includes(tab);
+  // The rail is desktop-only chrome: shown on rail pages, but only when the
+  // viewport is wide enough to carry it without crowding the content.
+  const show_rail = rail_ok && !selected_match && !selected_team && PAGES_WITH_RAIL.includes(tab);
 
   return (
     <div
@@ -232,11 +237,11 @@ export function App() {
           minHeight: "100vh",
         }}
       >
-        <Header on_logo_click={() => navigate("home")} />
+        <Header on_logo_click={() => navigate("home")} on_open_profile={() => navigate("profile")} />
         <PortfolioBar on_click={() => navigate("portfolio")} />
 
         <div style={{ display: "flex", flex: 1, alignItems: "stretch", minHeight: 0 }}>
-          <Sidebar active_tab={tab} on_navigate={navigate} />
+          {!is_mobile && <Sidebar active_tab={tab} on_navigate={navigate} />}
 
           <main
             style={{
@@ -247,7 +252,8 @@ export function App() {
               minHeight: 0,
             }}
           >
-            <div style={{ padding: "24px 32px 64px", width: "100%" }}>
+            {/* Extra bottom padding on mobile clears the fixed BottomNav. */}
+            <div style={{ padding: is_mobile ? "16px 14px 96px" : "24px 32px 64px", width: "100%" }}>
               {!selected_match && !selected_team && tab !== "home" && (
                 <div
                   style={{
@@ -282,6 +288,8 @@ export function App() {
           )}
         </div>
       </div>
+
+      {is_mobile && <BottomNav active_tab={tab} on_navigate={navigate} />}
 
       {selected_player && (
         <PlayerSheet

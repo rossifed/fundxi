@@ -3,13 +3,19 @@ import { AuthDialog } from "@/ui/components/AuthDialog";
 import { Avatar } from "@/ui/components/Avatar";
 import { Logo } from "@/ui/shell/Logo";
 import { useAuth } from "@/ui/shell/AuthContext";
+import { useViewport } from "@/ui/hooks/use_viewport";
 
 interface HeaderProps {
   on_logo_click: () => void;
+  // Opens the Profile page. On a phone the Sidebar (which carries the Profile
+  // entry on desktop) is hidden, so the header avatar is the only way in —
+  // mirrors the native tab-header avatar (apps/mobile AuthControl).
+  on_open_profile: () => void;
 }
 
-export function Header({ on_logo_click }: HeaderProps) {
+export function Header({ on_logo_click, on_open_profile }: HeaderProps) {
   const { user, status, logout } = useAuth();
+  const { is_mobile } = useViewport();
   const [dialog, set_dialog] = useState<null | "login" | "register">(null);
 
   return (
@@ -19,7 +25,7 @@ export function Header({ on_logo_click }: HeaderProps) {
         top: 0,
         zIndex: 100,
         height: 56,
-        padding: "0 24px",
+        padding: is_mobile ? "0 14px" : "0 24px",
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
@@ -33,26 +39,38 @@ export function Header({ on_logo_click }: HeaderProps) {
         onClick={on_logo_click}
       >
         <Logo size={22} />
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            color: "rgba(255,255,255,.4)",
-            background: "rgba(255,255,255,.06)",
-            padding: "3px 7px",
-            borderRadius: 5,
-            marginLeft: 4,
-          }}
-        >
-          WC 2026
-        </span>
+        {/* Decorative chip — desktop-only to keep the phone header uncluttered. */}
+        {!is_mobile && (
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: "rgba(255,255,255,.4)",
+              background: "rgba(255,255,255,.06)",
+              padding: "3px 7px",
+              borderRadius: 5,
+              marginLeft: 4,
+            }}
+          >
+            WC 2026
+          </span>
+        )}
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         {status === "authenticated" && user ? (
           <>
-            <Avatar seed={String(user.id)} name={user.name} size={28} />
-            <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,.7)" }}>{user.name}</span>
+            <button
+              onClick={on_open_profile}
+              aria-label="Open profile"
+              title="Profile"
+              style={{ display: "flex", alignItems: "center", gap: 8, background: "transparent", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit" }}
+            >
+              <Avatar seed={String(user.id)} name={user.name} size={28} />
+              {!is_mobile && (
+                <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,.7)" }}>{user.name}</span>
+              )}
+            </button>
             <button onClick={() => void logout()} style={ghost_btn}>Sign out</button>
           </>
         ) : status === "anonymous" ? (

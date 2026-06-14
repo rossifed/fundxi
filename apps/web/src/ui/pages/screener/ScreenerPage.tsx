@@ -19,7 +19,8 @@ import { spark_for_player } from "@fundxi/core/infrastructure/repositories/valua
 import { filter_screener_entries, type ScreenerSortKey } from "@fundxi/core/application/screener_filter";
 import { color_for_sign, fmt_signed_pct, price_label } from "@/ui/helpers/format";
 import { toggle_set } from "@/ui/helpers/state";
-import { position_color } from "@/ui/design/tokens";
+import { color, position_color } from "@/ui/design/tokens";
+import { useViewport } from "@/ui/hooks/use_viewport";
 
 // Preset ranges for the Performance (since-start %) and Age filters. Web uses
 // preset chips (its established filter pattern, like Price) where mobile uses
@@ -89,6 +90,40 @@ const TABS: Record<Tab, ColumnDef[]> = {
   ],
 };
 
+// Per-tab sort options for the mobile sort control (mirrors the native
+// TAB_SORTS in apps/mobile/app/(tabs)/screener.tsx). On desktop the clickable
+// column headers play this role; on a phone there are no headers, so the same
+// sort keys are exposed through a compact <select>.
+const MOBILE_TAB_SORTS: Record<Tab, { key: SortKey; label: string }[]> = {
+  valuation: [
+    { key: "value", label: "Value" },
+    { key: "since_start", label: "All-time %" },
+    { key: "last_match", label: "Last match %" },
+    { key: "avg_match", label: "Avg / match %" },
+    { key: "name", label: "Name" },
+  ],
+  statistics: [
+    { key: "value", label: "Value" },
+    { key: "rating_avg", label: "Rating" },
+    { key: "appearances", label: "Apps" },
+    { key: "minutes_played", label: "Minutes" },
+    { key: "goals", label: "Goals" },
+    { key: "assists", label: "Assists" },
+    { key: "key_passes", label: "Key passes" },
+    { key: "shots", label: "Shots" },
+    { key: "passes", label: "Passes" },
+    { key: "passes_accuracy", label: "Pass %" },
+    { key: "name", label: "Name" },
+  ],
+  personal: [
+    { key: "value", label: "Value" },
+    { key: "age", label: "Age" },
+    { key: "height", label: "Height" },
+    { key: "weight", label: "Weight" },
+    { key: "name", label: "Name" },
+  ],
+};
+
 const STAR_W = 28;
 const PLAYER_W = 210;
 const TEAM_W = 115;
@@ -104,6 +139,7 @@ interface ScreenerPageProps {
 }
 
 export function ScreenerPage({ on_open_player, on_open_team, watchlist, toggle_watch }: ScreenerPageProps) {
+  const { is_mobile } = useViewport();
   const [position_filters, set_position_filters] = useState<Set<Position>>(new Set());
   const [team_filters, set_team_filters] = useState<Set<string>>(new Set());
   const [price_range, set_price_range] = useState<[number, number]>([0, 999]);
@@ -178,6 +214,17 @@ export function ScreenerPage({ on_open_player, on_open_team, watchlist, toggle_w
       set_sort_dir(sort_dir === "asc" ? "desc" : "asc");
     } else {
       set_sort_key(key);
+      set_sort_dir("desc");
+    }
+  };
+
+  // On mobile the sort lives in a <select> scoped to the tab's options, so a
+  // tab switch must fall back to a valid key (e.g. "minutes" -> personal tab).
+  // Desktop keeps any sort across tabs (its column headers are unaffected).
+  const change_tab = (t: Tab) => {
+    set_tab(t);
+    if (is_mobile && !MOBILE_TAB_SORTS[t].some(o => o.key === sort_key)) {
+      set_sort_key("value");
       set_sort_dir("desc");
     }
   };
@@ -449,7 +496,7 @@ export function ScreenerPage({ on_open_player, on_open_team, watchlist, toggle_w
           return (
             <button
               key={t}
-              onClick={() => set_tab(t)}
+              onClick={() => change_tab(t)}
               style={{
                 padding: "8px 14px",
                 border: "1px solid rgba(255,255,255,.06)",
@@ -470,7 +517,51 @@ export function ScreenerPage({ on_open_player, on_open_team, watchlist, toggle_w
         })}
       </div>
 
-      {/* Result table — compact widths so everything fits without scroll. */}
+      {/* Mobile: a compact sort control replaces the clickable column headers. */}
+      {is_mobile && (
+        <MobileSortControl
+          options={MOBILE_TAB_SORTS[tab]}
+          sort_key={sort_key}
+          sort_dir={sort_dir}
+          on_change_key={k => {
+            set_sort_key(k);
+            set_sort_dir("desc");
+          }}
+          on_toggle_dir={() => set_sort_dir(d => (d === "asc" ? "desc" : "asc"))}
+        />
+      )}
+
+      {/* Mobile: vertical list of compact player cards (mirrors the native
+          Screener). Desktop: the wide grid table below. */}
+      {is_mobile ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {filtered.map(e => {
+            const team = teams_api.get(e.team_id);
+            return (
+              <MobileCard
+                key={e.id}
+                entry={e}
+                tab={tab}
+                team_color={team?.color ?? "#666"}
+                team_flag={team?.flag}
+                team_flag_url={team?.flag_url}
+                team_name={team?.name}
+                watched={watchlist?.has(e.id) ?? false}
+                held={held_ids.has(e.id)}
+                on_open={() => open_player_by_id(e.id)}
+                on_open_team={on_open_team}
+                on_toggle_watch={() => toggle_watch?.(e.id)}
+              />
+            );
+          })}
+          {filtered.length === 0 && (
+            <div style={{ padding: 40, textAlign: "center", color: "rgba(255,255,255,.25)", fontSize: 13 }}>
+              No players match your filters
+            </div>
+          )}
+        </div>
+      ) : (
+      /* Result table — compact widths so everything fits without scroll. */
       <div
         style={{
           background: "rgba(255,255,255,.02)",
@@ -547,6 +638,7 @@ export function ScreenerPage({ on_open_player, on_open_team, watchlist, toggle_w
           </div>
         )}
       </div>
+      )}
       <div style={{ padding: "0 4px", fontSize: 11, color: "rgba(255,255,255,.35)" }}>
         {filtered.length} players
       </div>
@@ -921,5 +1013,271 @@ function ColumnHeader({
       {label}
       {active && (dir === "asc" ? " ▲" : " ▼")}
     </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Mobile-only presentation: a compact sort control + a vertical list of
+// player cards. Mirrors the native Screener (apps/mobile/.../screener.tsx);
+// the desktop grid table above is untouched.
+// ---------------------------------------------------------------------------
+
+function MobileSortControl({
+  options,
+  sort_key,
+  sort_dir,
+  on_change_key,
+  on_toggle_dir,
+}: {
+  options: { key: SortKey; label: string }[];
+  sort_key: SortKey;
+  sort_dir: SortDir;
+  on_change_key: (k: SortKey) => void;
+  on_toggle_dir: () => void;
+}) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <span style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,.4)", letterSpacing: 0.4, textTransform: "uppercase", flexShrink: 0 }}>
+        Sort
+      </span>
+      <select
+        value={sort_key}
+        onChange={e => on_change_key(e.target.value as SortKey)}
+        style={{
+          flex: 1,
+          minWidth: 0,
+          background: "rgba(255,255,255,.04)",
+          border: "1px solid rgba(255,255,255,.08)",
+          borderRadius: 9,
+          color: "#fff",
+          fontSize: 13,
+          fontWeight: 600,
+          fontFamily: "inherit",
+          padding: "8px 10px",
+          cursor: "pointer",
+        }}
+      >
+        {options.map(o => (
+          <option key={o.key} value={o.key} style={{ background: "#0a0d12" }}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <button
+        onClick={on_toggle_dir}
+        aria-label={sort_dir === "asc" ? "Ascending" : "Descending"}
+        style={{
+          flexShrink: 0,
+          width: 38,
+          height: 36,
+          background: "rgba(255,255,255,.04)",
+          border: "1px solid rgba(255,255,255,.08)",
+          borderRadius: 9,
+          color: "#fff",
+          fontSize: 14,
+          fontWeight: 800,
+          cursor: "pointer",
+          fontFamily: "inherit",
+        }}
+      >
+        {sort_dir === "asc" ? "↑" : "↓"}
+      </button>
+    </div>
+  );
+}
+
+interface MobileStatCell {
+  label: string;
+  value: string;
+  color?: string;
+  // Yellow/red card counts rendered as two colour-coded numbers.
+  cards?: { y: number | null; r: number | null };
+}
+
+// Per-tab stat strip for the mobile card — port of the native `stat_cells`.
+function mobile_stat_cells(e: ScreenerEntry, tab: Tab): MobileStatCell[] {
+  const num = (v: number | null) => (v == null ? "—" : `${v}`);
+  if (tab === "valuation") {
+    return [
+      { label: "All-time", value: fmt_pct(e.since_start_pct), color: pct_color(e.since_start_pct) },
+      { label: "Last match", value: fmt_pct(e.last_match_pct), color: pct_color(e.last_match_pct) },
+      { label: "Avg / match", value: fmt_pct(e.avg_match_pct), color: pct_color(e.avg_match_pct) },
+    ];
+  }
+  if (tab === "statistics") {
+    return [
+      { label: "Rating", value: e.rating_avg == null ? "—" : e.rating_avg.toFixed(1) },
+      { label: "Apps", value: num(e.appearances) },
+      { label: "Min", value: num(e.minutes_played) },
+      { label: "Goals", value: num(e.goals) },
+      { label: "Assists", value: num(e.assists) },
+      { label: "Cards", value: "", cards: { y: e.yellow_cards, r: e.red_cards } },
+    ];
+  }
+  return [
+    { label: "Age", value: num(e.age) },
+    { label: "Foot", value: e.foot ? e.foot[0].toUpperCase() + e.foot.slice(1) : "—" },
+    { label: "Height", value: e.height == null ? "—" : `${e.height} cm` },
+    { label: "Weight", value: e.weight == null ? "—" : `${e.weight} kg` },
+  ];
+}
+
+function MobileCard({
+  entry: e,
+  tab,
+  team_color,
+  team_flag,
+  team_flag_url,
+  team_name,
+  watched,
+  held,
+  on_open,
+  on_open_team,
+  on_toggle_watch,
+}: {
+  entry: ScreenerEntry;
+  tab: Tab;
+  team_color: string;
+  team_flag?: string;
+  team_flag_url?: string;
+  team_name?: string;
+  watched: boolean;
+  held: boolean;
+  on_open: () => void;
+  on_open_team?: (team_id: string) => void;
+  on_toggle_watch: () => void;
+}) {
+  const cells = mobile_stat_cells(e, tab);
+  const meta = [team_name, e.club].filter(Boolean).join(" · ");
+  const label_style: React.CSSProperties = {
+    fontSize: 9,
+    fontWeight: 600,
+    color: "rgba(255,255,255,.4)",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  };
+  const value_style: React.CSSProperties = {
+    fontSize: 12.5,
+    fontWeight: 600,
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  };
+  return (
+    <div
+      onClick={on_open}
+      style={{
+        position: "relative",
+        background: "rgba(255,255,255,.045)",
+        border: "1px solid rgba(255,255,255,.09)",
+        borderRadius: 12,
+        padding: "10px 12px",
+        cursor: "pointer",
+      }}
+    >
+      <span
+        onClick={ev => {
+          ev.stopPropagation();
+          on_toggle_watch();
+        }}
+        style={{
+          position: "absolute",
+          top: 4,
+          left: 6,
+          zIndex: 2,
+          fontSize: 14,
+          lineHeight: 1,
+          color: watched ? "#fff" : "rgba(255,255,255,.2)",
+          cursor: "pointer",
+        }}
+      >
+        {watched ? "★" : "☆"}
+      </span>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+        <PlayerAvatar
+          image_path={e.image_path}
+          jersey_number={e.jersey_number}
+          team_color={team_color}
+          size={46}
+          radius={9}
+          fit="contain"
+          alt={e.full_name ?? e.name}
+        />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+            <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,.45)", flexShrink: 0 }}>
+              {e.jersey_number}
+            </span>
+            <span style={{ fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
+              {e.name}
+            </span>
+            {held && (
+              <span
+                title="In your portfolio"
+                style={{
+                  fontSize: 9,
+                  fontWeight: 800,
+                  letterSpacing: 0.4,
+                  color: "var(--color-positive)",
+                  background: "color-mix(in srgb, var(--color-positive) 14%, transparent)",
+                  border: "1px solid color-mix(in srgb, var(--color-positive) 35%, transparent)",
+                  padding: "1px 5px",
+                  borderRadius: 3,
+                  flexShrink: 0,
+                }}
+              >
+                HELD
+              </span>
+            )}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2, minWidth: 0 }}>
+            <TeamLink
+              team_id={e.team_id}
+              on_open_team={on_open_team}
+              style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "rgba(255,255,255,.55)", minWidth: 0, overflow: "hidden" }}
+            >
+              {team_flag_url ? (
+                <img src={team_flag_url} alt={team_name ?? ""} style={{ width: 15, height: 15, objectFit: "contain", flexShrink: 0 }} />
+              ) : (
+                <span style={{ fontSize: 12 }}>{team_flag}</span>
+              )}
+              <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{meta}</span>
+            </TeamLink>
+            <PositionBadge position={e.position as Position} />
+          </div>
+        </div>
+        <PriceCell value={e.current_price} />
+      </div>
+
+      <div style={{ display: "flex", marginTop: 9, paddingTop: 9, borderTop: "1px solid rgba(255,255,255,.07)" }}>
+        {cells.map(c => (
+          <div key={c.label} style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
+            <span style={label_style}>{c.label}</span>
+            {c.cards ? (
+              c.cards.y == null && c.cards.r == null ? (
+                <span className="mono" style={{ ...value_style, color: "rgba(255,255,255,.82)" }}>—</span>
+              ) : (
+                <span className="mono" style={value_style}>
+                  <span style={{ color: color.cardYellow }}>{c.cards.y ?? 0}</span>
+                  <span style={{ color: "rgba(255,255,255,.3)" }}> · </span>
+                  <span style={{ color: "var(--color-negative)" }}>{c.cards.r ?? 0}</span>
+                </span>
+              )
+            ) : (
+              <span className="mono" style={{ ...value_style, color: c.color ?? "rgba(255,255,255,.82)" }}>
+                {c.value}
+              </span>
+            )}
+          </div>
+        ))}
+        {tab === "valuation" && (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
+            <span style={label_style}>Trend</span>
+            <Spark data={spark_for_player(e.id)} width={60} height={16} />
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
