@@ -65,8 +65,10 @@ function _surname(full: string): string {
   return parts.length > 1 ? parts[parts.length - 1] : full;
 }
 
-function ScorerColumn({ goals, align }: { goals: MatchEvent[]; align: "left" | "right" }) {
-  if (goals.length === 0) return null;
+function ScorerColumn({ goals }: { goals: MatchEvent[] }) {
+  // Empty cell (not null) so the two-column scorer grid stays aligned even when
+  // only one side scored.
+  if (goals.length === 0) return <div />;
   // Group goals by scorer so a player's minutes sit on the SAME line as the
   // name ("Surname 12', 45'"), collapsing a brace into one line. The minute is
   // its own non-shrinking element, so it is never pushed to a second line —
@@ -81,11 +83,11 @@ function ScorerColumn({ goals, align }: { goals: MatchEvent[]; align: "left" | "
     else by_player.push({ name, mins: [min], own });
   }
   return (
-    <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 3, fontSize: 11, color: "#fff", fontWeight: 600 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 11, color: "#fff", fontWeight: 600, textAlign: "left", minWidth: 0 }}>
       {by_player.map((p, i) => (
         <div
           key={`${p.name}-${i}`}
-          style={{ display: "flex", alignItems: "baseline", gap: 5, minWidth: 0, justifyContent: align === "right" ? "flex-end" : "flex-start" }}
+          style={{ display: "flex", alignItems: "baseline", gap: 5, minWidth: 0, justifyContent: "flex-start" }}
         >
           <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
             ⚽ {_surname(p.name)}
@@ -306,7 +308,6 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
               <div style={{ fontSize: 48, lineHeight: 1 }}>{home_team?.flag}</div>
               <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8, letterSpacing: -0.2 }}>{home_team?.name ?? match.home_team_id}</div>
             </TeamLink>
-            <ScorerColumn goals={goals.filter(g => g.team_id === match.home_team_id)} align="right" />
           </div>
           <div className="mono" style={{ fontSize: 42, fontWeight: 900, letterSpacing: -1.5, paddingTop: 8, flexShrink: 0 }}>
             {match.home_score} : {match.away_score}
@@ -316,9 +317,16 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
               <div style={{ fontSize: 48, lineHeight: 1 }}>{away_team?.flag}</div>
               <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8, letterSpacing: -0.2 }}>{away_team?.name ?? match.away_team_id}</div>
             </TeamLink>
-            <ScorerColumn goals={goals.filter(g => g.team_id === match.away_team_id)} align="left" />
           </div>
         </div>
+        {/* Scorers under each team's half, left-anchored — same split as the
+            Home live card so it's clear who scored for whom. */}
+        {goals.length > 0 && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 14 }}>
+            <ScorerColumn goals={goals.filter(g => g.team_id === match.home_team_id)} />
+            <ScorerColumn goals={goals.filter(g => g.team_id === match.away_team_id)} />
+          </div>
+        )}
       </div>
 
       {/* Live commentary ticker — LIVE matches only. It is the same feed as the
