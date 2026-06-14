@@ -727,10 +727,10 @@ function DualRoster({
   const grid_2col: CSSProperties = {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
-    gap: is_mobile ? 6 : 10,
+    gap: is_mobile ? 8 : 10,
     alignItems: "start",
   };
-  const col_stack: CSSProperties = { display: "flex", flexDirection: "column", gap: 6 };
+  const col_stack: CSSProperties = { display: "flex", flexDirection: "column", gap: is_mobile ? 4 : 6 };
 
   return (
     <div style={card}>
@@ -883,42 +883,44 @@ function RosterCard({
         style={{
           display: "flex",
           alignItems: "center",
-          gap: 8,
-          padding: "8px",
+          gap: 7,
+          padding: "6px 7px",
           minWidth: 0,
-          background: sub ? "rgba(255,255,255,.012)" : "rgba(255,255,255,.035)",
-          border: sub ? "1px solid rgba(255,255,255,.035)" : "1px solid rgba(255,255,255,.05)",
-          borderRadius: 10,
+          background: sub ? "rgba(255,255,255,.012)" : "rgba(255,255,255,.028)",
+          border: "1px solid rgba(255,255,255,.035)",
+          borderRadius: 11,
           cursor: "pointer",
           opacity: sub ? 0.62 : 1,
         }}
       >
-        <div style={{ position: "relative", width: 32, height: 32, flexShrink: 0 }}>
-          <PlayerAvatar image_path={photo} size={32} radius={16} fit="cover" alt="" />
+        {/* Rounded-square 30px avatar with the jersey number as a bottom-right
+            badge — the exact native RosterCard avatar. */}
+        <div style={{ position: "relative", width: 30, height: 30, flexShrink: 0 }}>
+          <PlayerAvatar image_path={photo} size={30} radius={8} fit="cover" alt="" />
           <span
             className="mono"
-            style={{ position: "absolute", bottom: -3, right: -4, fontSize: 8, fontWeight: 800, background: "#0b0f14", color: "rgba(255,255,255,.85)", borderRadius: 7, padding: "0 4px", lineHeight: 1.3, border: "1px solid rgba(255,255,255,.12)" }}
+            style={{ position: "absolute", bottom: -3, right: -3, fontSize: 8, fontWeight: 700, background: "#020406", color: "rgba(255,255,255,.7)", borderRadius: 6, padding: "0 3px", lineHeight: 1.4, border: "1px solid rgba(255,255,255,.08)" }}
           >
             {p.jersey_number}
           </span>
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
-            <span style={{ flex: "0 1 auto", minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontSize: 12, fontWeight: 700 }}>{p.name}</span>
+            <span style={{ flex: "0 1 auto", minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontSize: 12, fontWeight: 600 }}>{p.name}</span>
             <span style={{ flexShrink: 0, display: "inline-flex", gap: 3 }}>
               <MatchEventBadge events={events} variant="inline" />
               <SubBadge sub={sub_info} variant="inline" />
             </span>
           </div>
-          <div style={{ fontSize: 10, color: "rgba(255,255,255,.4)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 1 }}>
+          <div style={{ fontSize: 9, color: "rgba(255,255,255,.4)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 1, letterSpacing: 0.2 }}>
             {exact_position}
           </div>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 3 }}>
-            <span className="mono" style={{ fontSize: 12, fontWeight: 800 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 7, marginTop: 1 }}>
+            <span className="mono" style={{ fontSize: 11.5, fontWeight: 700, color: "rgba(255,255,255,.78)" }}>
               <TickValue value={live_price}>€{live_price}M</TickValue>
             </span>
             {match_change !== 0 && (
-              <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: match_change >= 0 ? "var(--color-positive)" : "var(--color-negative)" }}>
+              <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: match_change >= 0 ? "var(--color-positive)" : "var(--color-negative)" }}>
                 {fmt_signed_pct(match_change, 1)}
               </span>
             )}
