@@ -24,6 +24,7 @@ import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import { teams_api } from "@fundxi/core/api/teams_api";
 import { trades_api } from "@fundxi/core/api/trades_api";
 import { valuations_api } from "@fundxi/core/api/valuations_api";
+import { useWatchlist, watchlist } from "@/lib/watchlist";
 import { POSITION_LABEL, type Player } from "@fundxi/core/domain/player/player";
 import { match_event_badges, type MatchEventKind } from "@fundxi/core/domain/player/player_match_view";
 import { build_tournament_stat_groups, type StatSemantic } from "@fundxi/core/domain/player/player_stat_view";
@@ -260,6 +261,7 @@ function Header({
   on_open_team: () => void;
 }) {
   const position = player.detailed_position ?? POSITION_LABEL[player.position];
+  const watched = useWatchlist().has(player.id);
   return (
     <View style={styles.header}>
       <View style={styles.header_top}>
@@ -295,6 +297,14 @@ function Header({
             </Text>
           </View>
         </View>
+        <Pressable
+          onPress={() => watchlist.toggle(player.id)}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel={watched ? "Remove from watchlist" : "Add to watchlist"}
+        >
+          <Text style={[styles.watch_star, watched && styles.watch_star_on]}>{watched ? "★" : "☆"}</Text>
+        </Pressable>
       </View>
       <View style={styles.bio_grid}>
         <BioStat label="Age" value={player.age != null ? String(player.age) : "—"} />
@@ -707,6 +717,8 @@ const styles = StyleSheet.create({
   header_top: { flexDirection: "row", alignItems: "center", gap: 14 },
   photo: { width: 72, height: 72, borderRadius: 11, backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
   identity: { flex: 1, minWidth: 0 },
+  watch_star: { fontSize: 24, color: text.faint, lineHeight: 26 },
+  watch_star_on: { color: palette.accentBlue },
   name_row: { flexDirection: "row", alignItems: "baseline", gap: 10 },
   jersey: { fontFamily: mono, fontSize: 20, fontWeight: "800", color: "rgba(255,255,255,0.55)", letterSpacing: -0.5 },
   name: { fontSize: 20, fontWeight: "800", color: "#fff", letterSpacing: -0.5, flexShrink: 1 },
