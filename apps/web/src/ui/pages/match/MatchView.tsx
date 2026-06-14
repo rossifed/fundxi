@@ -19,7 +19,6 @@ import { PitchView } from "@/ui/pages/match/PitchView";
 import { count_match_events, MatchEventBadge, SubBadge, type MatchEventCounts } from "@/ui/pages/match/event_badge";
 import { apply_subs, compute_subs, type SubInfo } from "@fundxi/core/domain/match/substitutions";
 
-const LINEUP_VIEW_STORAGE_KEY = "fundxi.lineup_view";
 type LineupView = "list" | "pitch";
 
 interface MatchViewProps {
@@ -105,15 +104,9 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
   const away_team = teams_api.get(match.away_team_id);
   const is_live = match.status === "live";
 
-  // Toggle between the roster list and the tactical pitch view. Persisted in
-  // localStorage so the user's choice survives reloads.
-  const [view_mode, set_view_mode] = useState<LineupView>(() => {
-    if (typeof window === "undefined") return "list";
-    return window.localStorage.getItem(LINEUP_VIEW_STORAGE_KEY) === "pitch" ? "pitch" : "list";
-  });
-  useEffect(() => {
-    if (typeof window !== "undefined") window.localStorage.setItem(LINEUP_VIEW_STORAGE_KEY, view_mode);
-  }, [view_mode]);
+  // Toggle between the roster list and the tactical pitch view. Always opens on
+  // the list (the default) — the choice is per-view, not persisted.
+  const [view_mode, set_view_mode] = useState<LineupView>("list");
 
   const goals = useMemo(
     () =>
