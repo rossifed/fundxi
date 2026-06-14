@@ -139,7 +139,12 @@ export function PitchView({
     [match.home_xi, match.home_bench, effective_subs],
   );
   const away_xi = useMemo(
-    () => apply_subs(match.away_xi, match.away_bench ?? [], effective_subs).on_field,
+    () =>
+      apply_subs(
+        match.away_xi.filter((x): x is MatchPlayer => typeof x !== "number"),
+        match.away_bench ?? [],
+        effective_subs,
+      ).on_field,
     [match.away_xi, match.away_bench, effective_subs],
   );
 

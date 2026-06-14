@@ -123,4 +123,22 @@ describe("apply_subs", () => {
     // Bench is also unchanged in such a corrupt-event case.
     expect(r.bench.map(p => p.id)).toEqual([2, 4]);
   });
+
+  it("caps a bloated starting XI to 11, keeping formation-slot holders first", () => {
+    // 11 real starters (each with a formation slot) + 2 leaked slot-less players.
+    const starters = [
+      ...Array.from({ length: 11 }, (_, i) => _player(i + 1, `S${i + 1}`, `${i + 1}:1`)),
+      _player(100, "Leaked A"),
+      _player(101, "Leaked B"),
+    ];
+    const r = apply_subs(starters, [], new Map());
+    expect(r.on_field).toHaveLength(11);
+    expect(r.on_field.map(p => p.id)).not.toContain(100);
+    expect(r.on_field.map(p => p.id)).not.toContain(101);
+  });
+
+  it("dedupes duplicate starter ids", () => {
+    const r = apply_subs([_player(1, "A", "1:1"), _player(1, "A dup", "1:1"), _player(2, "B", "2:1")], [], new Map());
+    expect(r.on_field.map(p => p.id)).toEqual([1, 2]);
+  });
 });

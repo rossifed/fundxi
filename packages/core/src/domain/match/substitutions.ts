@@ -75,6 +75,26 @@ export function compute_subs(events: MatchEvent[]): Map<number, SubInfo> {
  * players are appended at the end so they're visible but clearly
  * distinct from unused subs.
  */
+// Defensive: the live match payload can leak bench / subbed-in players into the
+// starting XI, so the on-field XI would balloon to the whole squad. Reduce the
+// snapshot to a single, full XI: drop duplicate ids, and when there are still
+// more than 11, keep the players that hold a real formation slot first (the
+// genuine starters) and cap at 11. A no-op for a well-formed 11-man lineup.
+function resolve_starting_xi(starters: MatchPlayer[]): MatchPlayer[] {
+  const seen = new Set<number>();
+  const unique: MatchPlayer[] = [];
+  for (const p of starters) {
+    if (!seen.has(p.id)) {
+      seen.add(p.id);
+      unique.push(p);
+    }
+  }
+  if (unique.length <= 11) return unique;
+  const with_slot = unique.filter(p => p.formation_field != null);
+  const without_slot = unique.filter(p => p.formation_field == null);
+  return [...with_slot, ...without_slot].slice(0, 11);
+}
+
 export function apply_subs(
   starters: MatchPlayer[],
   bench: MatchPlayer[],
@@ -84,7 +104,7 @@ export function apply_subs(
   const on_field: MatchPlayer[] = [];
   const used_from_bench = new Set<number>();
   const actually_swapped_out: MatchPlayer[] = [];
-  for (const s of starters) {
+  for (const s of resolve_starting_xi(starters)) {
     const info = subs.get(s.id);
     if (info?.direction === "off" && info.partner_id && bench_by_id.has(info.partner_id)) {
       // Swap: the entering player takes this formation slot, inheriting
