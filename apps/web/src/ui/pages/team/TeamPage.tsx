@@ -164,7 +164,7 @@ export function TeamPage({ team, on_open_player, on_open_match, on_open_team, on
 
       <TeamHeader team={team} standing={standing} group={team_group} />
       {standing && <RecordStrip standing={standing} />}
-      {squad && squad.length > 0 && <SquadSummary squad={squad} />}
+      {squad && squad.length > 0 && <SquadSummary squad={squad} on_open_player={on_open_player} />}
 
       <Section title={`Squad${squad ? ` · ${squad.length}` : ""}`}>
         {squad === null ? (
@@ -447,7 +447,7 @@ function last_word(name: string): string {
 
 /** Squad overview — every figure is an aggregate of the squad already
  * loaded (real persisted data), not a synthesised value. */
-function SquadSummary({ squad }: { squad: SquadPlayer[] }) {
+function SquadSummary({ squad, on_open_player }: { squad: SquadPlayer[]; on_open_player: (player_id: number) => void }) {
   const total_value = squad.reduce((sum, p) => sum + p.valuation.current_price, 0);
 
   const ages = squad.map(p => p.age).filter((a): a is number => a != null);
@@ -482,19 +482,27 @@ function SquadSummary({ squad }: { squad: SquadPlayer[] }) {
         label="Top scorer"
         main={top_goals > 0 && top_scorer ? last_word(top_scorer.name) : "—"}
         sub={top_goals > 0 ? `${top_goals} ${top_goals === 1 ? "goal" : "goals"}` : undefined}
+        on_click={top_goals > 0 && top_scorer ? () => on_open_player(top_scorer!.id) : undefined}
       />
       <SummaryCell
         label="Top value"
         main={top_value ? last_word(top_value.name) : "—"}
         sub={top_value ? fmt_eur_m(top_value.valuation.current_price) : undefined}
+        on_click={top_value ? () => on_open_player(top_value!.id) : undefined}
       />
     </div>
   );
 }
 
-function SummaryCell({ label, main, sub }: { label: string; main: string; sub?: string }) {
+function SummaryCell({ label, main, sub, on_click }: { label: string; main: string; sub?: string; on_click?: () => void }) {
   return (
-    <div style={{ background: "rgba(13,13,15,.6)", padding: "11px 8px", textAlign: "center", minWidth: 0 }}>
+    <div
+      onClick={on_click}
+      title={on_click ? "Open player" : undefined}
+      style={{ background: "rgba(13,13,15,.6)", padding: "11px 8px", textAlign: "center", minWidth: 0, cursor: on_click ? "pointer" : "default" }}
+      onMouseEnter={on_click ? e => (e.currentTarget.style.background = "rgba(255,255,255,.04)") : undefined}
+      onMouseLeave={on_click ? e => (e.currentTarget.style.background = "rgba(13,13,15,.6)") : undefined}
+    >
       <div
         style={{
           fontSize: 9,
