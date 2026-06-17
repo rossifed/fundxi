@@ -245,7 +245,6 @@ export function PlayerSheet({
       player_id={player.id}
       current_price={current_price}
       performance_rating={performance_rating}
-      price_history={price_history}
       tournament_stats={tournament_stats}
     />
   );
@@ -323,7 +322,6 @@ export function PlayerSheet({
                 player_id={player.id}
                 current_price={current_price}
                 performance_rating={performance_rating}
-                price_history={price_history}
                 tournament_stats={tournament_stats}
               />
               <PlayerPriceChart price_history={price_history} />
