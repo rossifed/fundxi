@@ -155,7 +155,12 @@ class SqlAlchemyLeagueRepository:
                     user_id=int(row["user_id"]),
                     name=str(row["name"]),
                     value=float(row["value"]),
-                    return_pct=round(float(row["return_pct"]), 2),
+                    # Full precision — round only at display (the frontend rounds
+                    # to 1 dp). Pre-rounding to 2 dp here double-rounds a near-flat
+                    # value past the .05 boundary: a residual of -0.046% became
+                    # -0.05% here, then "-0.1%" at the frontend's 1 dp, instead of
+                    # the correct "+0.0%". One rounding, at the edge.
+                    return_pct=float(row["return_pct"]),
                     is_me=int(row["user_id"]) == me_user_id,
                 )
             )
