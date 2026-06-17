@@ -959,7 +959,9 @@ function RosterCard({
   // topic), same source as Screener/Home so it can't disagree.
   const live_price = valuation?.current_price ?? p.value;
   const total_change = valuation?.change_since_inception ?? 0;
-  const match_change = p.change_last_match ?? 0;
+  // Same single source as total_change (the match payload is a separate, throttled
+  // fetch → it would desync mid-play). Fall back to the payload until valuation loads.
+  const match_change = valuation?.change_last_match ?? p.change_last_match ?? 0;
   const exact_position = ref_player?.detailed_position ?? POSITION_FALLBACK_LABEL[p.position];
   const photo = ref_player?.image_path;
 
