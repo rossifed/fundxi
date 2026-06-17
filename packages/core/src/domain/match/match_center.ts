@@ -22,6 +22,20 @@ export function latest_results(fixtures: readonly Fixture[], limit: number): Fix
     .slice(0, limit);
 }
 
+/** Live matches, ordered for the global LiveBar: matches where the user holds a
+ * player (their book is moving → highest-value trading signal) come first, then
+ * the rest in input order. Pure — the UI handles rotation/refresh. */
+export function live_fixtures_ordered(
+  fixtures: readonly Fixture[],
+  held_team_ids: ReadonlySet<string>,
+): Fixture[] {
+  const has_holding = (f: Fixture): boolean =>
+    held_team_ids.has(f.home_team_id) || held_team_ids.has(f.away_team_id);
+  return fixtures
+    .filter(f => f.status === "live")
+    .sort((a, b) => Number(has_holding(b)) - Number(has_holding(a)));
+}
+
 /** The soonest upcoming matches, earliest first. */
 export function next_fixtures(fixtures: readonly Fixture[], limit: number): Fixture[] {
   return fixtures

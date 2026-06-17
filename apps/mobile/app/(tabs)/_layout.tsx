@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { themes } from "@fundxi/core/design/palette";
 
 import { useAuth } from "@/components/AuthContext";
+import { LiveBar } from "@/components/LiveBar";
 import { PortfolioBar } from "@/components/PortfolioBar";
 
 const palette = themes.dark;
@@ -54,6 +55,7 @@ function TabHeader({ title, portfolio_bar = true }: { title: string; portfolio_b
         <AuthControl />
       </View>
       {portfolio_bar && <PortfolioBar />}
+      <LiveBar />
     </View>
   );
 }

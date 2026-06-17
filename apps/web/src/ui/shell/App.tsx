@@ -20,6 +20,7 @@ import { TeamPage } from "@/ui/pages/team/TeamPage";
 import { PlayerSheet } from "@/ui/pages/player/PlayerSheet";
 import { useViewport } from "@/ui/hooks/use_viewport";
 import { Header } from "./Header";
+import { LiveBar } from "./LiveBar";
 import { PortfolioBar } from "./PortfolioBar";
 import { Sidebar, NAV_TABS } from "./Sidebar";
 import { BottomNav } from "./BottomNav";
@@ -239,6 +240,7 @@ export function App() {
       >
         <Header on_logo_click={() => navigate("home")} on_open_profile={() => navigate("profile")} />
         <PortfolioBar on_click={() => navigate("portfolio")} />
+        <LiveBar on_open_match={open_match_by_fixture_id} />
 
         <div style={{ display: "flex", flex: 1, alignItems: "stretch", minHeight: 0 }}>
           {!is_mobile && <Sidebar active_tab={tab} on_navigate={navigate} />}
