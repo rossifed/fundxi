@@ -194,6 +194,9 @@ function MatchBody({
   // Bench grouped by position too, like the starting XI (GK / DF / MF / FW).
   const home_bench = useMemo(() => group_by_position(match.home_bench ?? []), [match.home_bench]);
   const away_bench = useMemo(() => group_by_position(match.away_bench ?? []), [match.away_bench]);
+  // Squad fallback (pre-lineup): both full squads, grouped by position.
+  const home_squad = useMemo(() => group_by_position(match.home_squad ?? []), [match.home_squad]);
+  const away_squad = useMemo(() => group_by_position(match.away_squad ?? []), [match.away_squad]);
   const home_color = match.home_kit_color ?? home?.color;
   const away_color = match.away_kit_color ?? away?.color;
 
@@ -242,22 +245,39 @@ function MatchBody({
 
       {tab === "compos" && (
         <View style={{ gap: 12 }}>
-          {/* Starting XI vs Bench — the bench is part of the composition, kept
-              in this tab behind a toggle rather than promoted to a top-level tab. */}
-          <Segmented view={compos_view} on_change={set_compos_view} />
-          <View style={styles.card}>
-            <View style={styles.lineup_body}>
-              {/* Column glow — a luminous team-color line on each column's outer
-                  edge (home left / away right), fading at top and bottom. */}
-              <ColumnGlow color={home_color} side="left" />
-              <ColumnGlow color={away_color} side="right" />
-              {compos_view === "xi" ? (
-                <GroupedRoster home={home_xi} away={away_xi} counts={counts} on_open={on_open} empty="Line-up not available." />
-              ) : (
-                <GroupedRoster home={home_bench} away={away_bench} counts={counts} on_open={on_open} empty="No substitutes listed." />
-              )}
-            </View>
-          </View>
+          {match.lineup_published === false ? (
+            // Pre-lineup: no XI yet → show both full squads (who COULD play, not
+            // confirmed) so the match is tradeable now. No XI/Bench toggle.
+            <>
+              <Text style={styles.squad_banner}>Lineup not announced yet — full squad, not confirmed to play.</Text>
+              <View style={styles.card}>
+                <View style={styles.lineup_body}>
+                  <ColumnGlow color={home_color} side="left" />
+                  <ColumnGlow color={away_color} side="right" />
+                  <GroupedRoster home={home_squad} away={away_squad} counts={counts} on_open={on_open} empty="No squad available." />
+                </View>
+              </View>
+            </>
+          ) : (
+            <>
+              {/* Starting XI vs Bench — the bench is part of the composition, kept
+                  in this tab behind a toggle rather than promoted to a top-level tab. */}
+              <Segmented view={compos_view} on_change={set_compos_view} />
+              <View style={styles.card}>
+                <View style={styles.lineup_body}>
+                  {/* Column glow — a luminous team-color line on each column's outer
+                      edge (home left / away right), fading at top and bottom. */}
+                  <ColumnGlow color={home_color} side="left" />
+                  <ColumnGlow color={away_color} side="right" />
+                  {compos_view === "xi" ? (
+                    <GroupedRoster home={home_xi} away={away_xi} counts={counts} on_open={on_open} empty="Line-up not available." />
+                  ) : (
+                    <GroupedRoster home={home_bench} away={away_bench} counts={counts} on_open={on_open} empty="No substitutes listed." />
+                  )}
+                </View>
+              </View>
+            </>
+          )}
         </View>
       )}
 
@@ -593,13 +613,14 @@ const styles = StyleSheet.create({
   loading_inline: { color: text.tertiary, fontSize: 12, padding: 16 },
 
   card: { backgroundColor: "rgba(255,255,255,0.02)", borderWidth: 1, borderColor: "rgba(255,255,255,0.05)", borderRadius: 14, overflow: "hidden" },
+  squad_banner: { fontSize: 12, fontWeight: "600", color: "rgba(255,255,255,0.6)", backgroundColor: "rgba(255,255,255,0.03)", borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
   section_title: { fontSize: 12, fontWeight: "700", color: "rgba(255,255,255,0.6)", padding: 14, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.05)" },
 
   score_top: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 18, paddingTop: 16 },
   group: { fontSize: 11, color: text.tertiary, fontWeight: "600" },
-  live: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(255,255,255,0.08)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
-  live_dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.6)" },
-  live_label: { fontFamily: mono, fontSize: 11, fontWeight: "700", color: "rgba(255,255,255,0.6)" },
+  live: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: with_alpha(palette.positive, 0.12), borderWidth: 1, borderColor: with_alpha(palette.positive, 0.35), paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
+  live_dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: palette.positive },
+  live_label: { fontFamily: mono, fontSize: 11, fontWeight: "700", color: palette.positive },
   ft: { fontSize: 11, color: text.tertiary, fontWeight: "600" },
   score_row: { flexDirection: "row", alignItems: "flex-start", justifyContent: "center", gap: 10, paddingHorizontal: 12, paddingTop: 14, paddingBottom: 18 },
   score_team: { flex: 1, alignItems: "center" },

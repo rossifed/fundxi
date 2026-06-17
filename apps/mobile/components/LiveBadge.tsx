@@ -30,19 +30,18 @@ export function LiveBadge() {
 }
 
 const styles = StyleSheet.create({
-  // Blue, NOT the connection-status green — a live match and the SSE
-  // connection are different things and must not look alike (web parity).
+  // Green (positive) — the single canonical "LIVE" colour, same as web.
   badge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    backgroundColor: with_alpha(palette.accentBlue, 0.16),
+    backgroundColor: with_alpha(palette.positive, 0.16),
     borderWidth: 1,
-    borderColor: with_alpha(palette.accentBlue, 0.45),
+    borderColor: with_alpha(palette.positive, 0.45),
     paddingHorizontal: 11,
     paddingVertical: 6,
     borderRadius: 10,
   },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: palette.accentBlue },
-  label: { fontSize: 11, fontWeight: "800", letterSpacing: 0.4, color: palette.accentBlue },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: palette.positive },
+  label: { fontSize: 11, fontWeight: "800", letterSpacing: 0.4, color: palette.positive },
 });

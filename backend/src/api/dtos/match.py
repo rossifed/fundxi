@@ -68,8 +68,15 @@ class MatchResponse(BaseModel):
     # yet ingested.
     home_formation: str | None
     away_formation: str | None
+    # False before the XI is published: home_xi/away_xi/home_bench/away_bench are
+    # then empty and home_squad/away_squad carry both full squads instead, so the
+    # match view shows who COULD play (not confirmed) rather than nothing.
+    lineup_published: bool
     home_xi: list[MatchPlayerResponse]
     away_xi: list[MatchPlayerResponse]
     home_bench: list[MatchPlayerResponse]
     away_bench: list[MatchPlayerResponse]
+    # Populated ONLY when lineup_published is False (squad fallback).
+    home_squad: list[MatchPlayerResponse]
+    away_squad: list[MatchPlayerResponse]
     events: list[MatchEventDTO]

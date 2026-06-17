@@ -42,18 +42,21 @@ _TYPE_LABEL: dict[MatchEventType, str] = {
 
 
 def _player_view_to_dto(view: MatchPlayerView) -> MatchPlayerResponse:
+    # ``lineup`` is None for a squad-fallback view (no XI published yet) — jersey,
+    # team and formation then come from the player (no pitch placement).
+    ln = view.lineup
     return MatchPlayerResponse(
         id=view.player.id,
         name=view.player.name,
         full_name=view.player.full_name,
-        jersey_number=view.lineup.jersey_number,
+        jersey_number=ln.jersey_number if ln else view.player.jersey_number,
         position=view.player.position.value,
-        team_id=view.lineup.team_id,
+        team_id=ln.team_id if ln else view.player.team_id,
         value=view.valuation.current_price,
         rating=view.valuation.performance_rating,
         change_last_match=view.valuation.change_last_match,
-        formation_position=view.lineup.formation_position,
-        formation_field=view.lineup.formation_field,
+        formation_position=ln.formation_position if ln else None,
+        formation_field=ln.formation_field if ln else None,
     )
 
 
@@ -129,10 +132,13 @@ async def fixtures_match(
         away_kit_color=view.fixture.away_kit_color,
         home_formation=view.fixture.home_formation,
         away_formation=view.fixture.away_formation,
+        lineup_published=view.lineup_published,
         home_xi=[_player_view_to_dto(v) for v in view.home_xi],
         away_xi=[_player_view_to_dto(v) for v in view.away_xi],
         home_bench=[_player_view_to_dto(v) for v in view.home_bench],
         away_bench=[_player_view_to_dto(v) for v in view.away_bench],
+        home_squad=[_player_view_to_dto(v) for v in view.home_squad],
+        away_squad=[_player_view_to_dto(v) for v in view.away_squad],
         events=[_event_dto(ev, view.player_names) for ev in view.events],
     )
 

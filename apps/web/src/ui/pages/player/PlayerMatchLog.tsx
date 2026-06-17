@@ -159,11 +159,11 @@ export function PlayerMatchLog({ player_id, on_open_match, embedded = false }: P
                 padding: "8px 10px",
                 borderRadius: 6,
                 background: is_live
-                  ? "color-mix(in srgb, var(--color-negative) 8%, transparent)"
+                  ? "color-mix(in srgb, var(--color-positive) 8%, transparent)"
                   : is_upcoming
                     ? "rgba(255,255,255,.015)"
                     : "rgba(255,255,255,.025)",
-                border: `1px solid ${is_live ? "color-mix(in srgb, var(--color-negative) 25%, transparent)" : "rgba(255,255,255,.05)"}`,
+                border: `1px solid ${is_live ? "color-mix(in srgb, var(--color-positive) 25%, transparent)" : "rgba(255,255,255,.05)"}`,
                 cursor: on_open_match ? "pointer" : "default",
               }}
             >
@@ -173,7 +173,7 @@ export function PlayerMatchLog({ player_id, on_open_match, embedded = false }: P
                     fontSize: 9,
                     fontWeight: 800,
                     color: "#fff",
-                    background: "var(--color-action-sell)",
+                    background: "var(--color-positive)",
                     padding: "2px 5px",
                     borderRadius: 3,
                     letterSpacing: 0.6,

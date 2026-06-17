@@ -70,20 +70,39 @@ def _player_orm_to_domain(orm: PlayerORM) -> Player:
     )
 
 
+# Squad-fallback ordering: group by position (GK → DF → MF → FW), then within a
+# group by base value (stars first — a real-data proxy for the likely starters,
+# NOT a predicted XI), then jersey.
+_SQUAD_POSITION_ORDER = {
+    Position.GOALKEEPER: 0,
+    Position.DEFENDER: 1,
+    Position.MIDFIELDER: 2,
+    Position.FORWARD: 3,
+}
+
+
 @dataclass(frozen=True, slots=True)
 class MatchPlayerView:
     player: Player
     valuation: PlayerValuation
-    lineup: Lineup
+    # The lineup row placing the player in the XI/bench. None for a squad-fallback
+    # view (lineup not published yet) — jersey/team then come from the player.
+    lineup: Lineup | None
 
 
 @dataclass(frozen=True, slots=True)
 class MatchView:
     fixture: Fixture
+    # True when real lineups are published. False before kickoff when no XI is
+    # out yet: home/away_squad then carry the full squads (xi/bench stay empty).
+    lineup_published: bool
     home_xi: list[MatchPlayerView]
     away_xi: list[MatchPlayerView]
     home_bench: list[MatchPlayerView]
     away_bench: list[MatchPlayerView]
+    # Full squads — populated ONLY when lineup_published is False.
+    home_squad: list[MatchPlayerView]
+    away_squad: list[MatchPlayerView]
     events: list[MatchEvent]
     player_names: dict[int, str]
 
@@ -150,9 +169,28 @@ async def get_match_view(
     # Lineups (separate by role + team).
     lineups_rows = (await session.execute(select(LineupORM).where(LineupORM.fixture_id == fixture_id))).scalars().all()
     lineups = [_orm_lineup_to_domain(o) for o in lineups_rows]
+    lineup_published = len(lineups) > 0
 
-    # All players appearing in this fixture (lineups + events).
+    # Squad fallback: before the XI is published the fixture would be empty —
+    # useless when the user opens a match to position ahead of kickoff. While no
+    # lineup exists, the "players in this fixture" are both teams' full squads
+    # (the canonical 26-man set kept in core.player). Loaded ONLY then; once a
+    # lineup exists we trust it and drop the fallback.
+    squad_orms: list[PlayerORM] = []
+    if not lineup_published:
+        squad_orms = list(
+            (
+                await session.execute(
+                    select(PlayerORM).where(PlayerORM.team_id.in_((fx_orm.home_team_id, fx_orm.away_team_id)))
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    # All players appearing in this fixture (lineups + events + squad fallback).
     player_ids: set[int] = {ln.player_id for ln in lineups}
+    player_ids.update(o.id for o in squad_orms)
     events_rows = (
         (
             await session.execute(
@@ -217,20 +255,44 @@ async def get_match_view(
         else:
             away_bench.append(view)
 
-    home_xi.sort(key=lambda v: v.lineup.formation_position or 99)
-    away_xi.sort(key=lambda v: v.lineup.formation_position or 99)
-    home_bench.sort(key=lambda v: v.lineup.jersey_number or 99)
-    away_bench.sort(key=lambda v: v.lineup.jersey_number or 99)
+    home_xi.sort(key=lambda v: (v.lineup.formation_position if v.lineup else None) or 99)
+    away_xi.sort(key=lambda v: (v.lineup.formation_position if v.lineup else None) or 99)
+    home_bench.sort(key=lambda v: (v.lineup.jersey_number if v.lineup else None) or 99)
+    away_bench.sort(key=lambda v: (v.lineup.jersey_number if v.lineup else None) or 99)
+
+    # Squad fallback views (only when no lineup is published). Ordered by the
+    # position group then base value (stars first) — see _SQUAD_POSITION_ORDER.
+    home_squad: list[MatchPlayerView] = []
+    away_squad: list[MatchPlayerView] = []
+    if not lineup_published:
+        ordered = sorted(
+            squad_orms,
+            key=lambda o: (
+                _SQUAD_POSITION_ORDER.get(Position(o.position), 9),
+                -float(o.base_value) if o.base_value is not None else float("inf"),
+                o.jersey_number or 99,
+            ),
+        )
+        for so in ordered:
+            p = player_by_id.get(so.id)
+            v = valuations.get(so.id)
+            if p is None or v is None:
+                continue
+            sview = MatchPlayerView(player=p, valuation=v, lineup=None)
+            (home_squad if so.team_id == fixture.home_team_id else away_squad).append(sview)
 
     # Per-player match move is carried on each MatchPlayerView.valuation
     # (change_last_match, from the single price-based read-model) — no separate
     # raw-tick map.
     return MatchView(
         fixture=fixture,
+        lineup_published=lineup_published,
         home_xi=home_xi,
         away_xi=away_xi,
         home_bench=home_bench,
         away_bench=away_bench,
+        home_squad=home_squad,
+        away_squad=away_squad,
         events=events,
         player_names=player_names,
     )

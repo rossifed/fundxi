@@ -62,6 +62,11 @@ export interface Match {
   minute: number;
   group: string;
   status: MatchStatus;
+  // False before the XI is published: home_xi/away_xi/bench are then empty and
+  // home_squad/away_squad carry both full squads (who COULD play, not confirmed).
+  lineup_published?: boolean;
+  home_squad?: MatchPlayer[];
+  away_squad?: MatchPlayer[];
   home_xi: (number | MatchPlayer)[];
   away_xi: MatchPlayer[];
   events: MatchEvent[];

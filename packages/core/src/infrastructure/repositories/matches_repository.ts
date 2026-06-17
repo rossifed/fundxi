@@ -44,10 +44,13 @@ interface MatchResponseDTO {
   away_kit_color: string | null;
   home_formation: string | null;
   away_formation: string | null;
+  lineup_published: boolean;
   home_xi: MatchPlayerDTO[];
   away_xi: MatchPlayerDTO[];
   home_bench: MatchPlayerDTO[];
   away_bench: MatchPlayerDTO[];
+  home_squad: MatchPlayerDTO[];
+  away_squad: MatchPlayerDTO[];
   events: MatchEventDTO[];
 }
 
@@ -96,10 +99,13 @@ function dto_to_match(dto: MatchResponseDTO): Match {
     away_kit_color: dto.away_kit_color ?? undefined,
     home_formation: dto.home_formation ?? undefined,
     away_formation: dto.away_formation ?? undefined,
+    lineup_published: dto.lineup_published,
     home_xi: dto.home_xi.map(dto_player),
     away_xi: dto.away_xi.map(dto_player),
     home_bench: dto.home_bench.map(dto_player),
     away_bench: dto.away_bench.map(dto_player),
+    home_squad: dto.home_squad.map(dto_player),
+    away_squad: dto.away_squad.map(dto_player),
     events: dto.events.map(dto_event),
   };
 }
