@@ -6,7 +6,7 @@
 // lineup carries the same data. Live via the fixture/{id} + prices topics.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Animated, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -90,6 +90,23 @@ function group_by_position(xi: MatchPlayer[]): Record<Position, MatchPlayer[]> {
   for (const p of xi) g[p.position]?.push(p);
   for (const k of Object.keys(g) as Position[]) g[k].sort((a, b) => (a.jersey_number || 99) - (b.jersey_number || 99));
   return g;
+}
+
+/** Small pulsing green dot — the live marker (mirrors the web score header and
+ * the LiveBadge dot). Animated opacity loop; no "LIVE" text. */
+function LiveDot() {
+  const opacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0.25, duration: 750, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: 750, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [opacity]);
+  return <Animated.View style={[styles.live_dot, { opacity }]} />;
 }
 
 export default function MatchScreen() {
@@ -211,15 +228,18 @@ function MatchBody({
           per-column team labels in Compos are redundant and dropped. */}
       <View style={styles.card}>
         <View style={styles.score_top}>
-          <Text style={styles.group}>Group {match.group}</Text>
-          {is_live ? (
-            <View style={styles.live}>
-              <View style={styles.live_dot} />
-              <Text style={styles.live_label}>{match.minute}'</Text>
-            </View>
-          ) : (
-            <Text style={styles.ft}>Full time</Text>
-          )}
+          {/* Top-left: a small pulsing green dot + minute as the live marker
+              (no big "LIVE" — that lives in the global LiveBar). */}
+          <View style={styles.score_top_left}>
+            {is_live ? (
+              <View style={styles.live_marker}>
+                <LiveDot />
+                {match.minute != null ? <Text style={styles.live_label}>{match.minute}'</Text> : null}
+              </View>
+            ) : null}
+            <Text style={styles.group}>Group {match.group}</Text>
+          </View>
+          {!is_live ? <Text style={styles.ft}>Full time</Text> : null}
         </View>
         <View style={styles.score_row}>
           <View style={styles.score_team}>
@@ -617,10 +637,11 @@ const styles = StyleSheet.create({
   section_title: { fontSize: 12, fontWeight: "700", color: "rgba(255,255,255,0.6)", padding: 14, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.05)" },
 
   score_top: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 18, paddingTop: 16 },
+  score_top_left: { flexDirection: "row", alignItems: "center", gap: 8 },
   group: { fontSize: 11, color: text.tertiary, fontWeight: "600" },
-  live: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: with_alpha(palette.positive, 0.12), borderWidth: 1, borderColor: with_alpha(palette.positive, 0.35), paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
-  live_dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: palette.positive },
-  live_label: { fontFamily: mono, fontSize: 11, fontWeight: "700", color: palette.positive },
+  live_marker: { flexDirection: "row", alignItems: "center", gap: 6 },
+  live_dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: palette.positive },
+  live_label: { fontFamily: mono, fontSize: 11, fontWeight: "800", color: palette.positive },
   ft: { fontSize: 11, color: text.tertiary, fontWeight: "600" },
   score_row: { flexDirection: "row", alignItems: "flex-start", justifyContent: "center", gap: 10, paddingHorizontal: 12, paddingTop: 14, paddingBottom: 18 },
   score_team: { flex: 1, alignItems: "center" },

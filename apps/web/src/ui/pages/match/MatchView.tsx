@@ -296,37 +296,25 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
       {/* Score header */}
       <div style={{ ...card, padding: "18px 20px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ fontSize: 11, color: "rgba(255,255,255,.35)", fontWeight: 600 }}>
-            Group {match.group}
-          </span>
+          {/* Top-left: a small pulsing green dot + minute as the live marker
+              (the big "LIVE" pill is redundant with the global LiveBar). */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {is_live && (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--color-positive)", boxShadow: "0 0 6px var(--color-positive)", animation: "pulse 1.5s infinite" }} />
+                {match.minute ? (
+                  <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: "var(--color-positive)" }}>{match.minute}'</span>
+                ) : null}
+              </span>
+            )}
+            <span style={{ fontSize: 11, color: "rgba(255,255,255,.35)", fontWeight: 600 }}>
+              Group {match.group}
+            </span>
+          </div>
           {!is_live && (
             <span style={{ fontSize: 11, color: "rgba(255,255,255,.3)", fontWeight: 600 }}>Full time</span>
           )}
         </div>
-        {/* Live banner — a centred LIVE + minute pill above the score. */}
-        {is_live && (
-          <div style={{ display: "flex", justifyContent: "center", marginTop: 10 }}>
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 7,
-                padding: "5px 14px",
-                borderRadius: 8,
-                background: "color-mix(in srgb, var(--color-positive) 14%, transparent)",
-                border: "1px solid color-mix(in srgb, var(--color-positive) 35%, transparent)",
-                fontSize: 12,
-                fontWeight: 800,
-                letterSpacing: 0.6,
-                color: "#fff",
-              }}
-            >
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--color-positive)", animation: "pulse 1.5s infinite" }} />
-              LIVE
-              {match.minute ? <span className="mono" style={{ fontWeight: 700, marginLeft: 7 }}>{match.minute}'</span> : null}
-            </span>
-          </div>
-        )}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "center", gap: 24, marginTop: 14 }}>
           <div style={{ flex: 1, textAlign: "right" }}>
             <TeamLink team_id={match.home_team_id} on_open_team={on_open_team} style={{ display: "block" }}>
