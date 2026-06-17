@@ -17,7 +17,6 @@ import { matches_api } from "@fundxi/core/api/matches_api";
 import { comments_api } from "@fundxi/core/api/comments_api";
 import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import { teams_api } from "@fundxi/core/api/teams_api";
-import { LiveBadge } from "@/ui/components/LiveBadge";
 import { useFixtureLiveVersion, useLiveRefetch, useMatchesLiveVersion } from "@/ui/hooks/use_live_updates";
 
 const ROTATE_MS = 7000;
@@ -97,7 +96,6 @@ export function LiveBar({ on_open_match }: { on_open_match: (fixture_id: number)
 
   const home = teams_api.get(current.home_team_id);
   const away = teams_api.get(current.away_team_id);
-  const minute = current.minute ? `${current.minute}'` : "";
   const score =
     current.home_score != null && current.away_score != null ? `${current.home_score}-${current.away_score}` : "";
 
@@ -122,9 +120,20 @@ export function LiveBar({ on_open_match }: { on_open_match: (fixture_id: number)
         overflow: "hidden",
       }}
     >
-      {/* Minute now lives in the LIVE pill ("LIVE 67'") so the score block stays
-          compact: flag · score · flag. */}
-      <LiveBadge minute={minute} />
+      {/* Just a small pulsing green dot as the live marker — no "LIVE" pill, no
+          minute (saves width in the bar). */}
+      <span
+        aria-hidden
+        style={{
+          flexShrink: 0,
+          width: 8,
+          height: 8,
+          borderRadius: "50%",
+          background: "var(--color-positive)",
+          boxShadow: "0 0 6px var(--color-positive)",
+          animation: "pulse 1.5s infinite",
+        }}
+      />
       <span className="mono" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 700, fontSize: 14, flexShrink: 0 }}>
         <span style={{ fontSize: 15 }}>{home?.flag ?? ""}</span>
         {score && <span>{score}</span>}

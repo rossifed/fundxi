@@ -20,7 +20,6 @@ import { teams_api } from "@fundxi/core/api/teams_api";
 import { live_fixtures_ordered } from "@fundxi/core/domain/match/match_center";
 import type { MatchComment } from "@fundxi/core/domain/match/match_comment";
 
-import { LiveBadge } from "@/components/LiveBadge";
 import { useFixtureLiveVersion, useLiveRefetch, useMatchesLiveVersion } from "@/components/live";
 import { palette, with_alpha } from "@/theme/tokens";
 
@@ -98,15 +97,14 @@ export function LiveBar() {
 
   const home = teams_api.get(current.home_team_id);
   const away = teams_api.get(current.away_team_id);
-  const minute = current.minute ? `${current.minute}'` : "";
   const score =
     current.home_score != null && current.away_score != null ? `${current.home_score}-${current.away_score}` : "";
 
   return (
     <Pressable onPress={() => router.push(`/match/${current.id}`)} style={styles.bar}>
-      {/* Minute lives in the LIVE pill now ("LIVE 67'") so the score block stays
-          compact: just the two flags + the score. */}
-      <LiveBadge minute={minute} />
+      {/* Just a small pulsing green dot as the live marker — no "LIVE", no minute
+          (saves width in the bar). */}
+      <BarLiveDot />
       <View style={styles.score}>
         <Text style={styles.flag}>{home?.flag ?? ""}</Text>
         {!!score && <Text style={styles.score_txt}>{score}</Text>}
@@ -122,6 +120,22 @@ export function LiveBar() {
       )}
     </Pressable>
   );
+}
+
+/* Small pulsing green dot — the live marker (no "LIVE" text, no minute). */
+function BarLiveDot() {
+  const opacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0.25, duration: 750, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: 750, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [opacity]);
+  return <Animated.View style={[styles.live_dot, { opacity }]} />;
 }
 
 /* The recent commentary scrolling right-to-left, seamlessly (two back-to-back
@@ -178,6 +192,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: with_alpha(palette.positive, 0.16),
   },
+  live_dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: palette.positive },
   score: { flexDirection: "row", alignItems: "center", gap: 5 },
   flag: { fontSize: 14 },
   // Single text size across the whole bar (score + commentary) = 14, the larger
