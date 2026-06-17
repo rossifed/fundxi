@@ -168,7 +168,10 @@ function PlayerDetail({
     set_price_history(null);
     set_stats(undefined);
     set_tab("valuation");
-    valuations_api.get_price_history(player.id).then(
+    // Cache-bust on open: a tick that landed before the sheet opened (e.g. a
+    // goal the user just saw move the price) must be in the chart immediately,
+    // not a stale cached history. The live refetch keeps it current afterwards.
+    valuations_api.refresh_price_history(player.id).then(
       p => !cancelled && set_price_history(p),
       () => !cancelled && set_price_history([]),
     );

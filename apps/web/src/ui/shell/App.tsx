@@ -19,6 +19,7 @@ import { MatchView } from "@/ui/pages/match/MatchView";
 import { TeamPage } from "@/ui/pages/team/TeamPage";
 import { PlayerSheet } from "@/ui/pages/player/PlayerSheet";
 import { useViewport } from "@/ui/hooks/use_viewport";
+import { useLiveValuations } from "@/ui/hooks/use_live_valuations";
 import { Header } from "./Header";
 import { LiveBar } from "./LiveBar";
 import { PortfolioBar } from "./PortfolioBar";
@@ -61,6 +62,11 @@ function read_reset_token(): string | null {
 
 export function App() {
   const { is_mobile, rail_ok } = useViewport();
+  // Mount the shared live-valuations stream once at the root so the cache is
+  // kept fresh app-wide (one socket, one debounced refetch per tick wave),
+  // regardless of which page is open. Surfaces re-render by calling
+  // useLiveValuations() themselves; this just guarantees it's always alive.
+  useLiveValuations();
   const [initial_join_code] = useState<string | null>(consume_join_code);
   const [reset_token, set_reset_token] = useState<string | null>(read_reset_token);
   const [show_login, set_show_login] = useState(false);

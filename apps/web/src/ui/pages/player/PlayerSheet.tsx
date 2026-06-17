@@ -80,7 +80,11 @@ export function PlayerSheet({
     let cancelled = false;
     set_price_history(null);
     valuations_api
-      .get_price_history(player.id)
+      // Cache-bust on open: a tick that landed BEFORE the sheet opened (e.g. a
+      // goal the user just saw move the price in the list) must be in the chart
+      // immediately — get_price_history would replay a stale cached history.
+      // The live refetch keeps it current while the sheet stays open.
+      .refresh_price_history(player.id)
       .then(points => {
         if (!cancelled) set_price_history(points);
       })
