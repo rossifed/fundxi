@@ -47,6 +47,24 @@ async def _two_player_ids(session: AsyncSession) -> tuple[int, int]:
     return int(rows[0][0]), int(rows[1][0])
 
 
+async def _untickedplayer(session: AsyncSession) -> tuple[int, float | None]:
+    """A player with no price tick at all, plus the price the leaderboard
+    ladder must mark it at (``base_value`` if seeded, else the test's own
+    cost basis). Skips if every player happens to be ticked."""
+    row = (
+        await session.execute(
+            text(
+                "SELECT id, base_value FROM core.player "
+                "WHERE id NOT IN (SELECT DISTINCT player_id FROM valuation.player_price_tick) "
+                "ORDER BY id LIMIT 1"
+            )
+        )
+    ).first()
+    if row is None:  # pragma: no cover — there is always an un-ticked tail
+        pytest.skip("need >= 1 player with no price tick")
+    return int(row[0]), (float(row[1]) if row[1] is not None else None)
+
+
 @pytest.mark.anyio
 async def test_cross_source_coherence(isolated_session: AsyncSession) -> None:
     """Two invariants in one test (single asyncio fixture lifecycle).
@@ -157,3 +175,54 @@ async def test_cross_source_coherence(isolated_session: AsyncSession) -> None:
     me = next((e for e in board if e.user_id == user.id), None)
     assert me is not None, "user must appear in their own league's leaderboard"
     assert me.value == pytest.approx(expected_value, abs=0.01)
+
+
+@pytest.mark.anyio
+async def test_leaderboard_does_not_drop_short_in_untickedplayer(isolated_session: AsyncSession) -> None:
+    """Regression: a SHORT on an un-ticked player must NOT vanish from the
+    leaderboard value.
+
+    The leaderboard marks every position at ``tick ?? base ?? cost`` (the
+    COHERENCE-INVARIANT). Before the fix it marked at ``tick`` ALONE: an
+    un-ticked player priced as NULL, so ``shares * NULL`` was dropped from the
+    value sum. For a short (shares < 0) that threw away the liability while the
+    short's cash credit stayed counted — a fresh user who shorted such a player
+    showed a phantom +20%. Here we short an un-ticked player and assert the
+    liability is still priced in (value strictly below cash), at the ladder's
+    fall-through price (``base_value`` if seeded, else cost basis) — never NULL.
+    """
+    portfolio_repo = SqlAlchemyPortfolioRepository(isolated_session)
+    league_repo = SqlAlchemyLeagueRepository(isolated_session)
+
+    pid, base_value = await _untickedplayer(isolated_session)
+    initial_cash = get_settings().initial_cash
+
+    user = UserORM(name=f"_short_{id(isolated_session)}", kind="human")
+    isolated_session.add(user)
+    await isolated_session.flush()
+    portfolio = await portfolio_repo.create_for_user(user_id=user.id, cash=initial_cash)
+
+    # Short the un-ticked player: negative shares, a known cost basis.
+    short_shares = -2.0
+    cost_basis = 50.0
+    await portfolio_repo.upsert_holding(
+        Holding(portfolio_id=portfolio.id, player_id=pid, shares=short_shares, average_buy_price=cost_basis)
+    )
+    await isolated_session.flush()
+
+    league = LeagueORM(name=f"_short_lg_{id(isolated_session)}", kind=LeagueKind.PRIVATE.value, invite_code="YYYYYY")
+    isolated_session.add(league)
+    await isolated_session.flush()
+    isolated_session.add(LeagueMemberORM(league_id=league.id, user_id=user.id))
+    await isolated_session.flush()
+
+    # Ladder fall-through: base_value when the player is seeded, else cost basis.
+    mark = base_value if base_value is not None else cost_basis
+    expected_value = initial_cash + short_shares * mark  # strictly below cash (short adds negative value)
+
+    board = await league_repo.leaderboard(league_id=league.id, me_user_id=user.id)
+    me = next((e for e in board if e.user_id == user.id), None)
+    assert me is not None, "user must appear in their own league's leaderboard"
+    # The liability is priced in — the position is NOT silently dropped.
+    assert me.value == pytest.approx(expected_value, abs=0.01)
+    assert me.value < initial_cash, "a short must lower portfolio value, never inflate it"

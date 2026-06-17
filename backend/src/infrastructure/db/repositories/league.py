@@ -1,10 +1,22 @@
 """SqlAlchemyLeagueRepository — Adapter for LeagueRepository.
 
 The leaderboard query is the only non-trivial piece: it values every
-member's portfolio at the latest tick price
-(``value = cash + sum(shares * current_price)``) and ranks descending.
-A member who has not traded sits at ``value = cash = initial_cash``, so
-``return_pct = 0`` (honest: that is their real state).
+member's portfolio at the canonical price ladder
+(``value = cash + sum(shares * (tick ?? base_value ?? cost_basis))``)
+and ranks descending. A member who has not traded sits at
+``value = cash = initial_cash``, so ``return_pct = 0`` (honest: that is
+their real state).
+
+The price ladder is the COHERENCE-INVARIANT: every surface (frontend
+``compute_portfolio_totals``, the snapshot ``SqlAlchemyCurrentPriceProvider``,
+``EngineValuationProvider``) marks a position at ``tick ?? base ?? cost``.
+The leaderboard MUST use the same ladder. Using ``tick`` alone (no fallback)
+silently drops any position in an un-ticked player from the value sum — which
+for a SHORT (shares < 0) throws away its liability while the short's cash
+credit stays counted, inflating the member's value and conjuring a phantom
+gain (observed: a fresh user who shorted an un-ticked player showed +20%).
+``base_value`` is NULL for the un-seeded tail, so the ladder then falls to the
+holding's own cost basis, marking such a position flat (P&L 0) — never NULL.
 """
 
 from __future__ import annotations
@@ -38,11 +50,17 @@ _LEADERBOARD_SQL = text(
       SELECT
         u.id   AS user_id,
         u.name AS name,
-        p.cash + COALESCE(SUM(h.shares * lt.current_price), 0) AS value
+        -- Price ladder: tick ?? base_value ?? cost_basis (COHERENCE-INVARIANT).
+        -- Never NULL for a held player, so a short's liability is never dropped.
+        p.cash + COALESCE(
+          SUM(h.shares * COALESCE(lt.current_price, pl.base_value, h.average_buy_price)),
+          0
+        ) AS value
       FROM app.league_member lm
       JOIN app."user"      u  ON u.id = lm.user_id
       JOIN app.portfolio   p  ON p.user_id = u.id
       LEFT JOIN app.holding h ON h.portfolio_id = p.id
+      LEFT JOIN core.player pl ON pl.id = h.player_id
       LEFT JOIN latest_tick lt ON lt.player_id = h.player_id
       WHERE lm.league_id = :league_id
       GROUP BY u.id, u.name, p.cash
