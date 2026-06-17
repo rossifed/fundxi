@@ -165,7 +165,7 @@ export default function LeaguesScreen() {
                   #{me.rank}
                   <Text style={styles.lc_rank_total}> /{detail.leaderboard.length}</Text>
                 </Text>
-                <Text style={[styles.lc_rank_ret, { color: color_for_sign(me.return_pct) }]}>{fmt_signed_pct(me.return_pct, 2)}</Text>
+                <Text style={[styles.lc_rank_ret, { color: color_for_sign(me.return_pct) }]}>{fmt_signed_pct(me.return_pct, 1)}</Text>
               </View>
             </View>
 

@@ -20,10 +20,14 @@ export const fmt_shares = (n: number): string =>
   Number.isInteger(n) ? n.toLocaleString() : n.toFixed(2);
 
 /** Format a signed percentage with a leading "+" / "-" and N decimals.
- * Returns "—" when the value is null/undefined (no data). */
+ * Returns "—" when the value is null/undefined (no data). A value that rounds
+ * to flat at this precision (incl. negative zero, e.g. -0.04 -> "-0.0") renders
+ * as "+0.0%", never the confusing "-0.0%"; real moves keep their sign. */
 export const fmt_signed_pct = (v: number | null | undefined, decimals = 1): string => {
   if (v == null) return "—";
-  return `${v >= 0 ? "+" : ""}${v.toFixed(decimals)}%`;
+  const rounded = Number(v.toFixed(decimals));
+  const norm = rounded === 0 ? 0 : rounded;
+  return `${norm >= 0 ? "+" : ""}${norm.toFixed(decimals)}%`;
 };
 
 /** Format a fixture's ISO kickoff as "11 Jun · 21:00" in the viewer's local

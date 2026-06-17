@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { portfolio_api } from "@fundxi/core/api/portfolio_api";
-import { fmt_eur_m, fmt_eur_m_signed } from "@/ui/helpers/format";
+import { fmt_eur_m, fmt_eur_m_signed, fmt_signed_pct } from "@/ui/helpers/format";
 import { useLiveValuations } from "@/ui/hooks/use_live_valuations";
 import { useViewport } from "@/ui/hooks/use_viewport";
 
@@ -86,8 +86,7 @@ export function PortfolioBar({ on_click }: PortfolioBarProps) {
             color: up ? "var(--color-positive)" : "var(--color-negative)",
           }}
         >
-          {return_pct >= 0 ? "+" : ""}
-          {return_pct.toFixed(1)}%
+          {fmt_signed_pct(return_pct, 1)}
         </span>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: is_mobile ? 12 : 14, flexShrink: 0, paddingLeft: 10 }}>

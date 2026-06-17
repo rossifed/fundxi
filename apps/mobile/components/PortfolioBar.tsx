@@ -15,7 +15,7 @@ import { valuations_api } from "@fundxi/core/api/valuations_api";
 
 import { useAuth } from "@/components/AuthContext";
 import { useLiveRefetch, usePricesLiveVersion } from "@/components/live";
-import { fmt_eur_m, fmt_eur_m_signed } from "@/lib/format";
+import { fmt_eur_m, fmt_eur_m_signed, fmt_signed_pct } from "@/lib/format";
 import { mono, palette, text } from "@/theme/tokens";
 
 export function PortfolioBar() {
@@ -66,8 +66,7 @@ export function PortfolioBar() {
         <View style={[styles.dot, { backgroundColor: accent }]} />
         <Text style={styles.value} numberOfLines={1}>{fmt_eur_m(total_value)}</Text>
         <Text style={[styles.return, { color: accent }]} numberOfLines={1}>
-          {return_pct >= 0 ? "+" : ""}
-          {return_pct.toFixed(1)}%
+          {fmt_signed_pct(return_pct, 1)}
         </Text>
       </View>
       <View style={styles.group_right}>

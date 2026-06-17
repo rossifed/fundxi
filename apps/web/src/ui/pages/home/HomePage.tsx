@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { color_for_sign, fmt_fixture_datetime, fmt_live_minute } from "@/ui/helpers/format";
+import { color_for_sign, fmt_fixture_datetime, fmt_live_minute, fmt_signed_pct } from "@/ui/helpers/format";
 import { compute_return_pct } from "@fundxi/core/domain/market/return";
 import { matches_api } from "@fundxi/core/api/matches_api";
 import { players_api } from "@fundxi/core/api/players_api";
@@ -301,8 +301,7 @@ export function HomePage({ on_open_player, on_navigate_tab, on_open_match, on_op
                     className="mono"
                     style={{ fontSize: 11, fontWeight: 700, color: color_for_sign(l.my_return_pct) }}
                   >
-                    {l.my_return_pct >= 0 ? "+" : ""}
-                    {l.my_return_pct}%
+                    {fmt_signed_pct(l.my_return_pct, 1)}
                   </div>
                 </div>
               </div>

@@ -208,7 +208,7 @@ export function LeaguesPage({ initial_join_code }: LeaguesPageProps = {}) {
                 <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,.35)" }}> /{detail.leaderboard.length}</span>
               </div>
               <div className="mono" style={{ fontSize: 12, fontWeight: 700, color: color_for_sign(me.return_pct) }}>
-                {fmt_signed_pct(me.return_pct, 2)}
+                {fmt_signed_pct(me.return_pct, 1)}
               </div>
             </div>
           </div>
