@@ -54,6 +54,9 @@ interface TeamRosterProps {
   team_color?: string;
   event_counts: Map<number, MatchEventCounts>;
   subs: Map<number, SubInfo>;
+  /** Pre-lineup squad mode: render just the position sections with no "XI"
+   * group header (it's the full squad, not a starting XI; bench is empty). */
+  squad_mode?: boolean;
   on_open_player: (player_id: number) => void;
 }
 
@@ -62,7 +65,7 @@ interface TeamRosterProps {
 // The cap keeps the row tight; the in-match curve fills whatever middle remains.
 const ROSTER_MAX_WIDTH = 720;
 
-export function TeamRoster({ xi, bench, team_color, event_counts, subs, on_open_player }: TeamRosterProps) {
+export function TeamRoster({ xi, bench, team_color, event_counts, subs, squad_mode, on_open_player }: TeamRosterProps) {
   // Phone width: drop the in-row chart (it gets crushed) and hand the freed
   // space to the full player name. Desktop keeps the elastic curve.
   const { is_mobile } = useViewport();
@@ -73,9 +76,10 @@ export function TeamRoster({ xi, bench, team_color, event_counts, subs, on_open_
     // gap 18 between the two top-level blocks (XI / Bench) so the starter↔sub
     // break reads as a real separation, not just another position group.
     <div style={{ display: "flex", flexDirection: "column", gap: 18, width: "100%", maxWidth: ROSTER_MAX_WIDTH }}>
-      {/* Starting XI — strong group header, then position sub-groups (faint). */}
+      {/* Starting XI — strong group header, then position sub-groups (faint).
+          Hidden in squad mode (pre-lineup full squad, no XI/Bench split). */}
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <GroupHeader label="XI" />
+        {!squad_mode && <GroupHeader label="XI" />}
         {POSITION_GROUPS.map(g => {
           const rows = by_pos.get(g.key) ?? [];
           if (rows.length === 0) return null;

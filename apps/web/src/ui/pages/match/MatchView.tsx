@@ -364,10 +364,32 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
       >
         {/* Left column: lineup view toggle + rosters / pitch */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
+          {/* Team selector — drives the roster (and the Pitch when live). Shown
+              both pre-lineup AND live so the two views stay consistent (same
+              single-team card style, same control). */}
+          <div style={{ display: "flex", gap: 8 }}>
+            {(["home", "away"] as const).map(t => {
+              const tm = t === "home" ? home_team : away_team;
+              const id = t === "home" ? match.home_team_id : match.away_team_id;
+              const kit = t === "home" ? match.home_kit_color : match.away_kit_color;
+              return (
+                <TeamChip
+                  key={t}
+                  name={tm?.name ?? id}
+                  flag={tm?.flag}
+                  flag_url={tm?.flag_url}
+                  color={kit ?? tm?.color ?? "rgba(255,255,255,.5)"}
+                  active={roster_team === t}
+                  onClick={() => set_roster_team(t)}
+                />
+              );
+            })}
+          </div>
+
           {match.lineup_published === false ? (
-            // Pre-lineup: no XI published yet. Show both full squads (who COULD
-            // play) so the match is tradeable now, with a clear "not confirmed"
-            // banner. No pitch (no formation) and no XI/Bench toggle (empty bench).
+            // Pre-lineup: SAME single-team card view as live, showing the full
+            // squad (who COULD play) with a "not confirmed" banner — no XI/Bench
+            // split, no pitch (no formation yet). Consistent with the live view.
             <>
               <div
                 style={{
@@ -382,49 +404,22 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
               >
                 Lineup not announced yet — full squad shown, not confirmed to play.
               </div>
-              <DualRoster
-                home_xi={match.home_squad ?? []}
-                away_xi={match.away_squad ?? []}
-                home_bench={[]}
-                away_bench={[]}
-                home_title={`${home_team?.flag ?? ""} ${home_team?.name ?? match.home_team_id}`.trim()}
-                away_title={`${away_team?.flag ?? ""} ${away_team?.name ?? match.away_team_id}`.trim()}
-                home_team_id={match.home_team_id}
-                away_team_id={match.away_team_id}
-                home_color={match.home_kit_color ?? home_team?.color}
-                away_color={match.away_kit_color ?? away_team?.color}
+              <TeamRoster
+                xi={(roster_team === "home" ? match.home_squad : match.away_squad) ?? []}
+                bench={[]}
+                team_color={
+                  roster_team === "home"
+                    ? (match.home_kit_color ?? home_team?.color)
+                    : (match.away_kit_color ?? away_team?.color)
+                }
                 event_counts={event_counts}
                 subs={subs}
-                card={card}
+                squad_mode
                 on_open_player={on_open_player_profile}
-                on_open_team={on_open_team}
               />
             </>
           ) : (
             <>
-              {/* Single team selector — drives BOTH the List and the Pitch.
-                  One source of truth (``roster_team``); switching List ↔ Pitch
-                  keeps the same team selected. The same TeamChip the pitch used
-                  internally, lifted here so the control is identical everywhere. */}
-              <div style={{ display: "flex", gap: 8 }}>
-                {(["home", "away"] as const).map(t => {
-                  const tm = t === "home" ? home_team : away_team;
-                  const id = t === "home" ? match.home_team_id : match.away_team_id;
-                  const kit = t === "home" ? match.home_kit_color : match.away_kit_color;
-                  return (
-                    <TeamChip
-                      key={t}
-                      name={tm?.name ?? id}
-                      flag={tm?.flag}
-                      flag_url={tm?.flag_url}
-                      color={kit ?? tm?.color ?? "rgba(255,255,255,.5)"}
-                      active={roster_team === t}
-                      onClick={() => set_roster_team(t)}
-                    />
-                  );
-                })}
-              </div>
-
               {/* View tabs — List / Pitch, applied to the selected team. */}
               <div
                 role="tablist"
