@@ -65,7 +65,10 @@ function today_key(): string {
   return `${y}-${m}-${day}`;
 }
 
-function group_by_day(fixtures: Fixture[]): DayGroup[] {
+// ``newest_first`` reverses both the day order and the within-day kickoff order,
+// so the Completed tab leads with the most recent match. Upcoming/Live/All keep
+// the default earliest-first order (you want the soonest match on top there).
+function group_by_day(fixtures: Fixture[], newest_first = false): DayGroup[] {
   const today = today_key();
   const groups = new Map<string, DayGroup>();
   for (const fx of fixtures) {
@@ -83,8 +86,9 @@ function group_by_day(fixtures: Fixture[]): DayGroup[] {
     }
     g.fixtures.push(fx);
   }
-  for (const g of groups.values()) g.fixtures.sort(compare_by_kickoff);
-  return [...groups.values()].sort((a, b) => a.day_key.localeCompare(b.day_key));
+  const dir = newest_first ? -1 : 1;
+  for (const g of groups.values()) g.fixtures.sort((a, b) => dir * compare_by_kickoff(a, b));
+  return [...groups.values()].sort((a, b) => dir * a.day_key.localeCompare(b.day_key));
 }
 
 function compare_by_kickoff(a: Fixture, b: Fixture): number {
@@ -149,7 +153,7 @@ export function FixturesPage({ on_open_match, on_open_team }: FixturesPageProps)
 
   const all = useMemo(() => matches_api.list_fixtures(), [data_version]);
   const fixtures = filter === "all" ? all : all.filter(f => f.status === filter);
-  const days = group_by_day(fixtures);
+  const days = group_by_day(fixtures, filter === "finished");
 
   // Portfolio exposure: which teams the user holds a player from, so the
   // calendar can mark the fixtures that move the user's book. Recomputed
