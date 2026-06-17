@@ -137,6 +137,7 @@ export function App() {
         }}
         on_open_team={open_team}
         go_portfolio={go_portfolio}
+        watchlist={watchlist}
       />
     );
   } else if (selected_team) {

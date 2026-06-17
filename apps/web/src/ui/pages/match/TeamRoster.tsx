@@ -57,6 +57,8 @@ interface TeamRosterProps {
   /** Pre-lineup squad mode: render just the position sections with no "XI"
    * group header (it's the full squad, not a starting XI; bench is empty). */
   squad_mode?: boolean;
+  /** Watched player ids — marks the watchlist star on each card. */
+  watchlist?: Set<number>;
   on_open_player: (player_id: number) => void;
 }
 
@@ -65,7 +67,7 @@ interface TeamRosterProps {
 // The cap keeps the row tight; the in-match curve fills whatever middle remains.
 const ROSTER_MAX_WIDTH = 720;
 
-export function TeamRoster({ xi, bench, team_color, event_counts, subs, squad_mode, on_open_player }: TeamRosterProps) {
+export function TeamRoster({ xi, bench, team_color, event_counts, subs, squad_mode, watchlist, on_open_player }: TeamRosterProps) {
   // Phone width: drop the in-row chart (it gets crushed) and hand the freed
   // space to the full player name. Desktop keeps the elastic curve.
   const { is_mobile } = useViewport();
@@ -93,6 +95,7 @@ export function TeamRoster({ xi, bench, team_color, event_counts, subs, squad_mo
                   events={event_counts.get(p.id)}
                   sub_info={subs.get(p.id)}
                   compact={is_mobile}
+                  watched={watchlist?.has(p.id) ?? false}
                   on_open={on_open_player}
                 />
               ))}
@@ -114,6 +117,7 @@ export function TeamRoster({ xi, bench, team_color, event_counts, subs, squad_mo
               events={event_counts.get(p.id)}
               sub_info={subs.get(p.id)}
               compact={is_mobile}
+              watched={watchlist?.has(p.id) ?? false}
               on_open={on_open_player}
               bench
             />
@@ -180,6 +184,7 @@ function RichRosterCard({
   sub_info,
   bench,
   compact,
+  watched,
   on_open,
 }: {
   p: MatchPlayer;
@@ -189,6 +194,8 @@ function RichRosterCard({
   bench?: boolean;
   /** Phone width: hide the in-row chart and show the player's full name. */
   compact?: boolean;
+  /** In the viewer's watchlist → a small grey star next to the name. */
+  watched?: boolean;
   on_open: (player_id: number) => void;
 }) {
   const ref_player = players_api.get(p.id);
@@ -319,7 +326,22 @@ function RichRosterCard({
           <span style={{ minWidth: 0, fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: -0.1 }}>
             {display_name}
           </span>
-          <span style={{ flexShrink: 0, display: "inline-flex", gap: 3 }}>
+          <span style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4 }}>
+            {/* In your watchlist → grey star (brief: grey, never gold). */}
+            {watched && (
+              <span title="In your watchlist" aria-label="In your watchlist" style={{ fontSize: 11, lineHeight: 1, color: "rgba(255,255,255,.55)" }}>
+                ★
+              </span>
+            )}
+            {/* In your portfolio → small accent dot (same colour as the card's
+                held accent). */}
+            {held && (
+              <span
+                aria-label="In your portfolio"
+                title="In your portfolio"
+                style={{ width: 6, height: 6, borderRadius: "50%", background: color.accentBlue, display: "inline-block" }}
+              />
+            )}
             <MatchEventBadge events={events} variant="inline" />
             <SubBadge sub={sub_info} variant="inline" />
           </span>

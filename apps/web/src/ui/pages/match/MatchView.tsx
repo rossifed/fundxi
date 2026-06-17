@@ -26,6 +26,8 @@ interface MatchViewProps {
   on_open_player_profile: (player_id: number) => void;
   on_open_team?: (team_id: string) => void;
   go_portfolio?: () => void; // not used here; kept for the App's prop contract
+  /** Watched player ids — to mark the watchlist star on roster cards. */
+  watchlist?: Set<number>;
 }
 
 const GREEN = "var(--color-positive)";
@@ -90,7 +92,7 @@ function ScorerColumn({ goals }: { goals: MatchEvent[] }) {
   );
 }
 
-export function MatchView({ match: initial_match, on_back, on_open_player_profile, on_open_team }: MatchViewProps) {
+export function MatchView({ match: initial_match, on_back, on_open_player_profile, on_open_team, watchlist }: MatchViewProps) {
   // The match comes in as a prop, but its clock / score / lineups / prices
   // change while an in-play (or replayed) match runs. We hold a live copy
   // refreshed from the SSE stream and fall back to the prop until it lands.
@@ -402,6 +404,7 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
                 event_counts={event_counts}
                 subs={subs}
                 squad_mode
+                watchlist={watchlist}
                 on_open_player={on_open_player_profile}
               />
             </>
@@ -459,6 +462,7 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
                   }
                   event_counts={event_counts}
                   subs={subs}
+                  watchlist={watchlist}
                   on_open_player={on_open_player_profile}
                 />
               ) : (
