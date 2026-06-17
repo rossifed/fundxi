@@ -27,7 +27,7 @@ import { valuations_api } from "@fundxi/core/api/valuations_api";
 import { useWatchlist, watchlist } from "@/lib/watchlist";
 import { POSITION_LABEL, type Player } from "@fundxi/core/domain/player/player";
 import { match_event_badges, type MatchEventKind } from "@fundxi/core/domain/player/player_match_view";
-import { build_tournament_stat_groups, type StatSemantic } from "@fundxi/core/domain/player/player_stat_view";
+import { build_tournament_stat_groups, key_tournament_stats, type StatSemantic } from "@fundxi/core/domain/player/player_stat_view";
 import type { PlayerValuation } from "@fundxi/core/domain/market/player_valuation";
 import { compute_portfolio_share } from "@fundxi/core/domain/portfolio/portfolio_metrics";
 import type { PlayerTournamentStat } from "@fundxi/core/infrastructure/repositories/player_stats_repository";
@@ -192,7 +192,7 @@ function PlayerDetail({
 
   return (
     <View style={styles.detail}>
-      <Header player={player} team_color={team?.color ?? "#888"} team_name={team?.name ?? "?"} team_flag={team?.flag} team_flag_url={team?.flag_url} on_open_team={() => on_open_team(player.team_id)} />
+      <Header player={player} stats={stats} team_color={team?.color ?? "#888"} team_name={team?.name ?? "?"} team_flag={team?.flag} team_flag_url={team?.flag_url} on_open_team={() => on_open_team(player.team_id)} />
 
       <View style={styles.maintabs}>
         {(["valuation", "statistics"] as const).map(t => {
@@ -247,6 +247,7 @@ function PlayerDetail({
 
 function Header({
   player,
+  stats,
   team_color,
   team_name,
   team_flag,
@@ -254,6 +255,7 @@ function Header({
   on_open_team,
 }: {
   player: Player;
+  stats: PlayerTournamentStat | null | undefined;
   team_color: string;
   team_name: string;
   team_flag?: string;
@@ -264,6 +266,17 @@ function Header({
   const watched = useWatchlist().has(player.id);
   return (
     <View style={styles.header}>
+      {/* Watch toggle on its own top-left line (mirrors the close X on the
+          top-right) so it never shifts the photo. */}
+      <Pressable
+        onPress={() => watchlist.toggle(player.id)}
+        hitSlop={10}
+        accessibilityRole="button"
+        accessibilityLabel={watched ? "Remove from watchlist" : "Add to watchlist"}
+        style={[styles.watch_btn, watched && styles.watch_btn_on]}
+      >
+        <Text style={[styles.watch_star, watched && styles.watch_star_on]}>{watched ? "★" : "☆"}</Text>
+      </Pressable>
       <View style={styles.header_top}>
         <PlayerAvatar
           image_path={player.image_path}
@@ -297,20 +310,35 @@ function Header({
             </Text>
           </View>
         </View>
-        <Pressable
-          onPress={() => watchlist.toggle(player.id)}
-          hitSlop={10}
-          accessibilityRole="button"
-          accessibilityLabel={watched ? "Remove from watchlist" : "Add to watchlist"}
-        >
-          <Text style={[styles.watch_star, watched && styles.watch_star_on]}>{watched ? "★" : "☆"}</Text>
-        </Pressable>
       </View>
       <View style={styles.bio_grid}>
         <BioStat label="Age" value={player.age != null ? String(player.age) : "—"} />
         <BioStat label="Height" value={player.height ?? "—"} />
         <BioStat label="Weight" value={player.weight ?? "—"} />
         <BioStat label="Foot" value={player.foot ? `${player.foot[0].toUpperCase()}${player.foot.slice(1)}` : "—"} />
+      </View>
+      {/* Tournament totals — compact strip, same source/format as the Statistics panel. */}
+      <View style={styles.stat_grid}>
+        {key_tournament_stats(stats).map(item => {
+          const c = statistics_color(item.semantic);
+          return (
+            <View key={item.label} style={styles.stat_cell}>
+              <Text style={[styles.bio_value, !item.parts && c ? { color: c } : null]} numberOfLines={1}>
+                {item.parts
+                  ? item.parts.map((p, i) => {
+                      const pc = statistics_color(p.semantic);
+                      return (
+                        <Text key={i} style={pc ? { color: pc } : null}>
+                          {p.text}
+                        </Text>
+                      );
+                    })
+                  : item.value}
+              </Text>
+              <Text style={styles.bio_label}>{item.label}</Text>
+            </View>
+          );
+        })}
       </View>
     </View>
   );
@@ -378,7 +406,7 @@ function PriceChart({ price_history }: { price_history: PricePoint[] | null }) {
           data={price_history.map(p => ({
             v: p.price,
             ts: Date.parse(p.ts),
-            label: new Date(p.ts).toLocaleDateString(undefined, { day: "2-digit", month: "short" }),
+            label: `${new Date(p.ts).toLocaleDateString(undefined, { day: "2-digit", month: "short" })} · ${new Date(p.ts).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`,
           }))}
           height={200}
           show_axes
@@ -716,9 +744,21 @@ const styles = StyleSheet.create({
   header: { paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.06)" },
   header_top: { flexDirection: "row", alignItems: "center", gap: 14 },
   photo: { width: 72, height: 72, borderRadius: 11, backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
+  watch_btn: {
+    alignSelf: "flex-start",
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+  },
+  watch_btn_on: { backgroundColor: "rgba(255,255,255,0.08)" },
   identity: { flex: 1, minWidth: 0 },
-  watch_star: { fontSize: 24, color: text.faint, lineHeight: 26 },
-  watch_star_on: { color: palette.accentBlue },
+  watch_star: { fontSize: 14, color: text.secondary },
+  watch_star_on: { color: text.primary },
   name_row: { flexDirection: "row", alignItems: "baseline", gap: 10 },
   jersey: { fontFamily: mono, fontSize: 20, fontWeight: "800", color: "rgba(255,255,255,0.55)", letterSpacing: -0.5 },
   name: { fontSize: 20, fontWeight: "800", color: "#fff", letterSpacing: -0.5, flexShrink: 1 },
@@ -730,6 +770,18 @@ const styles = StyleSheet.create({
   team_sep: { fontSize: 13, color: text.muted },
   team_pos: { fontSize: 13, fontWeight: "600", color: text.secondary, flexShrink: 1 },
   bio_grid: { flexDirection: "row", gap: 6, marginTop: 12 },
+  stat_grid: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
+  stat_cell: {
+    flexGrow: 1,
+    flexBasis: "30%",
+    backgroundColor: surface.cardSoft,
+    borderWidth: 1,
+    borderColor: border,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    alignItems: "center",
+  },
   bio_cell: {
     flex: 1,
     backgroundColor: surface.cardSoft,

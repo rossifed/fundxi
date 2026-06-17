@@ -25,6 +25,29 @@ export function PlayerSheetHeader({
 }: PlayerSheetHeaderProps) {
   return (
     <div style={{ padding: "16px 24px 12px", flexShrink: 0, borderBottom: "1px solid rgba(255,255,255,.06)" }}>
+      {/* Watch toggle on its own top-left line (mirrors the Sheet's close X on
+          the top-right) so it never shifts the photo. */}
+      <button
+        onClick={on_toggle_watch}
+        aria-label={is_watched ? "Remove from watchlist" : "Add to watchlist"}
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: 6,
+          background: is_watched ? "rgba(255,255,255,.08)" : "transparent",
+          border: "1px solid rgba(255,255,255,.08)",
+          color: is_watched ? "#fff" : "rgba(255,255,255,.5)",
+          cursor: "pointer",
+          fontSize: 14,
+          fontFamily: "inherit",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          marginBottom: 10,
+        }}
+      >
+        {is_watched ? "★" : "☆"}
+      </button>
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
         <PlayerAvatar
           image_path={player.image_path}
@@ -35,9 +58,9 @@ export function PlayerSheetHeader({
         />
         <div style={{ flex: 1, minWidth: 0 }}>
           {/* paddingRight reserves room for the Sheet's close (X) button in the
-              top-right corner so the watch star never slides under it. The name
-              wraps to a second line rather than truncating, so even long names
-              (e.g. "Gabriel Gudmundsson") show in full. */}
+              top-right corner. The name wraps to a second line rather than
+              truncating, so even long names (e.g. "Gabriel Gudmundsson") show in
+              full. The watch star now lives on the photo's top-left corner. */}
           <div style={{ display: "flex", alignItems: "flex-start", gap: 10, paddingRight: 32 }}>
             <span
               className="mono"
@@ -48,28 +71,6 @@ export function PlayerSheetHeader({
             <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.15, letterSpacing: -0.5, minWidth: 0, flex: 1, overflowWrap: "anywhere" }}>
               {player.full_name ?? player.name}
             </div>
-            <button
-              onClick={on_toggle_watch}
-              aria-label={is_watched ? "Remove from watchlist" : "Add to watchlist"}
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: 6,
-                background: is_watched ? "rgba(255,255,255,.08)" : "transparent",
-                border: "1px solid rgba(255,255,255,.08)",
-                color: is_watched ? "#fff" : "rgba(255,255,255,.5)",
-                cursor: "pointer",
-                fontSize: 14,
-                fontFamily: "inherit",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-                alignSelf: "center",
-              }}
-            >
-              {is_watched ? "★" : "☆"}
-            </button>
           </div>
           <div
             onClick={on_open_team ? () => on_open_team(player.team_id) : undefined}

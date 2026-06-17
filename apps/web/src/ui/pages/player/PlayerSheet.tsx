@@ -24,7 +24,8 @@ import { useLiveRefetch, usePlayerLiveVersion } from "@/ui/hooks/use_live_update
 import { PlayerMatchLog } from "@/ui/pages/player/PlayerMatchLog";
 import { PlayerPriceChart } from "@/ui/pages/player/PlayerPriceChart";
 import { PlayerSheetHeader } from "@/ui/pages/player/PlayerSheetHeader";
-import { PlayerStatistics } from "@/ui/pages/player/PlayerStatistics";
+import { PlayerStatistics, semantic_color } from "@/ui/pages/player/PlayerStatistics";
+import { key_tournament_stats } from "@fundxi/core/domain/player/player_stat_view";
 import { PlayerValuationRibbon } from "@/ui/pages/player/PlayerValuationRibbon";
 import { YourPositionCard } from "@/ui/pages/player/YourPositionCard";
 import { SectionCard, SmallKpi } from "@/ui/pages/player/player_sheet_ui";
@@ -146,6 +147,33 @@ export function PlayerSheet({
     </SectionCard>
   );
 
+  // Tournament totals — a compact headline strip (same source/format as the
+  // Statistics panel, via the shared key_tournament_stats). Always six cells;
+  // "—" while loading / for a player who hasn't featured.
+  const tournament_card = (
+    <SectionCard title="Tournament">
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 0 }}>
+        {key_tournament_stats(tournament_stats).map(item => (
+          <SmallKpi
+            key={item.label}
+            label={item.label}
+            value={
+              item.parts
+                ? item.parts.map((p, i) => (
+                    <span key={i} style={{ color: semantic_color(p.semantic) }}>
+                      {p.text}
+                    </span>
+                  ))
+                : item.value
+            }
+            color={item.parts ? undefined : semantic_color(item.semantic)}
+            title={item.title}
+          />
+        ))}
+      </div>
+    </SectionCard>
+  );
+
   // Skills — real provider tags only. No tags → no card (a synthesised skill
   // list would violate the data-sourcing rule).
   const skills_card =
@@ -231,6 +259,7 @@ export function PlayerSheet({
             {ribbon}
             <PlayerPriceChart price_history={price_history} />
             {personal_card}
+            {tournament_card}
             {skills_card}
             <YourPositionCard player={player} />
           </div>
@@ -369,6 +398,8 @@ export function PlayerSheet({
                 <SmallKpi label="Weight" value={player.weight ?? "—"} />
               </div>
             </SectionCard>
+
+            {tournament_card}
 
             {/* Skills — real provider tags only. No tags → no card (a
                 synthesised skill list would violate the data-sourcing rule). */}

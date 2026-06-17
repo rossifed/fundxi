@@ -32,6 +32,10 @@ export interface StatItem {
   semantic: StatSemantic;
   /** Optional disambiguation for compact ratios (e.g. "2 on target / 5 total"). */
   title?: string;
+  /** Optional multi-coloured value: render span-by-span, each with its own
+   *  semantic colour (e.g. yellow/red cards). When present it takes precedence
+   *  over `value`; `value` stays as a plain-text fallback. */
+  parts?: { text: string; semantic: StatSemantic }[];
 }
 
 export interface StatGroup {
@@ -151,5 +155,57 @@ export function build_tournament_stat_groups(s: PlayerTournamentStat): StatGroup
         kpi("Clean Sheets", count(s.clean_sheets), pos(s.clean_sheets)),
       ],
     },
+  ];
+}
+
+/* key_tournament_stats — the compact "headline" row of tournament totals shown
+ * just below the player's personal/bio block (a tight strip, NOT the full
+ * Statistics panel). Same source, formatting and absence rules as
+ * build_tournament_stat_groups, so web and mobile render the SAME six cells.
+ * Cards are folded into one "yellow/red" cell to keep the strip compact. */
+export function key_tournament_stats(s: PlayerTournamentStat | null | undefined): StatItem[] {
+  const kpi = (label: string, value: string, semantic: StatSemantic = "neutral", title?: string): StatItem => ({
+    label,
+    value,
+    semantic,
+    title,
+  });
+  if (!s) {
+    return [
+      kpi("Min", "—"),
+      kpi("Rating", "—"),
+      kpi("Goals", "—"),
+      kpi("Assists", "—"),
+      kpi("Cards", "—", "neutral", "Yellow / Red"),
+      kpi("Pass %", "—"),
+    ];
+  }
+  const played = present(s.appearances) || present(s.minutes_played);
+  const count = (v: Num): string => (present(v) ? String(v) : played ? "0" : "—");
+  const y = s.yellow_cards;
+  const r = s.red_cards;
+  const cards_known = present(y) || present(r) || played;
+  // Yellow count in the yellow-card colour, red count in red; "—" when the
+  // player hasn't featured (no colour split then).
+  const cards: StatItem = {
+    label: "Cards",
+    value: cards_known ? `${y ?? 0}/${r ?? 0}` : "—",
+    semantic: (r ?? 0) > 0 ? "danger" : (y ?? 0) > 0 ? "warn" : "neutral",
+    title: "Yellow / Red",
+    parts: cards_known
+      ? [
+          { text: String(y ?? 0), semantic: "warn" },
+          { text: "/", semantic: "neutral" },
+          { text: String(r ?? 0), semantic: "danger" },
+        ]
+      : undefined,
+  };
+  return [
+    kpi("Min", num(s.minutes_played)),
+    kpi("Rating", present(s.rating_avg) ? s.rating_avg.toFixed(1) : "—"),
+    kpi("Goals", count(s.goals), pos(s.goals)),
+    kpi("Assists", count(s.assists), pos(s.assists)),
+    cards,
+    kpi("Pass %", present(s.passes_accuracy) ? `${s.passes_accuracy.toFixed(0)}%` : "—"),
   ];
 }

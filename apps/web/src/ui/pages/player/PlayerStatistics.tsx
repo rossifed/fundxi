@@ -11,7 +11,7 @@ import type { PlayerTournamentStat } from "@fundxi/core/infrastructure/repositor
 import { color } from "@/ui/design/tokens";
 import { SectionCard, SmallKpi } from "@/ui/pages/player/player_sheet_ui";
 
-function semantic_color(semantic: StatSemantic): string | undefined {
+export function semantic_color(semantic: StatSemantic): string | undefined {
   switch (semantic) {
     case "good":
       return color.positive;
