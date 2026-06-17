@@ -7,7 +7,7 @@ import { PlayerAvatar } from "@/ui/components/PlayerAvatar";
 import { SectionHeader } from "@/ui/components/SectionHeader";
 import { TeamLink } from "@/ui/components/TeamLink";
 import { TickValue } from "@/ui/components/TickValue";
-import { fmt_live_minute } from "@/ui/helpers/format";
+import { color_for_sign, fmt_live_minute, fmt_signed_pct } from "@/ui/helpers/format";
 import { useLiveMatch } from "@/ui/hooks/use_live_match";
 
 interface RightRailProps {
@@ -101,7 +101,6 @@ export function RightRail({ watchlist, on_open_player, on_open_match, on_open_te
               const v = valuations_api.get_for_player(p.id);
               const current_price = v?.current_price ?? 0;
               const change_pct = v?.change_since_inception ?? 0;
-              const up = change_pct >= 0;
               return (
                 <div
                   key={p.id}
@@ -148,8 +147,8 @@ export function RightRail({ watchlist, on_open_player, on_open_match, on_open_te
                     <div className="mono" style={{ fontSize: 12, fontWeight: 700 }}>
                       <TickValue value={current_price}>€{current_price}M</TickValue>
                     </div>
-                    <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: up ? "var(--color-positive)" : "var(--color-negative)" }}>
-                      {up ? "+" : ""}{change_pct}%
+                    <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: color_for_sign(change_pct) }}>
+                      {fmt_signed_pct(change_pct, 1)}
                     </div>
                   </div>
                 </div>

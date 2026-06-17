@@ -144,7 +144,7 @@ export function PlayerMatchLog({ player_id, on_open_match, embedded = false }: P
           const pct_color =
             m.in_match_pct == null
               ? "rgba(255,255,255,.3)"
-              : m.in_match_pct >= 0
+              : Number(m.in_match_pct.toFixed(2)) >= 0
                 ? "var(--color-positive)"
                 : "var(--color-negative)";
           return (

@@ -581,7 +581,7 @@ function BreakdownCard({ title, items, chart }: { title: string; items: BItem[];
                   <View style={[styles.legend_dot, { backgroundColor: it.color }]} />
                   <Text style={styles.legend_label} numberOfLines={1}>{it.label}</Text>
                 </View>
-                <Text style={styles.legend_pct}>{it.pct >= 0 ? "+" : ""}{it.pct.toFixed(1)}%</Text>
+                <Text style={styles.legend_pct}>{fmt_signed_pct(it.pct, 1)}</Text>
               </View>
             ))}
           </View>
@@ -590,12 +590,12 @@ function BreakdownCard({ title, items, chart }: { title: string; items: BItem[];
         <View style={{ gap: 8 }}>
           {items.map((it, i) => {
             const pct = it.pct;
-            const neg = pct < 0;
+            const neg = Number(pct.toFixed(1)) < 0;
             return (
               <View key={i} style={{ gap: 4 }}>
                 <View style={styles.bars_head}>
                   <Text style={styles.legend_label} numberOfLines={1}>{it.label}</Text>
-                  <Text style={[styles.legend_pct, neg && { color: palette.negative }]}>{pct >= 0 ? "+" : ""}{it.pct.toFixed(1)}%</Text>
+                  <Text style={[styles.legend_pct, neg && { color: palette.negative }]}>{fmt_signed_pct(it.pct, 1)}</Text>
                 </View>
                 <View style={styles.bars_track}>
                   <View style={[styles.bars_fill, { width: `${Math.max(2, Math.abs(pct))}%`, backgroundColor: neg ? palette.negative : it.color }]} />

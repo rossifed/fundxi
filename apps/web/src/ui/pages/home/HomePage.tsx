@@ -543,7 +543,6 @@ function MoversColumn({
       {players.map((p, i) => {
         const team = teams_api.get(p.team_id);
         const tournament_return = compute_return_pct(p.valuation.current_price, p.valuation.base_value);
-        const up = tournament_return >= 0;
         return (
           <div
             key={p.id}
@@ -593,8 +592,8 @@ function MoversColumn({
               <div className="mono" style={{ fontSize: 12, fontWeight: 700 }}>
                 <TickValue value={p.valuation.current_price}>€{p.valuation.current_price}M</TickValue>
               </div>
-              <div className="mono" style={{ fontSize: 11, fontWeight: 800, color: up ? "var(--color-positive)" : "var(--color-negative)" }}>
-                {up ? "+" : ""}{tournament_return.toFixed(1)}%
+              <div className="mono" style={{ fontSize: 11, fontWeight: 800, color: color_for_sign(tournament_return) }}>
+                {fmt_signed_pct(tournament_return, 1)}
               </div>
             </div>
           </div>

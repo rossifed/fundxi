@@ -24,6 +24,7 @@ import { Logo } from "@/components/Logo";
 import { useAuth } from "@/components/AuthContext";
 import { useWatchlist } from "@/lib/watchlist";
 import { mono, surface, with_alpha } from "@/theme/tokens";
+import { color_for_sign, fmt_signed_pct } from "@/lib/format";
 
 const palette = themes.dark;
 
@@ -137,8 +138,8 @@ export default function HomeScreen() {
                 </View>
                 <View style={styles.league_stats}>
                   <Text style={styles.league_rank}>#{l.my_rank}</Text>
-                  <Text style={[styles.league_return, { color: l.my_return_pct >= 0 ? palette.positive : palette.negative }]}>
-                    {l.my_return_pct >= 0 ? "+" : ""}{l.my_return_pct}%
+                  <Text style={[styles.league_return, { color: color_for_sign(l.my_return_pct) }]}>
+                    {fmt_signed_pct(l.my_return_pct, 1)}
                   </Text>
                 </View>
               </Pressable>
@@ -301,7 +302,6 @@ function MoverRow({
 }) {
   const team = teams_api.get(player.team_id);
   const tournament_return = compute_return_pct(player.valuation.current_price, player.valuation.base_value);
-  const up = tournament_return >= 0;
   return (
     <Pressable
       style={[styles.mover_row, divider && styles.row_divider]}
@@ -324,9 +324,8 @@ function MoverRow({
       <Spark data={spark_for_player(player.id)} width={56} height={22} />
       <View style={styles.mover_price}>
         <Text style={styles.mover_price_value}>€{player.valuation.current_price}M</Text>
-        <Text style={[styles.mover_price_pct, { color: up ? palette.positive : palette.negative }]}>
-          {up ? "+" : ""}
-          {tournament_return.toFixed(1)}%
+        <Text style={[styles.mover_price_pct, { color: color_for_sign(tournament_return) }]}>
+          {fmt_signed_pct(tournament_return, 1)}
         </Text>
       </View>
     </Pressable>

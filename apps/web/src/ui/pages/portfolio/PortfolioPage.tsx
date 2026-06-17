@@ -983,7 +983,7 @@ function BreakdownCard({
           <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 1 }}>
             {items.map((item, i) => {
               const pct_num = item.pct;
-              const is_negative = pct_num < 0;
+              const is_negative = Number(pct_num.toFixed(1)) < 0;
               return (
                 <div
                   key={i}
@@ -1011,7 +1011,7 @@ function BreakdownCard({
                       flexShrink: 0,
                     }}
                   >
-                    {pct_num >= 0 ? "+" : ""}{item.pct.toFixed(1)}%
+                    {fmt_signed_pct(item.pct, 1)}
                   </span>
                 </div>
               );
@@ -1032,7 +1032,7 @@ function BreakdownCard({
         >
           {items.map((item, i) => {
             const pct_num = item.pct;
-            const is_negative = pct_num < 0;
+            const is_negative = Number(pct_num.toFixed(1)) < 0;
             return (
               <div key={i} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
@@ -1058,7 +1058,7 @@ function BreakdownCard({
                       flexShrink: 0,
                     }}
                   >
-                    {pct_num >= 0 ? "+" : ""}{item.pct.toFixed(1)}%
+                    {fmt_signed_pct(item.pct, 1)}
                   </span>
                 </div>
                 <div style={{ height: 5, borderRadius: 2, background: "rgba(255,255,255,.04)", overflow: "hidden" }}>

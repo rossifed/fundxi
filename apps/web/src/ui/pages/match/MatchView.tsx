@@ -52,7 +52,9 @@ function fmt_pct(v: number | undefined | null): string {
 }
 function pct_color(v: number | undefined | null): string {
   if (v == null) return "rgba(255,255,255,.35)";
-  return v >= 0 ? GREEN : RED;
+  // Colour by the value AS DISPLAYED (1 dp), matching fmt_pct, so a near-flat
+  // change reads neutral/positive, never red on a "0.0%" label.
+  return Number(v.toFixed(1)) >= 0 ? GREEN : RED;
 }
 function only_match_players(xs: (number | MatchPlayer)[]): MatchPlayer[] {
   return xs.filter((x): x is MatchPlayer => typeof x !== "number");
@@ -960,7 +962,7 @@ function RosterCard({
               <TickValue value={live_price}>€{live_price}M</TickValue>
             </span>
             {match_change !== 0 && (
-              <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: match_change >= 0 ? "var(--color-positive)" : "var(--color-negative)" }}>
+              <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: pct_color(match_change) }}>
                 {fmt_signed_pct(match_change, 1)}
               </span>
             )}

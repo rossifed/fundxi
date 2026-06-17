@@ -4,9 +4,14 @@ export const price_label = (value: number): string => (value >= 999 ? "∞" : "�
  * Negative values keep their sign in the output. */
 export const fmt_eur_m = (value_m: number): string => `€${value_m.toFixed(1)}M`;
 
-/** Same as fmt_eur_m, but with a leading "+" sign for non-negative values. */
-export const fmt_eur_m_signed = (value_m: number): string =>
-  `${value_m >= 0 ? "+" : ""}${fmt_eur_m(value_m)}`;
+/** Same as fmt_eur_m, but with a leading "+" sign for non-negative values.
+ * A value that rounds to flat renders a neutral "€0.0M" (no sign), so it never
+ * shows "€-0.0M" against the positive colour color_for_sign assigns it. */
+export const fmt_eur_m_signed = (value_m: number): string => {
+  const rounded = Number(value_m.toFixed(1));
+  if (rounded === 0) return fmt_eur_m(0);
+  return `${rounded > 0 ? "+" : ""}${fmt_eur_m(value_m)}`;
+};
 
 /** Format a €M value as plain euros (×1,000,000). Used for per-share prices,
  * which are tiny in €M (e.g. €0.0000008M = €0.80) and read better in €. */
@@ -49,9 +54,9 @@ export const fmt_fixture_datetime = (iso: string | undefined): string => {
  * the actual hue. Colours by the value AS DISPLAYED at 1 dp, so a near-flat
  * value that renders "0.0" / "0.0%" never shows red — text and colour always
  * agree (e.g. -0.04 -> positive, matching its "0.0%" label). */
-export const color_for_sign = (v: number | null | undefined): string => {
+export const color_for_sign = (v: number | null | undefined, decimals = 1): string => {
   if (v == null) return "rgba(255,255,255,.3)";
-  return Number(v.toFixed(1)) >= 0 ? "var(--color-positive)" : "var(--color-negative)";
+  return Number(v.toFixed(decimals)) >= 0 ? "var(--color-positive)" : "var(--color-negative)";
 };
 
 // Live match clock. The Match maps a missing provider minute to 0, so for a
