@@ -26,8 +26,10 @@ export const fmt_shares = (n: number): string =>
 export const fmt_signed_pct = (v: number | null | undefined, decimals = 1): string => {
   if (v == null) return "—";
   const rounded = Number(v.toFixed(decimals));
-  const norm = rounded === 0 ? 0 : rounded;
-  return `${norm >= 0 ? "+" : ""}${norm.toFixed(decimals)}%`;
+  // A value that rounds to flat renders a neutral "0.0%" (no sign) — never the
+  // confusing "-0.0%"; real moves keep their +/- sign.
+  if (rounded === 0) return `${(0).toFixed(decimals)}%`;
+  return `${rounded > 0 ? "+" : ""}${rounded.toFixed(decimals)}%`;
 };
 
 /** Format a fixture's ISO kickoff as "11 Jun · 21:00" in the viewer's local
@@ -44,10 +46,12 @@ export const fmt_fixture_datetime = (iso: string | undefined): string => {
 
 /** Canonical sign-based color token (positive / negative / muted-neutral
  * when null). Returns a ``var(--color-…)`` reference so the theme owns
- * the actual hue. */
+ * the actual hue. Colours by the value AS DISPLAYED at 1 dp, so a near-flat
+ * value that renders "0.0" / "0.0%" never shows red — text and colour always
+ * agree (e.g. -0.04 -> positive, matching its "0.0%" label). */
 export const color_for_sign = (v: number | null | undefined): string => {
   if (v == null) return "rgba(255,255,255,.3)";
-  return v >= 0 ? "var(--color-positive)" : "var(--color-negative)";
+  return Number(v.toFixed(1)) >= 0 ? "var(--color-positive)" : "var(--color-negative)";
 };
 
 // Live match clock. The Match maps a missing provider minute to 0, so for a
