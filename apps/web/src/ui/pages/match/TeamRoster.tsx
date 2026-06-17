@@ -234,7 +234,9 @@ function RichRosterCard({
         display: "flex",
         alignItems: "stretch",
         width: "100%",
-        height: 74,
+        // Phone: grow if the full name needs a 2nd line; desktop fits in 74.
+        height: compact ? undefined : 74,
+        minHeight: 74,
         padding: 0,
         background: held
           ? "color-mix(in srgb, var(--color-accent-blue) 8%, rgba(255,255,255,.022))"
@@ -324,7 +326,20 @@ function RichRosterCard({
           width and yields first when the row is tight — the name has priority. */}
       <div style={{ flex: compact ? 1 : "0 1 auto", minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: 4, padding: "0 10px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-          <span style={{ minWidth: 0, fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: -0.1 }}>
+          <span
+            style={{
+              minWidth: 0,
+              fontSize: 14,
+              fontWeight: 700,
+              letterSpacing: -0.1,
+              // Phone: wrap to a 2nd line so the FULL name always shows (no
+              // ellipsis). Desktop has room → keep it on one line, ellipsis only
+              // as an absolute last resort.
+              ...(compact
+                ? { whiteSpace: "normal", overflowWrap: "anywhere" }
+                : { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }),
+            }}
+          >
             {display_name}
           </span>
           <span style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4 }}>
