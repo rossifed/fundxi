@@ -319,9 +319,10 @@ function RichRosterCard({
         )}
       </div>
 
-      {/* Identity — on desktop a natural width capped so the curve keeps the
-          middle; on phone it takes the full freed row (no chart) for the name. */}
-      <div style={{ flex: compact ? 1 : "0 1 auto", minWidth: 0, maxWidth: compact ? undefined : 220, display: "flex", flexDirection: "column", justifyContent: "center", gap: 4, padding: "0 10px" }}>
+      {/* Identity — takes its natural width (full name + markers); NOT capped,
+          so the name isn't truncated. The curve (flex:1) absorbs the remaining
+          width and yields first when the row is tight — the name has priority. */}
+      <div style={{ flex: compact ? 1 : "0 1 auto", minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: 4, padding: "0 10px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
           <span style={{ minWidth: 0, fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: -0.1 }}>
             {display_name}
@@ -358,7 +359,7 @@ function RichRosterCard({
           the capped width). Hidden on phones, where the space goes to the full
           name instead (the squeezed thumbnail wasn't readable). Live-refreshed. */}
       {!compact && (
-        <div style={{ flex: 1, minWidth: 48, alignSelf: "center", padding: "0 16px" }}>
+        <div style={{ flex: 1, minWidth: 0, alignSelf: "center", padding: "0 16px" }}>
           <Spark data={spark} width={240} height={26} responsive />
         </div>
       )}
