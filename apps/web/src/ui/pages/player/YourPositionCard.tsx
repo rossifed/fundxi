@@ -10,7 +10,15 @@ import type { Player } from "@fundxi/core/domain/player/player";
 import { compute_portfolio_share } from "@fundxi/core/domain/portfolio/portfolio_metrics";
 import { color_for_sign, fmt_eur_from_m, fmt_eur_m, fmt_eur_m_signed, fmt_shares, fmt_signed_pct } from "@/ui/helpers/format";
 
-export function YourPositionCard({ player }: { player: Player }) {
+export function YourPositionCard({
+  player,
+  on_close_position,
+}: {
+  player: Player;
+  /** When provided AND the viewer holds a position, render a "Close position"
+   * button (mirrors the mobile sheet). The parent owns the confirm dialog. */
+  on_close_position?: () => void;
+}) {
   // Single source: market_value / pnl / return all come from the core
   // metrics (same price resolution as the holdings list + AUM), so this card
   // is aligned with mobile by construction and reconciles with the portfolio.
@@ -118,6 +126,29 @@ export function YourPositionCard({ player }: { player: Player }) {
         <PositionStat label="P&L" value={fmt_eur_m_signed(pnl)} color={color_for_sign(pnl)} />
         <PositionStat label="Return" value={fmt_signed_pct(return_pct, 1)} color={color_for_sign(return_pct)} />
       </div>
+      {on_close_position && (
+        <div style={{ padding: "0 14px 12px" }}>
+          <button
+            type="button"
+            onClick={on_close_position}
+            style={{
+              width: "100%",
+              padding: "10px 0",
+              fontSize: 13,
+              fontWeight: 800,
+              letterSpacing: 0.3,
+              borderRadius: 9,
+              background: "rgba(255,255,255,.05)",
+              border: "1px solid rgba(255,255,255,.14)",
+              color: "#fff",
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            Close position
+          </button>
+        </div>
+      )}
     </div>
   );
 }

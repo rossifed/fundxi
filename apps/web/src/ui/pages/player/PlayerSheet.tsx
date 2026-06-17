@@ -12,12 +12,14 @@
 
 import { useEffect, useState } from "react";
 import { players_api } from "@fundxi/core/api/players_api";
+import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import { teams_api } from "@fundxi/core/api/teams_api";
 import { valuations_api } from "@fundxi/core/api/valuations_api";
 import { POSITION_LABEL, type Player } from "@fundxi/core/domain/player/player";
 import type { PlayerTournamentStat } from "@fundxi/core/infrastructure/repositories/player_stats_repository";
 import type { PricePoint } from "@fundxi/core/infrastructure/repositories/valuations_repository";
 import { AuthDialog } from "@/ui/components/AuthDialog";
+import { ClosePositionsDialog } from "@/ui/components/ClosePositionsDialog";
 import { Sheet } from "@/ui/components/Sheet";
 import { TradeDialog } from "@/ui/components/TradeDialog";
 import { useLiveRefetch, usePlayerLiveVersion } from "@/ui/hooks/use_live_updates";
@@ -65,8 +67,15 @@ export function PlayerSheet({
   const { is_mobile } = useViewport();
   const [trade_dialog_kind, set_trade_dialog_kind] = useState<"buy" | "sell" | null>(null);
   const [auth_prompt_open, set_auth_prompt_open] = useState(false);
+  const [close_open, set_close_open] = useState(false);
   const { status: auth_status } = useAuth();
   const is_watched = watchlist?.has(player.id) ?? false;
+
+  // Held position → the "Close position" button (mirrors the mobile sheet),
+  // routed through the shared ClosePositionsDialog (confirm + execute).
+  const holding_metrics = portfolio_api.get_holding_metrics(player.id);
+  const has_position = !!holding_metrics && holding_metrics.shares !== 0;
+  const on_close_position = has_position ? () => set_close_open(true) : undefined;
 
   const handle_trade_click = (kind: "buy" | "sell") => {
     if (auth_status === "authenticated") set_trade_dialog_kind(kind);
@@ -264,7 +273,7 @@ export function PlayerSheet({
             {personal_card}
             {tournament_card}
             {skills_card}
-            <YourPositionCard player={player} />
+            <YourPositionCard player={player} on_close_position={on_close_position} />
           </div>
           <div style={{ padding: "0 24px 8px" }}>{tab_buttons}</div>
           {left_tab === "fixtures" ? (
@@ -288,6 +297,9 @@ export function PlayerSheet({
           }}
         />
         {auth_prompt_open && <AuthDialog initial_mode="register" on_close={() => set_auth_prompt_open(false)} />}
+        {close_open && holding_metrics && (
+          <ClosePositionsDialog open positions={[{ ...holding_metrics, player }]} on_close={() => set_close_open(false)} />
+        )}
       </Sheet>
     );
   }
@@ -438,7 +450,7 @@ export function PlayerSheet({
               </SectionCard>
             )}
 
-            <YourPositionCard player={player} />
+            <YourPositionCard player={player} on_close_position={on_close_position} />
 
             <div style={{ display: "flex", gap: 8 }}>
               <button
