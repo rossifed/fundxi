@@ -153,7 +153,7 @@ export function PlayerSheet({
   const tournament_card = (
     <SectionCard title="Tournament">
       <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 0 }}>
-        {key_tournament_stats(tournament_stats).map(item => (
+        {key_tournament_stats(tournament_stats, player.position).map(item => (
           <SmallKpi
             key={item.label}
             label={item.label}

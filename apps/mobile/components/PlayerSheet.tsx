@@ -319,7 +319,7 @@ function Header({
       </View>
       {/* Tournament totals — compact strip, same source/format as the Statistics panel. */}
       <View style={styles.stat_grid}>
-        {key_tournament_stats(stats).map(item => {
+        {key_tournament_stats(stats, player.position).map(item => {
           const c = statistics_color(item.semantic);
           return (
             <View key={item.label} style={styles.stat_cell}>

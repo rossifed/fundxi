@@ -22,6 +22,7 @@
  *    "0%" would misrepresent "no value", so we never synthesise one.
  */
 
+import type { Position } from "@fundxi/core/domain/player/player";
 import type { PlayerTournamentStat } from "@fundxi/core/infrastructure/repositories/player_stats_repository";
 
 export type StatSemantic = "neutral" | "good" | "warn" | "danger";
@@ -162,8 +163,15 @@ export function build_tournament_stat_groups(s: PlayerTournamentStat): StatGroup
  * just below the player's personal/bio block (a tight strip, NOT the full
  * Statistics panel). Same source, formatting and absence rules as
  * build_tournament_stat_groups, so web and mobile render the SAME six cells.
- * Cards are folded into one "yellow/red" cell to keep the strip compact. */
-export function key_tournament_stats(s: PlayerTournamentStat | null | undefined): StatItem[] {
+ * Cards are folded into one "yellow/red" cell to keep the strip compact.
+ *
+ * Position-aware: a goalkeeper shows Saves / Conceded instead of Goals /
+ * Assists (a keeper normally neither scores nor assists). */
+export function key_tournament_stats(
+  s: PlayerTournamentStat | null | undefined,
+  position: Position,
+): StatItem[] {
+  const is_gk = position === "GK";
   const kpi = (label: string, value: string, semantic: StatSemantic = "neutral", title?: string): StatItem => ({
     label,
     value,
@@ -174,8 +182,8 @@ export function key_tournament_stats(s: PlayerTournamentStat | null | undefined)
     return [
       kpi("Min", "—"),
       kpi("Rating", "—"),
-      kpi("Goals", "—"),
-      kpi("Assists", "—"),
+      kpi(is_gk ? "Saves" : "Goals", "—"),
+      kpi(is_gk ? "Conceded" : "Assists", "—"),
       kpi("Cards", "—", "neutral", "Yellow / Red"),
       kpi("Pass %", "—"),
     ];
@@ -203,8 +211,8 @@ export function key_tournament_stats(s: PlayerTournamentStat | null | undefined)
   return [
     kpi("Min", num(s.minutes_played)),
     kpi("Rating", present(s.rating_avg) ? s.rating_avg.toFixed(1) : "—"),
-    kpi("Goals", count(s.goals), pos(s.goals)),
-    kpi("Assists", count(s.assists), pos(s.assists)),
+    is_gk ? kpi("Saves", count(s.saves), pos(s.saves)) : kpi("Goals", count(s.goals), pos(s.goals)),
+    is_gk ? kpi("Conceded", count(s.goals_conceded)) : kpi("Assists", count(s.assists), pos(s.assists)),
     cards,
     kpi("Pass %", present(s.passes_accuracy) ? `${s.passes_accuracy.toFixed(0)}%` : "—"),
   ];
