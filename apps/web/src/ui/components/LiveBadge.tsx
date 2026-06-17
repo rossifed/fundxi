@@ -2,8 +2,11 @@
  *
  * GREEN (positive): the single canonical "LIVE" colour across the app — the
  * fixture badge, the match banner, the commentary ticker and the match log all
- * read the same. Glowing, pulsing dot so it reads as on-air. */
-export function LiveBadge() {
+ * read the same. Glowing, pulsing dot so it reads as on-air.
+ *
+ * Optional `minute` is appended as "LIVE 67'" — keeps the live clock on the
+ * badge instead of crowding the flag/score block in the LiveBar. */
+export function LiveBadge({ minute }: { minute?: string }) {
   return (
     <span
       style={{
@@ -31,6 +34,7 @@ export function LiveBadge() {
         }}
       />
       LIVE
+      {minute ? <span className="mono" style={{ fontWeight: 700 }}>{minute}</span> : null}
     </span>
   );
 }

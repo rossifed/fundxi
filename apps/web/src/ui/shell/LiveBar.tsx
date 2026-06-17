@@ -122,12 +122,12 @@ export function LiveBar({ on_open_match }: { on_open_match: (fixture_id: number)
         overflow: "hidden",
       }}
     >
-      <LiveBadge />
-      {/* Score line: flag · score · minute · flag — so you always know which match. */}
-      <span className="mono" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 700, fontSize: 12, flexShrink: 0 }}>
+      {/* Minute now lives in the LIVE pill ("LIVE 67'") so the score block stays
+          compact: flag · score · flag. */}
+      <LiveBadge minute={minute} />
+      <span className="mono" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 700, fontSize: 14, flexShrink: 0 }}>
         <span style={{ fontSize: 15 }}>{home?.flag ?? ""}</span>
         {score && <span>{score}</span>}
-        {minute && <span style={{ color: "var(--color-positive)" }}>{minute}</span>}
         <span style={{ fontSize: 15 }}>{away?.flag ?? ""}</span>
       </span>
       <CommentMarquee comments={comments} />
@@ -182,7 +182,7 @@ function CommentMarquee({ comments }: { comments: MatchComment[] }) {
         flex: 1,
         minWidth: 0,
         overflow: "hidden",
-        fontSize: 12,
+        fontSize: 14,
         color: "rgba(255,255,255,.6)",
         maskImage: "linear-gradient(to right, transparent 0, #000 16px, #000 calc(100% - 16px), transparent 100%)",
         WebkitMaskImage: "linear-gradient(to right, transparent 0, #000 16px, #000 calc(100% - 16px), transparent 100%)",

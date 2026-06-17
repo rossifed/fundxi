@@ -104,11 +104,12 @@ export function LiveBar() {
 
   return (
     <Pressable onPress={() => router.push(`/match/${current.id}`)} style={styles.bar}>
-      <LiveBadge />
+      {/* Minute lives in the LIVE pill now ("LIVE 67'") so the score block stays
+          compact: just the two flags + the score. */}
+      <LiveBadge minute={minute} />
       <View style={styles.score}>
         <Text style={styles.flag}>{home?.flag ?? ""}</Text>
         {!!score && <Text style={styles.score_txt}>{score}</Text>}
-        {!!minute && <Text style={styles.min}>{minute}</Text>}
         <Text style={styles.flag}>{away?.flag ?? ""}</Text>
       </View>
       <CommentMarquee comments={comments} />
@@ -179,11 +180,12 @@ const styles = StyleSheet.create({
   },
   score: { flexDirection: "row", alignItems: "center", gap: 5 },
   flag: { fontSize: 14 },
-  score_txt: { color: "#fff", fontSize: 12, fontWeight: "700" },
-  min: { color: palette.positive, fontSize: 12, fontWeight: "700" },
+  // Single text size across the whole bar (score + commentary) = 14, the larger
+  // of the two former sizes, so the type never appears to shift between items.
+  score_txt: { color: "#fff", fontSize: 14, fontWeight: "700" },
   cm_wrap: { flex: 1, overflow: "hidden" },
   cm_copy: { flexDirection: "row" },
-  cm_item: { color: "rgba(255,255,255,0.6)", fontSize: 12, marginRight: 24 },
+  cm_item: { color: "rgba(255,255,255,0.6)", fontSize: 14, marginRight: 24 },
   cm_min: { color: palette.positive, fontWeight: "700" },
   dots: { flexDirection: "row", gap: 4 },
   dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.2)" },

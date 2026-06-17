@@ -7,7 +7,7 @@ import { Animated, StyleSheet, Text, View } from "react-native";
 
 import { palette, with_alpha } from "@/theme/tokens";
 
-export function LiveBadge() {
+export function LiveBadge({ minute }: { minute?: string }) {
   const opacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -25,6 +25,7 @@ export function LiveBadge() {
     <View style={styles.badge}>
       <Animated.View style={[styles.dot, { opacity }]} />
       <Text style={styles.label}>LIVE</Text>
+      {minute ? <Text style={styles.minute}>{minute}</Text> : null}
     </View>
   );
 }
@@ -44,4 +45,7 @@ const styles = StyleSheet.create({
   },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: palette.positive },
   label: { fontSize: 11, fontWeight: "800", letterSpacing: 0.4, color: palette.positive },
+  // Live minute appended to the pill ("LIVE 67'") — relocated here so it no
+  // longer crowds the flag/score block in the LiveBar.
+  minute: { fontSize: 11, fontWeight: "700", color: palette.positive },
 });
