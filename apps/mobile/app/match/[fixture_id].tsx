@@ -431,7 +431,7 @@ function RosterCard({
       </View>
       <View style={styles.rc_meta}>
         <View style={styles.rc_name_row}>
-          <Text style={styles.rc_name} numberOfLines={1}>{p.name}</Text>
+          <Text style={styles.rc_name} numberOfLines={2}>{p.full_name ?? p.name}</Text>
           {counts && (counts.goals > 0 || counts.own_goals > 0 || counts.yellow > 0 || counts.red > 0) && (
             <Text style={styles.rc_badges}>
               {counts.goals > 0 ? `⚽${counts.goals > 1 ? counts.goals : ""}` : ""}
