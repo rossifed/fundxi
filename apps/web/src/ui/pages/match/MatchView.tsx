@@ -804,8 +804,11 @@ function DualRoster({
       {/* Column glow — team identity carried by a soft edge halo per column
           (home on the left, away on the right), replacing the per-card left
           bar that pulled every row's weight to the left. */}
-      {/* Starting XI / Substitutes toggle — one section at a time, like the
-          native lineup (the bench was previously stacked under the XI). */}
+      {/* XI / Bench toggle — one section at a time, like the native lineup
+          (the bench was previously stacked under the XI). Labels reflect the
+          CURRENT state: after a substitution the player who came on shows under
+          "XI" and the one who went off under "Bench" (the groups are
+          live-updated), so "Starting XI" / "Substitutes" would be misleading. */}
       {has_bench && (
         <div style={{ display: "flex", gap: 6, padding: "10px 12px 0" }}>
           {(["xi", "bench"] as const).map(v => {
@@ -829,7 +832,7 @@ function DualRoster({
                   fontFamily: "inherit",
                 }}
               >
-                {v === "xi" ? "Starting XI" : "Substitutes"}
+                {v === "xi" ? "XI" : "Bench"}
               </button>
             );
           })}

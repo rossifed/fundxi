@@ -550,7 +550,7 @@ function Segmented({ view, on_change }: { view: ComposView; on_change: (v: Compo
         const active = v === view;
         return (
           <Pressable key={v} onPress={() => on_change(v)} style={[styles.seg_btn, active && styles.seg_btn_on]} hitSlop={4}>
-            <Text style={[styles.seg_label, active && styles.seg_label_on]}>{v === "xi" ? "Starting XI" : "Bench"}</Text>
+            <Text style={[styles.seg_label, active && styles.seg_label_on]}>{v === "xi" ? "XI" : "Bench"}</Text>
           </Pressable>
         );
       })}
