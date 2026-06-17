@@ -7,7 +7,6 @@ import { players_api } from "@fundxi/core/api/players_api";
 import { teams_api } from "@fundxi/core/api/teams_api";
 import { news_api } from "@fundxi/core/api/news_api";
 import { leagues_api } from "@fundxi/core/api/leagues_api";
-import { compute_return_pct } from "@fundxi/core/domain/market/return";
 import { default_match_tab, latest_results, next_fixtures, type MatchTab } from "@fundxi/core/domain/match/match_center";
 import { compute_initials } from "@fundxi/core/domain/identity/avatar";
 import { spark_for_player } from "@fundxi/core/infrastructure/repositories/valuations_repository";
@@ -301,7 +300,9 @@ function MoverRow({
   rank?: number;
 }) {
   const team = teams_api.get(player.team_id);
-  const tournament_return = compute_return_pct(player.valuation.current_price, player.valuation.base_value);
+  // Authoritative since-inception % from the valuation (NOT recomputed from
+  // current/base) so it matches the card / screener / backend.
+  const tournament_return = player.valuation.change_since_inception;
   return (
     <Pressable
       style={[styles.mover_row, divider && styles.row_divider]}

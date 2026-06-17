@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { color_for_sign, fmt_fixture_datetime, fmt_live_minute, fmt_signed_pct } from "@/ui/helpers/format";
-import { compute_return_pct } from "@fundxi/core/domain/market/return";
 import { matches_api } from "@fundxi/core/api/matches_api";
 import { players_api } from "@fundxi/core/api/players_api";
 import { teams_api } from "@fundxi/core/api/teams_api";
@@ -542,7 +541,9 @@ function MoversColumn({
     <div>
       {players.map((p, i) => {
         const team = teams_api.get(p.team_id);
-        const tournament_return = compute_return_pct(p.valuation.current_price, p.valuation.base_value);
+        // Authoritative since-inception % from the valuation (NOT recomputed from
+        // current/base) so it matches the card / screener / backend.
+        const tournament_return = p.valuation.change_since_inception;
         return (
           <div
             key={p.id}
