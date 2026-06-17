@@ -9,6 +9,7 @@ import { useMemo } from "react";
 import type { Match, MatchPlayer } from "@fundxi/core/domain/match/match";
 import { compute_pitch_positions, type PitchPosition } from "@fundxi/core/domain/match/formation_layout";
 import { players_api } from "@fundxi/core/api/players_api";
+import { valuations_api } from "@fundxi/core/api/valuations_api";
 import { PlayerAvatar } from "@/ui/components/PlayerAvatar";
 import { useViewport } from "@/ui/hooks/use_viewport";
 import { fmt_eur_m, fmt_signed_pct } from "@/ui/helpers/format";
@@ -431,8 +432,12 @@ function PlayerToken({
   const p = pos.player;
   const ref = players_api.get(p.id);
   const photo = ref?.image_path;
-  const change = p.change_last_match ?? 0;
-  const value = p.value;
+  // Price + match% from the SAME valuation source as the List view, so a token
+  // and its list row never disagree (the match payload is a separate, throttled
+  // fetch). Fall back to the payload only until the valuation loads.
+  const valuation = valuations_api.get_for_player(p.id);
+  const change = valuation?.change_last_match ?? p.change_last_match ?? 0;
+  const value = valuation?.current_price ?? p.value;
 
   // Project pitch (x, y) ∈ [0, 100] to screen via the trapezoid.
   const u = pos.x / 100;

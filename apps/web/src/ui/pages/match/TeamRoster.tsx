@@ -190,8 +190,13 @@ function RichRosterCard({
   const ref_player = players_api.get(p.id);
   const valuation = valuations_api.get_for_player(p.id);
   const price = valuation?.current_price ?? p.value;
-  const match_change = p.change_last_match; // % move over THIS match; null if no data
-  const total_change = valuation?.change_since_inception ?? 0; // % since entering our universe
+  // BOTH deltas come from the SAME valuation object (single source) so they can
+  // never desync — match% used to come from the match payload (a separate fetch
+  // refreshed on a different cadence), which made it disagree with total% mid-
+  // play while the price moved. Fall back to the match payload only if the
+  // valuation hasn't loaded. (COHERENCE-INVARIANT.)
+  const match_change = valuation?.change_last_match ?? p.change_last_match; // % over THIS match
+  const total_change = valuation?.change_since_inception ?? 0; // % since tournament open
   const rating = p.rating;
   // On phones the chart is gone, so there's room for the full name; on desktop
   // keep the short display name (the elastic curve takes the middle).
