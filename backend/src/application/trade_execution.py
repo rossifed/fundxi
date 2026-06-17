@@ -113,7 +113,13 @@ async def execute_trade(
     if request.portfolio_id != portfolio.id:
         raise TradeError("portfolio mismatch")
 
-    total = round(request.shares * request.price, 2)
+    # Full precision — NEVER round money in the domain (round only at display).
+    # `shares` (4 dp) * `price` (2 dp) lands on <= 6 dp; rounding `total` to cents
+    # here is what made cash drift from the position's mark (a fresh buy at the
+    # current price showed a sub-cent residual at the account level, surfaced as a
+    # phantom -0.05% / +20% once divided into a return). cash and total columns
+    # carry scale 6 so the charge equals the position value exactly.
+    total = request.shares * request.price
     held = await portfolio_repo.get_holding(portfolio_id=request.portfolio_id, player_id=request.player_id)
     prev_shares = held.shares if held else 0.0
     prev_avg = held.average_buy_price if held else 0.0
@@ -129,10 +135,10 @@ async def execute_trade(
         if portfolio.cash < total:
             raise TradeError(f"insufficient cash: need €{total:.2f}M, have €{portfolio.cash:.2f}M")
         new_shares = prev_shares + request.shares
-        new_cash = round(portfolio.cash - total, 2)
+        new_cash = portfolio.cash - total
     else:  # SELL — including selling beyond holding (short) or while flat / already short
         new_shares = prev_shares - request.shares
-        new_cash = round(portfolio.cash + total, 2)
+        new_cash = portfolio.cash + total
 
     new_avg = _compute_new_avg(
         prev_shares=prev_shares,

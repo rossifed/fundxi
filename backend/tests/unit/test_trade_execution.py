@@ -310,7 +310,8 @@ _price = st.floats(min_value=0.01, max_value=200.0, allow_nan=False, allow_infin
 def test_property_round_trip_buy_then_sell_is_cash_neutral(shares: float, price: float) -> None:
     """For ANY shares/price the user can AFFORD, buying then selling the
     same quantity at the same price returns cash to its starting value
-    and removes the holding. (Within 2dp rounding on ``total``.)"""
+    and removes the holding. Money is no longer rounded in the domain, so
+    cash returns EXACTLY (float noise only) — not within a 0.01 residue."""
     pr, tr, p = _repos(cash=10_000.0)
     try:
         out_buy = _run(
@@ -332,23 +333,16 @@ def test_property_round_trip_buy_then_sell_is_cash_neutral(shares: float, price:
         )
     )
     assert out_sell.holding is None
-    # 2dp rounding on ``total`` => cash residue bounded by 0.01.
-    assert abs(out_sell.portfolio.cash - 10_000.0) <= 0.01
+    # No domain rounding => exact restoration, bounded only by float error.
+    assert out_sell.portfolio.cash == pytest.approx(10_000.0, abs=1e-6)
 
 
 @given(shares=_shares, price=_price)
 def test_property_cash_delta_equals_trade_total_for_buy(shares: float, price: float) -> None:
     """Cash conservation: the cash DEBITED by a buy equals the trade
-    total exactly — they are the two numbers the user sees and they
-    must agree on every input.
-
-    We compare delta to ``out.trade.total`` and NOT to a recomputed
-    ``round(shares*price, 2)``: the kernel rounds ``total`` to 2 dp
-    monetary precision BEFORE debiting cash; recomputing the expected
-    from raw inputs uses a single global rounding and diverges on the
-    .005 boundary (caught by hypothesis on shares=1.5 price=0.01).
-    The invariant we care about is the two-numbers-agree property.
-    """
+    total, and the total equals ``shares * price`` EXACTLY — money is
+    never rounded in the domain, so the two numbers the user sees agree
+    on every input with no .005-boundary divergence."""
     pr, tr, p = _repos(cash=1_000_000.0)
     out = _run(
         execute_trade(
@@ -358,8 +352,33 @@ def test_property_cash_delta_equals_trade_total_for_buy(shares: float, price: fl
             trade_repo=tr,
         )
     )
-    cash_delta = round(1_000_000.0 - out.portfolio.cash, 2)
-    assert cash_delta == out.trade.total
+    cash_delta = 1_000_000.0 - out.portfolio.cash
+    assert cash_delta == pytest.approx(out.trade.total, abs=1e-9)
+    assert out.trade.total == pytest.approx(shares * price, rel=1e-12)
+
+
+@given(shares=_shares, price=_price)
+def test_property_buy_at_mark_preserves_equity(shares: float, price: float) -> None:
+    """THE fix, stated at the account level: buying at the current price
+    leaves equity unchanged. equity = cash + shares*mark; with mark = the
+    buy price, cash spent (= shares*price) exactly offsets the position
+    value, so a fresh buy can never show a phantom gain/loss. This is the
+    invariant the 2dp ``total`` rounding used to violate by a sub-cent."""
+    pr, tr, p = _repos(cash=1_000_000.0)
+    try:
+        out = _run(
+            execute_trade(
+                request=TradeRequest(p.id, 1, TradeKind.BUY, shares=shares, price=price),
+                portfolio=p,
+                portfolio_repo=pr,
+                trade_repo=tr,
+            )
+        )
+    except TradeError:
+        return  # insufficient cash for THIS sample — precondition not met
+    position_value = out.holding.shares * price if out.holding else 0.0
+    equity = out.portfolio.cash + position_value
+    assert equity == pytest.approx(1_000_000.0, abs=1e-6)
 
 
 @given(prev_shares=st.floats(min_value=0.0, max_value=50.0), prev_avg=_price, qty=_shares, price=_price)

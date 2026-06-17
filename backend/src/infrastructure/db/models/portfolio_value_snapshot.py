@@ -24,7 +24,10 @@ class PortfolioValueSnapshotORM(Base):
         BigInteger, ForeignKey("app.portfolio.id", ondelete="CASCADE")
     )
     ts: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    cash: Mapped[float] = mapped_column(Numeric(14, 2))
-    holdings_value: Mapped[float] = mapped_column(Numeric(14, 2))
-    value: Mapped[float] = mapped_column(Numeric(14, 2))
-    pnl_vs_open: Mapped[float] = mapped_column(Numeric(14, 2))
+    # Scale 6 — same precision ladder as app.portfolio.cash / app.trade.total, so
+    # a snapshot's value reconciles with cash + sum(shares * mark) exactly and the
+    # history curve carries no rounding residual. Rounded only at display. See 0038.
+    cash: Mapped[float] = mapped_column(Numeric(18, 6))
+    holdings_value: Mapped[float] = mapped_column(Numeric(18, 6))
+    value: Mapped[float] = mapped_column(Numeric(18, 6))
+    pnl_vs_open: Mapped[float] = mapped_column(Numeric(18, 6))

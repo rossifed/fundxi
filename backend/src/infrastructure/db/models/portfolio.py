@@ -14,7 +14,10 @@ class PortfolioORM(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("app.user.id", ondelete="CASCADE"), unique=True, index=True)
-    cash: Mapped[float] = mapped_column(Numeric(12, 2))
+    # Scale 6: cash must absorb `shares` (4 dp) * `price` (2 dp) = up to 6 dp
+    # without rounding, so the cash charged equals the position's mark exactly
+    # (no account-level residual). Money is rounded only at display. See 0038.
+    cash: Mapped[float] = mapped_column(Numeric(18, 6))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
@@ -53,7 +56,9 @@ class TradeORM(Base):
     kind: Mapped[str] = mapped_column(String(8))
     shares: Mapped[float] = mapped_column(Numeric(12, 4))
     price: Mapped[float] = mapped_column(Numeric(10, 2))
-    total: Mapped[float] = mapped_column(Numeric(12, 2))
+    # Scale 6: total = shares (4 dp) * price (2 dp) is stored exactly, so the
+    # cash movement reconciles with the position value to the cent. See 0038.
+    total: Mapped[float] = mapped_column(Numeric(18, 6))
     executed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )
