@@ -15,7 +15,8 @@ import { TeamLink } from "@/ui/components/TeamLink";
 import { TickValue } from "@/ui/components/TickValue";
 import { useFixtureLiveVersion, useLiveRefetch, usePricesLiveVersion } from "@/ui/hooks/use_live_updates";
 import { useViewport } from "@/ui/hooks/use_viewport";
-import { PitchView } from "@/ui/pages/match/PitchView";
+import { PitchView, TeamChip } from "@/ui/pages/match/PitchView";
+import { TeamRoster } from "@/ui/pages/match/TeamRoster";
 import { count_match_events, MatchEventBadge, SubBadge, type MatchEventCounts } from "@/ui/pages/match/event_badge";
 import { apply_subs, compute_subs, type SubInfo } from "@fundxi/core/domain/match/substitutions";
 
@@ -119,6 +120,9 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
   // Toggle between the roster list and the tactical pitch view. Always opens on
   // the list (the default) — the choice is per-view, not persisted.
   const [view_mode, set_view_mode] = useState<LineupView>("list");
+  // One team at a time in the roster (home/away) — full-width rich cards beat the
+  // old cramped two-column list (truncated names, no room for the trade signal).
+  const [roster_team, set_roster_team] = useState<"home" | "away">("home");
 
   const goals = useMemo(
     () =>
@@ -410,70 +414,89 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
             </>
           ) : (
             <>
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <div
-                  role="tablist"
-                  style={{
-                    display: "inline-flex",
-                    background: "rgba(255,255,255,.03)",
-                    border: "1px solid rgba(255,255,255,.06)",
-                    borderRadius: 8,
-                    padding: 3,
-                    gap: 2,
-                  }}
-                >
-                  {(["list", "pitch"] as const).map(m => {
-                    const active = view_mode === m;
-                    return (
-                      <button
-                        key={m}
-                        type="button"
-                        role="tab"
-                        aria-selected={active}
-                        onClick={() => set_view_mode(m)}
-                        style={{
-                          padding: "5px 12px",
-                          border: "none",
-                          background: active ? "rgba(255,255,255,.08)" : "transparent",
-                          color: active ? "#fff" : "rgba(255,255,255,.5)",
-                          fontSize: 11,
-                          fontWeight: 700,
-                          letterSpacing: 0.3,
-                          borderRadius: 6,
-                          cursor: "pointer",
-                          fontFamily: "inherit",
-                        }}
-                      >
-                        {m === "list" ? "List" : "Pitch"}
-                      </button>
-                    );
-                  })}
-                </div>
+              {/* Single team selector — drives BOTH the List and the Pitch.
+                  One source of truth (``roster_team``); switching List ↔ Pitch
+                  keeps the same team selected. The same TeamChip the pitch used
+                  internally, lifted here so the control is identical everywhere. */}
+              <div style={{ display: "flex", gap: 8 }}>
+                {(["home", "away"] as const).map(t => {
+                  const tm = t === "home" ? home_team : away_team;
+                  const id = t === "home" ? match.home_team_id : match.away_team_id;
+                  const kit = t === "home" ? match.home_kit_color : match.away_kit_color;
+                  return (
+                    <TeamChip
+                      key={t}
+                      name={tm?.name ?? id}
+                      flag={tm?.flag}
+                      flag_url={tm?.flag_url}
+                      color={kit ?? tm?.color ?? "rgba(255,255,255,.5)"}
+                      active={roster_team === t}
+                      onClick={() => set_roster_team(t)}
+                    />
+                  );
+                })}
+              </div>
+
+              {/* View tabs — List / Pitch, applied to the selected team. */}
+              <div
+                role="tablist"
+                style={{
+                  display: "inline-flex",
+                  alignSelf: "flex-start",
+                  background: "rgba(255,255,255,.03)",
+                  border: "1px solid rgba(255,255,255,.06)",
+                  borderRadius: 8,
+                  padding: 3,
+                  gap: 2,
+                }}
+              >
+                {(["list", "pitch"] as const).map(m => {
+                  const active = view_mode === m;
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => set_view_mode(m)}
+                      style={{
+                        padding: "5px 14px",
+                        border: "none",
+                        background: active ? "rgba(255,255,255,.08)" : "transparent",
+                        color: active ? "#fff" : "rgba(255,255,255,.5)",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        letterSpacing: 0.3,
+                        borderRadius: 6,
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                      }}
+                    >
+                      {m === "list" ? "List" : "Pitch"}
+                    </button>
+                  );
+                })}
               </div>
 
               {view_mode === "list" ? (
-                <DualRoster
-                  home_xi={home_effective.on_field}
-                  away_xi={away_effective.on_field}
-                  home_bench={home_effective.bench}
-                  away_bench={away_effective.bench}
-                  home_title={`${home_team?.flag ?? ""} ${home_team?.name ?? match.home_team_id}`.trim()}
-                  away_title={`${away_team?.flag ?? ""} ${away_team?.name ?? match.away_team_id}`.trim()}
-                  home_team_id={match.home_team_id}
-                  away_team_id={match.away_team_id}
-                  home_color={match.home_kit_color ?? home_team?.color}
-                  away_color={match.away_kit_color ?? away_team?.color}
+                <TeamRoster
+                  xi={(roster_team === "home" ? home_effective : away_effective).on_field}
+                  bench={(roster_team === "home" ? home_effective : away_effective).bench}
+                  team_color={
+                    roster_team === "home"
+                      ? (match.home_kit_color ?? home_team?.color)
+                      : (match.away_kit_color ?? away_team?.color)
+                  }
                   event_counts={event_counts}
                   subs={subs}
-                  card={card}
                   on_open_player={on_open_player_profile}
-                  on_open_team={on_open_team}
                 />
               ) : (
                 <div>
                   <PitchView
                     match={match}
                     subs={subs}
+                    team={roster_team}
                     home_color={match.home_kit_color ?? home_team?.color}
                     away_color={match.away_kit_color ?? away_team?.color}
                     on_open_player={on_open_player_profile}

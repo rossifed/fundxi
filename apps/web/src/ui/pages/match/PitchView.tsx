@@ -5,11 +5,10 @@
 // distance. All lines and player tokens are positioned through a single
 // projection function (no CSS perspective hacks — fully deterministic).
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { Match, MatchPlayer } from "@fundxi/core/domain/match/match";
 import { compute_pitch_positions, type PitchPosition } from "@fundxi/core/domain/match/formation_layout";
 import { players_api } from "@fundxi/core/api/players_api";
-import { teams_api } from "@fundxi/core/api/teams_api";
 import { PlayerAvatar } from "@/ui/components/PlayerAvatar";
 import { useViewport } from "@/ui/hooks/use_viewport";
 import { fmt_eur_m, fmt_signed_pct } from "@/ui/helpers/format";
@@ -88,14 +87,13 @@ function fmt_pct_token(v: number): string {
   return `${fmt_signed_pct(v, 1)}`;
 }
 
-const TEAM_SELECT_STORAGE_KEY = "fundxi.pitch.team_select";
-
 export function PitchView({
   match,
   subs,
   on_open_player,
   home_color,
   away_color,
+  team,
 }: {
   match: Match;
   /** Per-player sub annotations (computed once at the MatchView
@@ -105,24 +103,15 @@ export function PitchView({
   on_open_player: (player_id: number) => void;
   home_color?: string;
   away_color?: string;
+  /** Which team to render — controlled by MatchView's single team
+   * selector, the SAME state that drives the List view. The pitch shows
+   * one team at a time; the selector lives above the List/Pitch tabs. */
+  team: "home" | "away";
 }) {
   const { is_mobile } = useViewport();
   // Player tokens are a fixed pixel size; on a narrow phone pitch they would
   // overlap, so shrink them (and give the pitch more height) on mobile.
   const token_factor = is_mobile ? 0.58 : 1;
-
-  const [team_select, set_team_select] = useState<"home" | "away">(() => {
-    if (typeof window === "undefined") return "home";
-    const v = window.localStorage.getItem(TEAM_SELECT_STORAGE_KEY);
-    return v === "away" ? "away" : "home";
-  });
-
-  const select = (t: "home" | "away") => {
-    set_team_select(t);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(TEAM_SELECT_STORAGE_KEY, t);
-    }
-  };
 
   // Effective on-field XI per team: starters with subbed-off players
   // REPLACED by the entering subs (inheriting their formation slot so
@@ -148,9 +137,9 @@ export function PitchView({
     [match.away_xi, match.away_bench, effective_subs],
   );
 
-  const selected_xi = team_select === "home" ? home_xi : away_xi;
+  const selected_xi = team === "home" ? home_xi : away_xi;
   const selected_formation =
-    team_select === "home" ? match.home_formation : match.away_formation;
+    team === "home" ? match.home_formation : match.away_formation;
 
   // Single-team rendering. We still pass the team's REAL broadcast role
   // (home / away) because the Sportmonks column numbering is broadcast-
@@ -159,8 +148,8 @@ export function PitchView({
   // single_team flag tells the resolver to stretch the team across the
   // full pitch length and to apply the x-mirror for the home team.
   const positions = useMemo(
-    () => compute_pitch_positions(selected_xi, selected_formation, team_select, { single_team: true }),
-    [selected_xi, selected_formation, team_select],
+    () => compute_pitch_positions(selected_xi, selected_formation, team, { single_team: true }),
+    [selected_xi, selected_formation, team],
   );
 
   // Per-player event tally — built by the shared helper so Pitch and
@@ -169,37 +158,12 @@ export function PitchView({
 
   const home_fill = home_color ?? match.home_kit_color ?? "rgba(255,255,255,.5)";
   const away_fill = away_color ?? match.away_kit_color ?? "rgba(255,255,255,.5)";
-  const selected_color = team_select === "home" ? home_fill : away_fill;
-
-  const home_team = teams_api.get(match.home_team_id);
-  const away_team = teams_api.get(match.away_team_id);
+  const selected_color = team === "home" ? home_fill : away_fill;
 
   return (
     <div style={{ width: "100%" }}>
-      <div
-        style={{
-          display: "flex",
-          gap: 8,
-          marginBottom: 10,
-        }}
-      >
-        <TeamChip
-          name={home_team?.name ?? match.home_team_id}
-          flag={home_team?.flag}
-          flag_url={home_team?.flag_url}
-          color={home_fill}
-          active={team_select === "home"}
-          onClick={() => select("home")}
-        />
-        <TeamChip
-          name={away_team?.name ?? match.away_team_id}
-          flag={away_team?.flag}
-          flag_url={away_team?.flag_url}
-          color={away_fill}
-          active={team_select === "away"}
-          onClick={() => select("away")}
-        />
-      </div>
+      {/* No team selector here — it lives above the List/Pitch tabs in
+          MatchView and is shared with the List view (single source). */}
       <div
         style={{
           position: "relative",
@@ -251,7 +215,7 @@ export function PitchView({
   );
 }
 
-function TeamChip({
+export function TeamChip({
   name,
   flag,
   flag_url,

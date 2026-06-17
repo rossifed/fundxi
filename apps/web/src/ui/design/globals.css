@@ -207,6 +207,17 @@ body,
     color: inherit;
   }
 }
+/* Match roster card — subtle hover lift (desktop only; invisible on touch). */
+.match-card {
+  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
+}
+@media (hover: hover) {
+  .match-card:hover {
+    border-color: rgba(255, 255, 255, 0.14);
+    background-color: rgba(255, 255, 255, 0.04);
+    transform: translateY(-1px);
+  }
+}
 .price-pulse-up {
   animation: price_pulse_up 450ms ease-out;
   border-radius: 4px;
