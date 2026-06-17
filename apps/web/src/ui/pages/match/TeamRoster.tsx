@@ -23,6 +23,7 @@ import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import { spark_for_player } from "@fundxi/core/infrastructure/repositories/valuations_repository";
 import { Spark } from "@/ui/components/Spark";
 import { TickValue } from "@/ui/components/TickValue";
+import { useViewport } from "@/ui/hooks/use_viewport";
 import { color } from "@/ui/design/tokens";
 import { color_for_sign, fmt_eur_m, fmt_signed_pct } from "@/ui/helpers/format";
 import { MatchEventBadge, SubBadge, type MatchEventCounts } from "@/ui/pages/match/event_badge";
@@ -62,6 +63,9 @@ interface TeamRosterProps {
 const ROSTER_MAX_WIDTH = 720;
 
 export function TeamRoster({ xi, bench, team_color, event_counts, subs, on_open_player }: TeamRosterProps) {
+  // Phone width: drop the in-row chart (it gets crushed) and hand the freed
+  // space to the full player name. Desktop keeps the elastic curve.
+  const { is_mobile } = useViewport();
   const by_pos = group_by_position(xi);
   const bench_ordered = POSITION_GROUPS.flatMap(g => group_by_position(bench).get(g.key) ?? []);
 
@@ -84,6 +88,7 @@ export function TeamRoster({ xi, bench, team_color, event_counts, subs, on_open_
                   team_color={team_color}
                   events={event_counts.get(p.id)}
                   sub_info={subs.get(p.id)}
+                  compact={is_mobile}
                   on_open={on_open_player}
                 />
               ))}
@@ -104,6 +109,7 @@ export function TeamRoster({ xi, bench, team_color, event_counts, subs, on_open_
               team_color={team_color}
               events={event_counts.get(p.id)}
               sub_info={subs.get(p.id)}
+              compact={is_mobile}
               on_open={on_open_player}
               bench
             />
@@ -169,6 +175,7 @@ function RichRosterCard({
   events,
   sub_info,
   bench,
+  compact,
   on_open,
 }: {
   p: MatchPlayer;
@@ -176,6 +183,8 @@ function RichRosterCard({
   events?: MatchEventCounts;
   sub_info?: SubInfo;
   bench?: boolean;
+  /** Phone width: hide the in-row chart and show the player's full name. */
+  compact?: boolean;
   on_open: (player_id: number) => void;
 }) {
   const ref_player = players_api.get(p.id);
@@ -184,6 +193,9 @@ function RichRosterCard({
   const match_change = p.change_last_match; // % move over THIS match; null if no data
   const total_change = valuation?.change_since_inception ?? 0; // % since entering our universe
   const rating = p.rating;
+  // On phones the chart is gone, so there's room for the full name; on desktop
+  // keep the short display name (the elastic curve takes the middle).
+  const display_name = compact ? (p.full_name ?? p.name) : p.name;
   const exact_position = ref_player?.detailed_position ?? POSITION_FALLBACK[p.position];
   const photo = ref_player?.image_path ?? null;
   const held = portfolio_api.get_holding_metrics(p.id) != null;
@@ -291,11 +303,12 @@ function RichRosterCard({
         )}
       </div>
 
-      {/* Identity — natural width, capped so the in-match curve keeps the middle. */}
-      <div style={{ flex: "0 1 auto", minWidth: 0, maxWidth: 220, display: "flex", flexDirection: "column", justifyContent: "center", gap: 4, padding: "0 10px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: -0.1 }}>
-            {p.name}
+      {/* Identity — on desktop a natural width capped so the curve keeps the
+          middle; on phone it takes the full freed row (no chart) for the name. */}
+      <div style={{ flex: compact ? 1 : "0 1 auto", minWidth: 0, maxWidth: compact ? undefined : 220, display: "flex", flexDirection: "column", justifyContent: "center", gap: 4, padding: "0 10px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+          <span style={{ minWidth: 0, fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: -0.1 }}>
+            {display_name}
           </span>
           <span style={{ flexShrink: 0, display: "inline-flex", gap: 3 }}>
             <MatchEventBadge events={events} variant="inline" />
@@ -311,10 +324,13 @@ function RichRosterCard({
       </div>
 
       {/* Performance curve — elastic: fills the row's middle (the dead space at
-          the capped width) instead of a fixed thumbnail. Live-refreshed. */}
-      <div style={{ flex: 1, minWidth: 48, alignSelf: "center", padding: "0 16px" }}>
-        <Spark data={spark} width={240} height={26} responsive />
-      </div>
+          the capped width). Hidden on phones, where the space goes to the full
+          name instead (the squeezed thumbnail wasn't readable). Live-refreshed. */}
+      {!compact && (
+        <div style={{ flex: 1, minWidth: 48, alignSelf: "center", padding: "0 16px" }}>
+          <Spark data={spark} width={240} height={26} responsive />
+        </div>
+      )}
 
       {/* Live price + BOTH moves we keep: THIS match and TOTAL (since the player
           entered our universe), labelled like the legacy card. TickValue gives
@@ -324,24 +340,47 @@ function RichRosterCard({
         <span className="mono" style={{ fontSize: 14, fontWeight: 800, lineHeight: 1 }}>
           <TickValue value={price}>{fmt_eur_m(price)}</TickValue>
         </span>
-        <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
-          <DeltaStat label="match" value={match_change} />
-          <DeltaStat label="total" value={total_change} dim />
+        {/* Phone: stack the two deltas (each on one line) so the price block
+            stays narrow and never clips; desktop keeps them side by side. */}
+        <div style={{ display: "flex", flexDirection: compact ? "column" : "row", gap: compact ? 2 : 10, alignItems: "flex-end" }}>
+          <DeltaStat label="match" value={match_change} inline={compact} />
+          <DeltaStat label="total" value={total_change} dim inline={compact} />
         </div>
       </div>
     </button>
   );
 }
 
-/** One labelled delta (match / total): tiny uppercase label over a signed,
- * sign-coloured percentage. `dim` softens the secondary (total) reading. */
-function DeltaStat({ label, value, dim }: { label: string; value: number | null | undefined; dim?: boolean }) {
+/** One labelled delta (match / total): tiny uppercase label + a signed,
+ * sign-coloured percentage. `dim` softens the secondary (total) reading.
+ * `inline` lays label and value on one line (phone, stacked deltas); otherwise
+ * label sits over the value (desktop, deltas side by side). */
+function DeltaStat({
+  label,
+  value,
+  dim,
+  inline,
+}: {
+  label: string;
+  value: number | null | undefined;
+  dim?: boolean;
+  inline?: boolean;
+}) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", lineHeight: 1.1, opacity: dim ? 0.8 : 1 }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: inline ? "row" : "column",
+        alignItems: inline ? "baseline" : "flex-end",
+        gap: inline ? 5 : 0,
+        lineHeight: 1.1,
+        opacity: dim ? 0.8 : 1,
+      }}
+    >
       <span style={{ fontSize: 8.5, fontWeight: 700, color: "rgba(255,255,255,.35)", letterSpacing: 0.5, textTransform: "uppercase" }}>
         {label}
       </span>
-      <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: color_for_sign(value), marginTop: 1 }}>
+      <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: color_for_sign(value), marginTop: inline ? 0 : 1 }}>
         {fmt_signed_pct(value, 1)}
       </span>
     </div>
