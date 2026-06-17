@@ -9,6 +9,7 @@ import { TeamLink } from "@/ui/components/TeamLink";
 import { TickValue } from "@/ui/components/TickValue";
 import { color_for_sign, fmt_live_minute, fmt_signed_pct } from "@/ui/helpers/format";
 import { useLiveMatch } from "@/ui/hooks/use_live_match";
+import { useLiveValuations } from "@/ui/hooks/use_live_valuations";
 
 interface RightRailProps {
   watchlist: Set<number>;
@@ -18,6 +19,9 @@ interface RightRailProps {
 }
 
 export function RightRail({ watchlist, on_open_player, on_open_match, on_open_team }: RightRailProps) {
+  // Re-render the rail's watchlist movers on each price wave (leaf-level, so the
+  // refresh stays scoped here and never re-renders the whole app shell).
+  useLiveValuations();
   const live = useLiveMatch();
   const live_home = live ? teams_api.get(live.home_team_id) : undefined;
   const live_away = live ? teams_api.get(live.away_team_id) : undefined;

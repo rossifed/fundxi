@@ -14,13 +14,39 @@
  *     goes live (and clears the card when none is live).
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { matches_api } from "@fundxi/core/api/matches_api";
 import type { Match } from "@fundxi/core/domain/match/match";
 import { useFixtureLiveVersion, useLiveRefetch, useMatchesLiveVersion } from "@/ui/hooks/use_live_updates";
 
 export function useLiveMatch(): Match | null {
   const [live, set_live] = useState<Match | null>(() => matches_api.get_live_match() ?? null);
+
+  // On mount (e.g. navigating BACK to Home), proactively find the current live
+  // match instead of waiting for the next "matches" tick — otherwise the card
+  // can stay empty after a page switch when the boot snapshot didn't carry it.
+  useEffect(() => {
+    if (live) return;
+    let cancelled = false;
+    void matches_api
+      .refresh_fixtures()
+      .then(fixtures => {
+        if (cancelled) return;
+        const live_fixture = fixtures.find(f => f.status === "live");
+        if (!live_fixture) return;
+        return matches_api.refresh_match_by_fixture_id(live_fixture.id).then(m => {
+          if (!cancelled && m && m.status === "live") set_live(m);
+        });
+      })
+      .catch(() => {
+        /* keep the (empty) card on a transient error */
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Mount-only one-shot recovery; the streams below keep it live afterwards.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const live_version = useFixtureLiveVersion(live?.fixture_id);
   useLiveRefetch(live_version, () => {
