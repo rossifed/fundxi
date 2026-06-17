@@ -164,7 +164,7 @@ function CommentMarquee({ comments }: { comments: MatchComment[] }) {
       onLayout={measure ? e => set_copy_w(e.nativeEvent.layout.width) : undefined}
     >
       {comments.map((c, i) => (
-        <Text key={`${suffix}-${c.id ?? i}`} style={styles.cm_item}>
+        <Text key={`${suffix}-${c.id ?? i}`} style={styles.cm_item} allowFontScaling={false}>
           <Text style={styles.cm_min}>{c.minute}&apos;</Text> {c.comment}
         </Text>
       ))}
@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
   cm_wrap: { flex: 1, overflow: "hidden" },
   cm_copy: { flexDirection: "row" },
   cm_item: { color: "rgba(255,255,255,0.6)", fontSize: 14, marginRight: 24 },
-  cm_min: { color: palette.positive, fontWeight: "700" },
+  cm_min: { color: palette.positive, fontWeight: "700", fontSize: 14 },
   dots: { flexDirection: "row", gap: 4 },
   dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.2)" },
   dot_on: { backgroundColor: palette.positive },

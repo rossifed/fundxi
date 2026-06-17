@@ -178,8 +178,8 @@ function CommentMarquee({ comments }: { comments: MatchComment[] }) {
 
   const items = (suffix: string) =>
     comments.map((c, i) => (
-      <span key={`${suffix}-${c.id ?? i}`} style={{ marginRight: 26, whiteSpace: "nowrap" }}>
-        <span style={{ color: "var(--color-positive)", fontWeight: 700 }}>{c.minute}&apos;</span> {c.comment}
+      <span key={`${suffix}-${c.id ?? i}`} style={{ marginRight: 26, whiteSpace: "nowrap", fontSize: 14, fontWeight: 500 }}>
+        <span style={{ color: "var(--color-positive)", fontWeight: 700, fontSize: 14 }}>{c.minute}&apos;</span> {c.comment}
       </span>
     ));
 
