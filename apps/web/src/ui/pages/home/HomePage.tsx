@@ -426,14 +426,16 @@ interface _ScorerEntry {
 }
 
 // One team's scorers, stacked and left-anchored ("⚽ Surname 9', 67'" per line).
-function _ScorerList({ scorers, color }: { scorers: _ScorerEntry[]; color?: string }) {
+// Names are NEVER team-coloured — always neutral white-grey (a coloured name is
+// a stop-the-line per the user). Team colour belongs on markers, not on text.
+function _ScorerList({ scorers }: { scorers: _ScorerEntry[] }) {
   if (scorers.length === 0) return <div />;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 11, color: "rgba(255,255,255,.5)", textAlign: "left", minWidth: 0 }}>
       {scorers.map((s, i) => (
         <div key={`${s.name}-${i}`} style={{ display: "flex", alignItems: "baseline", gap: 5, minWidth: 0 }}>
           <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
-            ⚽ <span style={{ color: color ?? "rgba(255,255,255,.8)", fontWeight: 700 }}>{_surname(s.name)}</span>
+            ⚽ <span style={{ color: "rgba(255,255,255,.8)", fontWeight: 700 }}>{_surname(s.name)}</span>
             {s.own ? <span style={{ opacity: 0.7, fontWeight: 700 }}> (og)</span> : null}
           </span>
           <span className="mono" style={{ flexShrink: 0, fontWeight: 700 }}>{s.mins.join(", ")}</span>
@@ -518,8 +520,8 @@ function LiveMatchCard({
         // Each team's scorers under its own half, left-anchored — so it's clear
         // who scored for whom (mirrors the native match scorer split).
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 12 }}>
-          <_ScorerList scorers={scorers.filter(s => s.team_id === match.home_team_id)} color={home?.color} />
-          <_ScorerList scorers={scorers.filter(s => s.team_id === match.away_team_id)} color={away?.color} />
+          <_ScorerList scorers={scorers.filter(s => s.team_id === match.home_team_id)} />
+          <_ScorerList scorers={scorers.filter(s => s.team_id === match.away_team_id)} />
         </div>
       )}
     </div>
