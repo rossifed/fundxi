@@ -55,6 +55,7 @@ def _player_view_to_dto(view: MatchPlayerView) -> MatchPlayerResponse:
         value=view.valuation.current_price,
         rating=view.valuation.performance_rating,
         change_last_match=view.valuation.change_last_match,
+        change_this_match=view.change_this_match,
         formation_position=ln.formation_position if ln else None,
         formation_field=ln.formation_field if ln else None,
     )

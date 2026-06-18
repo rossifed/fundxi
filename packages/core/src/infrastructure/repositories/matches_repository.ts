@@ -13,6 +13,7 @@ interface MatchPlayerDTO {
   value: number;
   rating: number;
   change_last_match: number;
+  change_this_match: number;
   formation_position: number | null;
   formation_field: string | null;
 }
@@ -65,6 +66,7 @@ function dto_player(p: MatchPlayerDTO): MatchPlayer {
     rating: p.rating,
     team_id: p.team_id,
     change_last_match: p.change_last_match,
+    change_this_match: p.change_this_match,
     formation_field: p.formation_field,
   };
 }

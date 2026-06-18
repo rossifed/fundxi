@@ -1,7 +1,10 @@
 """Unit tests for per_match_changes_from_prices — the per-fixture net-move
 aggregation behind EngineValuationProvider, derived from prices (not deltas)."""
 
-from src.infrastructure.valuation.engine_valuation_provider import per_match_changes_from_prices
+from src.infrastructure.valuation.engine_valuation_provider import (
+    change_in_fixture_from_prices,
+    per_match_changes_from_prices,
+)
 
 
 def test_empty_rows() -> None:
@@ -68,3 +71,31 @@ def test_elimination_settlement_folds_into_its_fixture_and_total() -> None:
     assert avg == round((10.0 + expected_last) / 2.0, 2)
     # And the total reconciles with the same series: 72 / 100 - 1 = -28%.
     assert round((72.0 / 100.0 - 1.0) * 100.0, 2) == -28.0
+
+
+# --- change_in_fixture_from_prices ("perf of THIS match") --------------------
+
+
+def test_change_in_fixture_picks_only_the_target_fixture() -> None:
+    # base 100; fixture 100 closes +10% (110); fixture 200 pre=110 → 132 = +20%.
+    rows = [(1, 100, 110.0), (1, 200, 132.0)]
+    assert change_in_fixture_from_prices(rows, base_by_player={1: 100.0}, fixture_id=100) == {1: 10.0}
+    assert change_in_fixture_from_prices(rows, base_by_player={1: 100.0}, fixture_id=200) == {1: 20.0}
+
+
+def test_change_in_fixture_absent_when_no_tick_in_that_fixture() -> None:
+    # Player 1 played fixture 100 only → asking fixture 200 yields nothing
+    # (caller renders 0 — they did not feature in this match).
+    rows = [(1, 100, 105.0)]
+    assert change_in_fixture_from_prices(rows, base_by_player={1: 100.0}, fixture_id=200) == {}
+
+
+def test_change_in_fixture_reconciles_with_change_last_match() -> None:
+    # THE safety proof: for the player's MOST RECENT fixture, the per-fixture
+    # value MUST equal per_match's "last" (== valuation.change_last_match). Same
+    # series, same pre/post → the displayed "this match" number can't diverge
+    # from the existing match % when this fixture IS the latest.
+    rows = [(1, 100, 108.0), (1, 200, 113.0), (1, 200, 118.8)]
+    _, last = per_match_changes_from_prices(rows, base_by_player={1: 100.0})[1]
+    this_match = change_in_fixture_from_prices(rows, base_by_player={1: 100.0}, fixture_id=200)[1]
+    assert this_match == last == 10.0

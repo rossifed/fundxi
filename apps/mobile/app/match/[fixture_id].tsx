@@ -402,12 +402,12 @@ function RosterCard({
   on_open: (player: Player) => void;
 }) {
   const ref_player = players_api.get(p.id);
-  // Price AND match% both from the SAME valuation object (single source) so they
-  // never desync with the rest of the app; fall back to the match payload only
-  // until the valuation loads. (COHERENCE-INVARIANT.)
+  // Live price from the valuation (single source). MATCH% = change_this_match,
+  // the backend-computed move WITHIN THIS fixture (0 before kickoff / for players
+  // who didn't feature) — NOT change_last_match (the player's other match).
   const valuation = valuations_api.get_for_player(p.id);
   const live_price = valuation?.current_price ?? p.value;
-  const match_change = valuation?.change_last_match ?? p.change_last_match ?? 0;
+  const match_change = p.change_this_match ?? 0;
   const photo = ref_player?.image_path;
   // Detailed provider position (e.g. "Centre-Back") — finer than the GK/DF/MF/FW
   // section header. Shown only when the provider gives it; never invented.

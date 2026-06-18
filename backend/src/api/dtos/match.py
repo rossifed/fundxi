@@ -18,6 +18,7 @@ class MatchPlayerResponse(BaseModel):
     value: float
     rating: float
     change_last_match: float | None  # %, net change over the latest fixture; None if no match yet
+    change_this_match: float = 0.0  # %, net move WITHIN this fixture; 0 pre-kickoff / for unused subs
     formation_position: int | None = None
     # Sportmonks "row:col" tactical grid coordinate (e.g. "2:3"). When present,
     # this is the authoritative source for placing the player on the pitch;

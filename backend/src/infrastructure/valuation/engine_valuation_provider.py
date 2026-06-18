@@ -75,6 +75,36 @@ def per_match_changes_from_prices(
     return out
 
 
+def change_in_fixture_from_prices(
+    rows: list[tuple[int, int, float]],
+    *,
+    base_by_player: dict[int, float],
+    fixture_id: int,
+) -> dict[int, float]:
+    """Per player, the NET price move WITHIN one specific fixture (%) — the
+    "perf of THIS match". Same pre/post definition as
+    ``per_match_changes_from_prices`` (a fixture's move = last_price / pre_price
+    - 1, pre = the previous fixture's close, or the tournament-open base for the
+    first), but returns only ``fixture_id``'s value. Players with no tick in that
+    fixture are ABSENT (caller treats as 0 — they didn't move in this match).
+    The full walk is needed so each fixture's pre-price carries correctly."""
+    pre: dict[int, dict[int, float]] = {}
+    post: dict[int, dict[int, float]] = {}
+    carried: dict[int, float] = dict(base_by_player)
+    for player_id, fid, price in rows:
+        player_pre = pre.setdefault(player_id, {})
+        if fid not in player_pre:
+            player_pre[fid] = carried.get(player_id, price)
+        post.setdefault(player_id, {})[fid] = price
+        carried[player_id] = price
+
+    out: dict[int, float] = {}
+    for player_id, posts in post.items():
+        if fixture_id in posts and pre[player_id][fixture_id] > 0:
+            out[player_id] = round((posts[fixture_id] / pre[player_id][fixture_id] - 1.0) * 100.0, 2)
+    return out
+
+
 class EngineValuationProvider:
     """Reads `valuation.player_price_tick` for the latest price per player."""
 

@@ -12,6 +12,10 @@ export interface MatchPlayer {
   rating: number;
   team_id?: string;
   change_last_match?: number; // %, net price change over the latest fixture — moves live during play
+  // %, net price move WITHIN this fixture ("perf of this match"): 0 before
+  // kickoff and for players who didn't feature. THIS is what the roster shows
+  // under MATCH — never change_last_match (which is the player's latest fixture).
+  change_this_match?: number;
   // Sportmonks tactical grid coordinate "row:col" (e.g. "2:3"). Authoritative
   // source for pitch placement; absent for bench and pre-ingestion fixtures.
   formation_field?: string | null;

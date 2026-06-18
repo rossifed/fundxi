@@ -20,8 +20,10 @@ from src.infrastructure.db.models.fixture import FixtureORM
 from src.infrastructure.db.models.lineup import LineupORM
 from src.infrastructure.db.models.match_event import MatchEventORM
 from src.infrastructure.db.models.player import PlayerORM
+from src.infrastructure.db.models.player_price_tick import PlayerPriceTickORM
 from src.infrastructure.db.models.standings import StandingORM
 from src.infrastructure.db.models.venue import VenueORM
+from src.infrastructure.valuation.engine_valuation_provider import change_in_fixture_from_prices
 
 
 def _fixture_orm_to_domain(
@@ -88,6 +90,10 @@ class MatchPlayerView:
     # The lineup row placing the player in the XI/bench. None for a squad-fallback
     # view (lineup not published yet) — jersey/team then come from the player.
     lineup: Lineup | None
+    # Net price move WITHIN THIS fixture (%). 0 before kickoff and for players
+    # with no tick in this match (unused subs) — distinct from
+    # valuation.change_last_match (the player's LATEST fixture, any match).
+    change_this_match: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -229,12 +235,40 @@ async def get_match_view(
         await valuation_provider.get_for_players(list(player_ids)) if player_ids else {}
     )
 
+    # Per-player price move WITHIN THIS fixture ("perf of this match"): from the
+    # fixtured price ticks, scoped to this fixture_id. Baseline = the player's
+    # tournament-open price (valuation.base_value), carried fixture by fixture.
+    # 0 before kickoff / for players with no tick in this match (unused subs).
+    bases = {pid: v.base_value for pid, v in valuations.items()}
+    tick_rows = (
+        (
+            await session.execute(
+                select(
+                    PlayerPriceTickORM.player_id,
+                    PlayerPriceTickORM.fixture_id,
+                    PlayerPriceTickORM.current_price,
+                )
+                .where(PlayerPriceTickORM.player_id.in_(player_ids), PlayerPriceTickORM.fixture_id.isnot(None))
+                .order_by(PlayerPriceTickORM.player_id, PlayerPriceTickORM.ts.asc())
+            )
+        ).all()
+        if player_ids
+        else []
+    )
+    match_changes = change_in_fixture_from_prices(
+        [(r.player_id, r.fixture_id, float(r.current_price)) for r in tick_rows],
+        base_by_player=bases,
+        fixture_id=fixture_id,
+    )
+
     def _make_view(line: Lineup) -> MatchPlayerView | None:
         p = player_by_id.get(line.player_id)
         v = valuations.get(line.player_id)
         if p is None or v is None:
             return None
-        return MatchPlayerView(player=p, valuation=v, lineup=line)
+        return MatchPlayerView(
+            player=p, valuation=v, lineup=line, change_this_match=match_changes.get(line.player_id, 0.0)
+        )
 
     home_xi: list[MatchPlayerView] = []
     away_xi: list[MatchPlayerView] = []
@@ -278,7 +312,9 @@ async def get_match_view(
             v = valuations.get(so.id)
             if p is None or v is None:
                 continue
-            sview = MatchPlayerView(player=p, valuation=v, lineup=None)
+            sview = MatchPlayerView(
+                player=p, valuation=v, lineup=None, change_this_match=match_changes.get(so.id, 0.0)
+            )
             (home_squad if so.team_id == fixture.home_team_id else away_squad).append(sview)
 
     # Per-player match move is carried on each MatchPlayerView.valuation

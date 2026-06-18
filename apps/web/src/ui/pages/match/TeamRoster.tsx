@@ -44,11 +44,11 @@ function group_by_position(players: MatchPlayer[]): Map<Position, MatchPlayer[]>
   return m;
 }
 
-/** This player's price move OVER THIS MATCH (%), from the single valuation
- * source (falls back to the match payload). The "market impact" the fixture lens
- * sorts, tints and surfaces. 0 before the match has moved anything. */
+/** This player's price move WITHIN THIS fixture (%) — the backend-computed
+ * "perf of this match" (0 before kickoff, 0 for players who didn't feature).
+ * Drives the MATCH delta, the heat tint and the movers banner. */
 function match_delta(p: MatchPlayer): number {
-  return valuations_api.get_for_player(p.id)?.change_last_match ?? p.change_last_match ?? 0;
+  return p.change_this_match ?? 0;
 }
 
 // Below this |Δ| a player isn't a "mover" — keeps pre-match (all ~0) quiet.
@@ -63,11 +63,6 @@ interface TeamRosterProps {
   /** Pre-lineup squad mode: render just the position sections with no "XI"
    * group header (it's the full squad, not a starting XI; bench is empty). */
   squad_mode?: boolean;
-  /** True once THIS fixture is live or finished. The MATCH delta + movers + heat
-   * only make sense then — ``change_last_match`` is the player's LATEST fixture,
-   * which equals THIS one only once it's under way. Before kickoff it would be
-   * the player's PREVIOUS match, so we hide those (keep TOTAL only). */
-  started?: boolean;
   /** Watched player ids — marks the watchlist star on each card. */
   watchlist?: Set<number>;
   on_open_player: (player_id: number) => void;
@@ -76,24 +71,22 @@ interface TeamRosterProps {
 // Comfortable reading measure for the single-team rows (centred by the caller).
 const ROSTER_MAX_WIDTH = 720;
 
-export function TeamRoster({ xi, bench, team_color, event_counts, subs, squad_mode, started = false, watchlist, on_open_player }: TeamRosterProps) {
+export function TeamRoster({ xi, bench, team_color, event_counts, subs, squad_mode, watchlist, on_open_player }: TeamRosterProps) {
   const by_pos = group_by_position(xi);
-  // Sort by this-match impact only once the match is under way (otherwise the
-  // "impact" would be the previous match) → keep position order before kickoff.
+  // ``match_delta`` (= change_this_match) is 0 before kickoff and for players who
+  // didn't feature, so sorting/movers/heat are correct by construction — no
+  // started/participation gating needed. Biggest mover of THIS match first.
   const sort_by_impact = (rows: MatchPlayer[]) =>
-    started ? rows.slice().sort((a, b) => Math.abs(match_delta(b)) - Math.abs(match_delta(a))) : rows;
+    rows.slice().sort((a, b) => Math.abs(match_delta(b)) - Math.abs(match_delta(a)));
   const bench_ordered = sort_by_impact(POSITION_GROUPS.flatMap(g => group_by_position(bench).get(g.key) ?? []));
 
-  // Market lens: the biggest movers OVER THIS MATCH — only once it's started,
-  // and only players who actually featured (starters + subs who came on/off).
-  // An unused bench player's change_last_match is their PREVIOUS match → exclude.
-  const movers = started
-    ? [...xi, ...bench.filter(p => subs.has(p.id))]
-        .map(p => ({ p, d: match_delta(p) }))
-        .filter(m => Math.abs(m.d) >= MOVER_MIN)
-        .sort((a, b) => Math.abs(b.d) - Math.abs(a.d))
-        .slice(0, 3)
-    : [];
+  // Market lens: the biggest movers WITHIN THIS MATCH (non-participants are 0 →
+  // filtered out by MOVER_MIN; pre-kickoff everyone is 0 → banner hidden).
+  const movers = [...xi, ...bench]
+    .map(p => ({ p, d: match_delta(p) }))
+    .filter(m => Math.abs(m.d) >= MOVER_MIN)
+    .sort((a, b) => Math.abs(b.d) - Math.abs(a.d))
+    .slice(0, 3);
 
   return (
     // gap 18 between the two top-level blocks (XI / Bench) so the starter↔sub
@@ -119,7 +112,6 @@ export function TeamRoster({ xi, bench, team_color, event_counts, subs, squad_mo
                   sub_info={subs.get(p.id)}
                   watched={watchlist?.has(p.id) ?? false}
                   delta={match_delta(p)}
-                  show_match={started}
                   on_open={on_open_player}
                 />
               ))}
@@ -142,7 +134,6 @@ export function TeamRoster({ xi, bench, team_color, event_counts, subs, squad_mo
               sub_info={subs.get(p.id)}
               watched={watchlist?.has(p.id) ?? false}
               delta={match_delta(p)}
-              show_match={started}
               on_open={on_open_player}
               bench
             />
@@ -257,7 +248,6 @@ function RichRosterCard({
   bench,
   watched,
   delta,
-  show_match,
   on_open,
 }: {
   p: MatchPlayer;
@@ -267,23 +257,16 @@ function RichRosterCard({
   bench?: boolean;
   /** In the viewer's watchlist → a small grey star next to the name. */
   watched?: boolean;
-  /** This-match price move (%) — drives a subtle green/red heat wash so hot
-   * players pop in the fixture's "market lens". */
+  /** This-match price move (%) = change_this_match. Drives the MATCH delta and
+   * the heat tint. 0 before kickoff and for players who didn't feature. */
   delta: number;
-  /** Show the MATCH delta + heat tint — only once the fixture is live/finished
-   * (before then ``delta`` is the previous match, which would mislead here). */
-  show_match: boolean;
   on_open: (player_id: number) => void;
 }) {
   const ref_player = players_api.get(p.id);
   const valuation = valuations_api.get_for_player(p.id);
   const price = valuation?.current_price ?? p.value;
-  // BOTH deltas come from the SAME valuation object (single source) so they can
-  // never desync — match% used to come from the match payload (a separate fetch
-  // refreshed on a different cadence), which made it disagree with total% mid-
-  // play while the price moved. Fall back to the match payload only if the
-  // valuation hasn't loaded. (COHERENCE-INVARIANT.)
-  const match_change = valuation?.change_last_match ?? p.change_last_match; // % over THIS match
+  // TOTAL comes from the valuation (single source, reconciles with the price);
+  // MATCH is ``delta`` = change_this_match (this fixture only), passed in.
   const total_change = valuation?.change_since_inception ?? 0; // % since tournament open
   const rating = p.rating;
   // Full name — the row is clean (no in-row chart) so there's room for it.
@@ -295,17 +278,12 @@ function RichRosterCard({
   // Guard the empty string ("" is falsy-but-not-nullish, so ?? wouldn't catch it).
   const tc = team_color && team_color.trim() ? team_color : "#8a8a8a";
   // "Market lens" heat: a subtle green/red wash scaled by this-match move (cap
-  // ±15% → max ~12% wash), so the biggest movers pop. Neutral below ~1%.
+  // ±15% → max ~12% wash), so the biggest movers pop. Neutral below ~1%. ``delta``
+  // (change_this_match) is already 0 pre-kickoff / for non-participants.
   const base_bg = held
     ? "color-mix(in srgb, var(--color-accent-blue) 8%, rgba(255,255,255,.022))"
     : "rgba(255,255,255,.025)";
-  // The MATCH delta is THIS match's move — only real for a player who actually
-  // featured: a starter (not bench) or a sub who came on / off (has sub_info).
-  // An unused bench player never played, so change_last_match would be their
-  // PREVIOUS match → show 0 instead (no movement in THIS match for them).
-  const played = !bench || sub_info != null;
-  const match_known = show_match && played;
-  const heat_mag = match_known ? Math.min(Math.abs(delta), 15) / 15 : 0;
+  const heat_mag = Math.min(Math.abs(delta), 15) / 15;
   const heat_bg =
     heat_mag < 0.06
       ? base_bg
@@ -447,10 +425,9 @@ function RichRosterCard({
           <TickValue value={price}>{fmt_eur_m(price)}</TickValue>
         </span>
         <div style={{ display: "flex", flexDirection: "column", gap: 2, alignItems: "flex-end" }}>
-          {/* MATCH = THIS fixture's move. 0% before kickoff AND for players who
-              didn't feature (unused subs) — NOT their previous match, which
-              ``change_last_match`` would otherwise leak here. */}
-          <DeltaStat label="match" value={match_known ? match_change : 0} inline />
+          {/* MATCH = this fixture's move (change_this_match): 0% before kickoff
+              and for players who didn't feature — never the player's other match. */}
+          <DeltaStat label="match" value={delta} inline />
           <DeltaStat label="total" value={total_change} dim inline />
         </div>
       </div>

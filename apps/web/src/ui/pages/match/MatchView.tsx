@@ -315,18 +315,18 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
           <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
             <TeamLink team_id={match.home_team_id} on_open_team={on_open_team} style={{ display: "block" }}>
               <div style={{ fontSize: 48, lineHeight: 1 }}>{home_team?.flag}</div>
-              <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8, letterSpacing: -0.2, overflowWrap: "break-word" }}>
+              <div style={{ fontSize: 18, fontWeight: 800, marginTop: 8, letterSpacing: -0.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {home_team?.name ?? match.home_team_id}
               </div>
             </TeamLink>
           </div>
-          <div className="mono" style={{ fontSize: 42, fontWeight: 900, letterSpacing: -1.5, paddingTop: 8, flexShrink: 0 }}>
+          <div className="mono" style={{ fontSize: 40, fontWeight: 900, letterSpacing: -1.5, paddingTop: 8, flexShrink: 0 }}>
             {match.home_score} : {match.away_score}
           </div>
           <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
             <TeamLink team_id={match.away_team_id} on_open_team={on_open_team} style={{ display: "block" }}>
               <div style={{ fontSize: 48, lineHeight: 1 }}>{away_team?.flag}</div>
-              <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8, letterSpacing: -0.2, overflowWrap: "break-word" }}>
+              <div style={{ fontSize: 18, fontWeight: 800, marginTop: 8, letterSpacing: -0.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {away_team?.name ?? match.away_team_id}
               </div>
             </TeamLink>
@@ -408,7 +408,6 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
                   event_counts={event_counts}
                   subs={subs}
                   squad_mode
-                  started={is_live || match.status === "finished"}
                   watchlist={watchlist}
                   on_open_player={on_open_player_profile}
                 />
@@ -467,7 +466,6 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
                     }
                     event_counts={event_counts}
                     subs={subs}
-                    started={is_live || match.status === "finished"}
                     watchlist={watchlist}
                     on_open_player={on_open_player_profile}
                   />
