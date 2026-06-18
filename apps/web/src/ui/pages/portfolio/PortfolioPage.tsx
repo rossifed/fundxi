@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { compute_period_return } from "@fundxi/core/domain/market/return";
 import { players_api } from "@fundxi/core/api/players_api";
 import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import { teams_api } from "@fundxi/core/api/teams_api";
@@ -148,8 +147,6 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
   const trades = useMemo(() => portfolio_api.list_trades(), [data_version]);
   const totals = useMemo(() => portfolio_api.get_totals(), [data_version]);
   const total_value = totals.total_value;
-  const pnl = totals.pnl;
-  const return_pct = totals.return_pct;
   // Allocation slices (by team / position / age) + win-rate: single source
   // shared with mobile (packages/core domain). The UI only maps these to
   // display items below — no calculation leaks here. See COHERENCE-INVARIANT.
@@ -184,10 +181,25 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
       cancelled = true;
     };
   }, [data_version]);
-  const period_return = useMemo(
-    () => compute_period_return(performance_data.map(p => p.v)),
-    [performance_data],
-  );
+  // Perf since the portfolio opened — the SINGLE truth shown everywhere: the
+  // live total value vs the opening value (first history snapshot = starting
+  // capital). Realized + unrealized (cash already holds realized P&L), and it
+  // moves with prices. Anchored to the SAME opening as the chart, so the Total-
+  // value card, the chart and the KPIs reconcile by construction. (null until
+  // the history loads.)
+  // open_value = value − pnl_vs_open at any point (the server anchors pnl_vs_open
+  // to the all-time open, never the window), so this is the true starting capital.
+  const inception_value =
+    performance_data.length > 0 ? performance_data[0]!.v - (performance_data[0]!.pnl ?? 0) : null;
+  const pnl_since_inception = inception_value != null ? total_value - inception_value : null;
+  const pnl_since_inception_pct =
+    inception_value != null && inception_value !== 0
+      ? ((total_value - inception_value) / inception_value) * 100
+      : null;
+  const inception_delta =
+    pnl_since_inception != null && pnl_since_inception_pct != null
+      ? `${fmt_eur_m_signed(pnl_since_inception)} (${fmt_signed_pct(pnl_since_inception_pct, 1)})`
+      : "—";
 
   // Earliest trade per player → opening date of the current position.
   // For longs that's the first buy; for shorts the first sell. We just
@@ -267,7 +279,6 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
   // ── Phone: native-style single-column flow (hero -> chart -> KPI grid ->
   // Positions/Trades/Stats/Allocation tabs). Mirrors apps/mobile portfolio. ──
   if (is_mobile) {
-    const pnl_color = color_for_sign(pnl);
     const top_position_pnl = holdings.length > 0 ? Math.max(...holdings.map(h => h.pnl)) : null;
     const tabs: { k: PositionsTab; label: string; count?: number }[] = [
       { k: "positions", label: "Positions", count: holdings.length },
@@ -284,17 +295,15 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {/* Hero — Total value + Buying power */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          <HeroCard label="Total value" value={fmt_eur_m(total_value)} delta={`${fmt_eur_m_signed(pnl)} (${fmt_signed_pct(return_pct, 1)})`} delta_color={pnl_color} note="Since open" />
+          <HeroCard label="Total value" value={fmt_eur_m(total_value)} delta={inception_delta} delta_color={color_for_sign(pnl_since_inception)} note="Since inception" />
           <HeroCard label="Buying power" value={fmt_eur_m(totals.buying_power)} delta={`${fmt_eur_m(totals.cash)} cash`} delta_color="rgba(255,255,255,.5)" note="Deployable now" />
         </div>
 
-        {/* Portfolio value chart */}
+        {/* Portfolio value chart — the perf % now lives in the Total value card
+            above (single source); the title alone here avoids a redundant %. */}
         <div style={mobile_card_style}>
           <div style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 14, fontWeight: 800 }}>Portfolio value</div>
-            <div className="mono" style={{ fontSize: 13, fontWeight: 700, color: color_for_sign(period_return), marginTop: 2 }}>
-              {fmt_signed_pct(period_return, 1)}
-            </div>
           </div>
           {performance_data.length > 0 ? (
             <PerformanceChart data={performance_data} height={176} format_axis={v => `€${v.toFixed(1)}M`} min_span_pct={5} show_axes show_last_value />
@@ -444,15 +453,15 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
         <KpiCard label="Positions" value={String(holdings.length)} title="Number of open positions" />
         <KpiCard
           label="P&L"
-          value={fmt_eur_m_signed(pnl)}
-          color={color_for_sign(pnl)}
-          title="Unrealised profit / loss on your open positions. Equals the sum of the P&L column in the positions table."
+          value={pnl_since_inception != null ? fmt_eur_m_signed(pnl_since_inception) : "—"}
+          color={color_for_sign(pnl_since_inception)}
+          title="Profit / loss since you opened the portfolio (realized + unrealized) — total value minus your starting capital. The single number shown in the Total value card and the chart."
         />
         <KpiCard
           label="Return"
-          value={`${fmt_signed_pct(return_pct, 1)}`}
-          color={color_for_sign(return_pct)}
-          title="P&L as a percentage of what you invested (P&L / Invested). Profit on your positions vs their cost — not the same as the Portfolio value chart, which tracks total value (incl. cash) over time."
+          value={pnl_since_inception_pct != null ? fmt_signed_pct(pnl_since_inception_pct, 1) : "—"}
+          color={color_for_sign(pnl_since_inception_pct)}
+          title="P&L since inception as a percentage of your starting capital. Same anchor as the Portfolio value chart, so they always agree."
         />
         <KpiCard label="Trades" value={String(trades.length)} title="Total number of trades executed" />
         <KpiCard
@@ -488,20 +497,13 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
               minWidth: 0,
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 800 }}>Portfolio value</div>
-                <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", marginTop: 2 }}>
-                  Total value (cash + positions) since portfolio open
-                </div>
+            {/* Perf % moved to the Total value / P&L+Return KPIs (single source);
+                the chart keeps just its title to avoid a redundant figure. */}
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 14, fontWeight: 800 }}>Portfolio value</div>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", marginTop: 2 }}>
+                Total value (cash + positions) since portfolio open
               </div>
-              <span
-                className="mono"
-                title="Change in total portfolio value since you opened the portfolio"
-                style={{ fontSize: 18, fontWeight: 800, color: color_for_sign(period_return) }}
-              >
-                {fmt_signed_pct(period_return, 1)}
-              </span>
             </div>
             <PerformanceChart
               data={performance_data}

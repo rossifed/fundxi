@@ -16,7 +16,6 @@ import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import { teams_api } from "@fundxi/core/api/teams_api";
 import { trades_api } from "@fundxi/core/api/trades_api";
 import { valuations_api } from "@fundxi/core/api/valuations_api";
-import { compute_period_return } from "@fundxi/core/domain/market/return";
 import { POSITION_ABBR, type Player } from "@fundxi/core/domain/player/player";
 import { compute_portfolio_breakdowns } from "@fundxi/core/domain/portfolio/portfolio_breakdown";
 import type { HoldingDetail } from "@fundxi/core/application/portfolio_service";
@@ -182,7 +181,16 @@ export default function PortfolioScreen() {
       cancelled = true;
     };
   }, [data_version, period]);
-  const period_return = useMemo(() => compute_period_return(perf.map(p => p.v)), [perf]);
+  // Perf since the portfolio opened — the SINGLE truth (Total value card + chart):
+  // live total value vs the all-time opening value. `pnl_vs_open` is always vs the
+  // all-time open (never the selected window), so open_value = v − pnl recovers the
+  // starting capital regardless of period. Realized + unrealized, live.
+  const inception_value = perf.length > 0 ? perf[0]!.v - (perf[0]!.pnl ?? 0) : null;
+  const pnl_since_inception = inception_value != null ? total_value - inception_value : null;
+  const pnl_since_inception_pct =
+    inception_value != null && inception_value !== 0
+      ? ((total_value - inception_value) / inception_value) * 100
+      : null;
 
   const sorted_holdings = useMemo(() => [...holdings].sort((a, b) => b.market_value - a.market_value), [holdings]);
   const sorted_trades = useMemo(() => [...trades].sort((a, b) => b.date.localeCompare(a.date)), [trades]);
@@ -194,7 +202,7 @@ export default function PortfolioScreen() {
   const with_color = <T extends { v: number }>(items: T[]) =>
     items.map((it, i) => ({ ...it, color: CHART_PALETTE[i] ?? CHART_PALETTE[CHART_PALETTE.length - 1] }));
 
-  const pnl_color = color_for_sign(totals.pnl);
+  const pnl_color = color_for_sign(pnl_since_inception);
 
   return (
     <View style={styles.screen}>
@@ -213,9 +221,11 @@ export default function PortfolioScreen() {
               {fmt_eur_m(total_value)}
             </Text>
             <Text style={[styles.hero_delta, { color: pnl_color }]} numberOfLines={1}>
-              {fmt_eur_m_signed(totals.pnl)} ({fmt_signed_pct(totals.return_pct, 1)})
+              {pnl_since_inception != null && pnl_since_inception_pct != null
+                ? `${fmt_eur_m_signed(pnl_since_inception)} (${fmt_signed_pct(pnl_since_inception_pct, 1)})`
+                : "—"}
             </Text>
-            <Text style={styles.hero_note}>Since open</Text>
+            <Text style={styles.hero_note}>Since inception</Text>
           </View>
           <View style={styles.hero_card}>
             <Text style={styles.hero_label}>Buying power</Text>
@@ -234,7 +244,6 @@ export default function PortfolioScreen() {
           <View style={styles.value_head}>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.value_title}>Portfolio value</Text>
-              <Text style={[styles.value_pct, { color: color_for_sign(period_return) }]}>{fmt_signed_pct(period_return, 1)}</Text>
             </View>
             <View style={styles.period_row}>
               {PERIODS.map(p => {
