@@ -390,17 +390,30 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
             <MobileEmpty>No open positions.</MobileEmpty>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <button
-                onClick={close_all}
-                style={{ alignSelf: "flex-end", padding: "8px 14px", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--color-negative) 30%, transparent)", background: "color-mix(in srgb, var(--color-negative) 8%, transparent)", color: "var(--color-negative)", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
-              >
-                Close all
-              </button>
+              {/* Per-position selection (parity with the desktop table): tick the
+                  positions to close, or close all. Same selection state + close
+                  use case as desktop — no duplicated logic. */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <button
+                  onClick={toggle_all}
+                  style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,.1)", background: "transparent", color: "rgba(255,255,255,.6)", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+                >
+                  {all_selected ? "Clear" : "Select all"}
+                </button>
+                <button
+                  onClick={some_selected ? close_selected : close_all}
+                  style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--color-negative) 30%, transparent)", background: "color-mix(in srgb, var(--color-negative) 8%, transparent)", color: "var(--color-negative)", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+                >
+                  {some_selected ? `Close selected (${selected.size})` : "Close all"}
+                </button>
+              </div>
               {sorted_holdings.map(h => (
                 <MobilePositionCard
                   key={h.player_id}
                   h={h}
                   opened={opened_by_player.get(h.player_id)}
+                  selected={selected.has(h.player_id)}
+                  on_toggle={() => toggle_one(h.player_id)}
                   on_open={() => on_open_player(h.player)}
                   on_open_team={on_open_team}
                 />
@@ -1300,18 +1313,54 @@ function StripCell({ label, value, sub, color }: { label: string; value: string;
 function MobilePositionCard({
   h,
   opened,
+  selected,
+  on_toggle,
   on_open,
   on_open_team,
 }: {
   h: HoldingDetail;
   opened?: string;
+  selected: boolean;
+  on_toggle: () => void;
   on_open: () => void;
   on_open_team?: (team_id: string) => void;
 }) {
   const team = teams_api.get(h.player.team_id);
   return (
-    <div onClick={on_open} style={{ ...mobile_card_style, padding: "12px", cursor: "pointer" }}>
+    <div
+      onClick={on_open}
+      style={{ ...mobile_card_style, padding: "12px", cursor: "pointer", ...(selected ? { border: "1px solid color-mix(in srgb, var(--color-accent-blue) 55%, transparent)" } : {}) }}
+    >
       <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+        {/* Per-position select check — stops propagation so it never opens the
+            player sheet. Same selection state the desktop table uses. */}
+        <button
+          type="button"
+          onClick={e => {
+            e.stopPropagation();
+            on_toggle();
+          }}
+          aria-label={selected ? "Deselect position" : "Select position to close"}
+          style={{
+            flexShrink: 0,
+            width: 20,
+            height: 20,
+            borderRadius: 5,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 0,
+            cursor: "pointer",
+            fontFamily: "inherit",
+            fontSize: 12,
+            fontWeight: 900,
+            border: `1px solid ${selected ? "var(--color-accent-blue)" : "rgba(255,255,255,.25)"}`,
+            background: selected ? "var(--color-accent-blue)" : "transparent",
+            color: "var(--color-bg)",
+          }}
+        >
+          {selected ? "✓" : ""}
+        </button>
         <PlayerAvatar player={h.player} team_color={team?.color ?? "#666"} size={36} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
