@@ -67,17 +67,21 @@ export function BasketDialog({ open, title, accent, players, initial_selected, o
   const [error, set_error] = useState<string | null>(null);
   const [outcome, set_outcome] = useState<BasketOutcome | null>(null);
 
-  // Reset on (re)open: default selection = the passed XI, else the whole squad.
+  // Reset ONLY when the dialog opens (false → true). It must NOT depend on
+  // `players`/`initial_selected` identity: those arrays are rebuilt on every
+  // parent re-render (live price ticks ~3s), and re-running this would wipe the
+  // user's manual de/selection mid-use. Player ids are stable, so the selection
+  // set stays valid across re-renders.
   useEffect(() => {
-    if (open) {
-      set_percentage(10);
-      set_weighting("equal");
-      set_selected(new Set(initial_selected ?? players.map(p => p.id)));
-      set_phase("form");
-      set_error(null);
-      set_outcome(null);
-    }
-  }, [open, initial_selected, players]);
+    if (!open) return;
+    set_percentage(10);
+    set_weighting("equal");
+    set_selected(new Set(initial_selected ?? players.map(p => p.id)));
+    set_phase("form");
+    set_error(null);
+    set_outcome(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset on open only
+  }, [open]);
 
   // Biggest market cap first — easiest to scan the stars at the top.
   const sorted_players = useMemo(() => [...players].sort((a, b) => b.value - a.value), [players]);

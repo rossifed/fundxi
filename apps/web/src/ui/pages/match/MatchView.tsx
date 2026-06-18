@@ -312,19 +312,23 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
           )}
         </div>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "center", gap: 24, marginTop: 14 }}>
-          <div style={{ flex: 1, textAlign: "right" }}>
+          <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
             <TeamLink team_id={match.home_team_id} on_open_team={on_open_team} style={{ display: "block" }}>
               <div style={{ fontSize: 48, lineHeight: 1 }}>{home_team?.flag}</div>
-              <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8, letterSpacing: -0.2 }}>{home_team?.name ?? match.home_team_id}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8, letterSpacing: -0.2, overflowWrap: "break-word" }}>
+                {home_team?.name ?? match.home_team_id}
+              </div>
             </TeamLink>
           </div>
           <div className="mono" style={{ fontSize: 42, fontWeight: 900, letterSpacing: -1.5, paddingTop: 8, flexShrink: 0 }}>
             {match.home_score} : {match.away_score}
           </div>
-          <div style={{ flex: 1, textAlign: "left" }}>
+          <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
             <TeamLink team_id={match.away_team_id} on_open_team={on_open_team} style={{ display: "block" }}>
               <div style={{ fontSize: 48, lineHeight: 1 }}>{away_team?.flag}</div>
-              <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8, letterSpacing: -0.2 }}>{away_team?.name ?? match.away_team_id}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8, letterSpacing: -0.2, overflowWrap: "break-word" }}>
+                {away_team?.name ?? match.away_team_id}
+              </div>
             </TeamLink>
           </div>
         </div>

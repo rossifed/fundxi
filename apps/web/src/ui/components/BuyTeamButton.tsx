@@ -7,7 +7,7 @@
 // loaded squad) and MatchView (per selected team, lazy-fetches). The dialog
 // widget and the trade logic live elsewhere and are never duplicated here.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { teams_api, type SquadPlayer } from "@fundxi/core/api/teams_api";
 import { valuations_api } from "@fundxi/core/api/valuations_api";
 import type { Position } from "@fundxi/core/domain/player/player";
@@ -52,13 +52,16 @@ export function BuyTeamButton({ team, on_open_player, squad }: BuyTeamButtonProp
   }, [team.id]);
 
   const squad_data = squad ?? fetched;
+  // Stable reference across re-renders (live ticks) — only rebuilt when the
+  // squad itself changes, so the open BasketDialog's list doesn't reflow.
+  const candidates = useMemo(() => (squad_data ? to_candidates(squad_data) : []), [squad_data]);
 
   return (
     <BasketButton
       label="+ Buy team"
       title={`Buy ${team.name}`}
       accent={team.color}
-      candidates={squad_data ? to_candidates(squad_data) : []}
+      candidates={candidates}
       on_open_player={on_open_player}
       title_text="Buy several players of this team in one go — pick a % of your cash, split equally or by total value across the squad. You review and deselect players before confirming."
       on_open={() => {

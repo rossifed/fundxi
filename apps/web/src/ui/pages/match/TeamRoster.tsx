@@ -84,10 +84,11 @@ export function TeamRoster({ xi, bench, team_color, event_counts, subs, squad_mo
     started ? rows.slice().sort((a, b) => Math.abs(match_delta(b)) - Math.abs(match_delta(a))) : rows;
   const bench_ordered = sort_by_impact(POSITION_GROUPS.flatMap(g => group_by_position(bench).get(g.key) ?? []));
 
-  // Market lens: the biggest movers OVER THIS MATCH — only once it's started
-  // (before kickoff, change_last_match is the previous match → would mislead).
+  // Market lens: the biggest movers OVER THIS MATCH — only once it's started,
+  // and only players who actually featured (starters + subs who came on/off).
+  // An unused bench player's change_last_match is their PREVIOUS match → exclude.
   const movers = started
-    ? [...xi, ...bench]
+    ? [...xi, ...bench.filter(p => subs.has(p.id))]
         .map(p => ({ p, d: match_delta(p) }))
         .filter(m => Math.abs(m.d) >= MOVER_MIN)
         .sort((a, b) => Math.abs(b.d) - Math.abs(a.d))
@@ -298,7 +299,13 @@ function RichRosterCard({
   const base_bg = held
     ? "color-mix(in srgb, var(--color-accent-blue) 8%, rgba(255,255,255,.022))"
     : "rgba(255,255,255,.025)";
-  const heat_mag = show_match ? Math.min(Math.abs(delta), 15) / 15 : 0;
+  // The MATCH delta is THIS match's move — only real for a player who actually
+  // featured: a starter (not bench) or a sub who came on / off (has sub_info).
+  // An unused bench player never played, so change_last_match would be their
+  // PREVIOUS match → show 0 instead (no movement in THIS match for them).
+  const played = !bench || sub_info != null;
+  const match_known = show_match && played;
+  const heat_mag = match_known ? Math.min(Math.abs(delta), 15) / 15 : 0;
   const heat_bg =
     heat_mag < 0.06
       ? base_bg
@@ -440,10 +447,10 @@ function RichRosterCard({
           <TickValue value={price}>{fmt_eur_m(price)}</TickValue>
         </span>
         <div style={{ display: "flex", flexDirection: "column", gap: 2, alignItems: "flex-end" }}>
-          {/* MATCH = THIS fixture's move. Before kickoff it's 0% (nothing has
-              happened in this match yet) — NOT the player's previous match, which
-              ``change_last_match`` would otherwise show here. */}
-          <DeltaStat label="match" value={show_match ? match_change : 0} inline />
+          {/* MATCH = THIS fixture's move. 0% before kickoff AND for players who
+              didn't feature (unused subs) — NOT their previous match, which
+              ``change_last_match`` would otherwise leak here. */}
+          <DeltaStat label="match" value={match_known ? match_change : 0} inline />
           <DeltaStat label="total" value={total_change} dim inline />
         </div>
       </div>
