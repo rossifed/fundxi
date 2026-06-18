@@ -311,32 +311,29 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
             <span style={{ fontSize: 11, color: "rgba(255,255,255,.3)", fontWeight: 600 }}>Full time</span>
           )}
         </div>
-        {/* Flags + score on one row; team NAMES on their own full-width row
-            below — so the name no longer shares horizontal space with the score
-            and gets the full half-width (fits long names like "Switzerland" /
-            "Bosnia and Herzegovina" on one line, no truncation). */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 18, marginTop: 14 }}>
-          <TeamLink team_id={match.home_team_id} on_open_team={on_open_team} style={{ flex: 1, textAlign: "right", fontSize: 44, lineHeight: 1 }}>
-            {home_team?.flag}
-          </TeamLink>
-          <div className="mono" style={{ fontSize: 40, fontWeight: 900, letterSpacing: -1.5, flexShrink: 0 }}>
+        {/* Same pattern as the Home LiveMatchCard (which displays names cleanly):
+            flag over name, flex:1 per side, NO nowrap/overflow/ellipsis — the
+            name just renders. Small-ish font so it fits on one line. */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 20, marginTop: 14 }}>
+          <div style={{ textAlign: "right", flex: 1, minWidth: 0 }}>
+            <TeamLink team_id={match.home_team_id} on_open_team={on_open_team} style={{ display: "block" }}>
+              <div style={{ fontSize: 40, lineHeight: 1 }}>{home_team?.flag}</div>
+              <div style={{ fontSize: 16, fontWeight: 800, marginTop: 6, letterSpacing: -0.2 }}>
+                {home_team?.name ?? match.home_team_id}
+              </div>
+            </TeamLink>
+          </div>
+          <div className="mono" style={{ fontSize: 36, fontWeight: 900, letterSpacing: -1.5, flexShrink: 0 }}>
             {match.home_score} : {match.away_score}
           </div>
-          <TeamLink team_id={match.away_team_id} on_open_team={on_open_team} style={{ flex: 1, textAlign: "left", fontSize: 44, lineHeight: 1 }}>
-            {away_team?.flag}
-          </TeamLink>
-        </div>
-        <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
-          <TeamLink team_id={match.home_team_id} on_open_team={on_open_team} style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: -0.3, textAlign: "right", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {home_team?.name ?? match.home_team_id}
-            </div>
-          </TeamLink>
-          <TeamLink team_id={match.away_team_id} on_open_team={on_open_team} style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: -0.3, textAlign: "left", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {away_team?.name ?? match.away_team_id}
-            </div>
-          </TeamLink>
+          <div style={{ textAlign: "left", flex: 1, minWidth: 0 }}>
+            <TeamLink team_id={match.away_team_id} on_open_team={on_open_team} style={{ display: "block" }}>
+              <div style={{ fontSize: 40, lineHeight: 1 }}>{away_team?.flag}</div>
+              <div style={{ fontSize: 16, fontWeight: 800, marginTop: 6, letterSpacing: -0.2 }}>
+                {away_team?.name ?? match.away_team_id}
+              </div>
+            </TeamLink>
+          </div>
         </div>
         {/* Scorers under each team's half, left-anchored — same split as the
             Home live card so it's clear who scored for whom. */}
