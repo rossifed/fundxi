@@ -34,7 +34,7 @@ interface TradeSheetProps {
 }
 
 export function TradeSheet({ visible, player, current_price, initial_kind, on_close, on_done }: TradeSheetProps) {
-  const [kind, set_kind] = useState<Kind>(initial_kind);
+  const [kind_state, set_kind] = useState<Kind>(initial_kind);
   const [mode, set_mode] = useState<TradeMode>("percentage");
   const [percentage, set_percentage] = useState(10);
   const [shares, set_shares] = useState(0);
@@ -51,6 +51,10 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
     set_kind(initial_kind);
   }
 
+  // Long-only: Sell is only meaningful with a position to unwind. No holding →
+  // disable Sell and force Buy. Mirrors the web TradeDialog.
+  const has_position = portfolio_api.holds(player.id);
+  const kind: Kind = has_position ? kind_state : "buy";
   const is_buy = kind === "buy";
   const accent = is_buy ? palette.actionBuy : palette.actionSell;
 
@@ -59,18 +63,15 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
     [player, kind, mode, percentage, shares, current_price],
   );
 
-  // Slider ceiling in shares mode, in DISPLAY shares — bounded by BOTH cash
-  // (buys) and the player-value cap (max_trade_display_shares). Mirrors the web
-  // TradeDialog. `shares` state is the displayed count; preview.shares is the
-  // canonical ownership fraction sent to the backend.
-  const safe_pps = preview.price_per_share > 0 ? preview.price_per_share : 1;
-  const max_affordable = is_buy ? preview.cash_before / safe_pps : Infinity;
-  // Buys also can't exceed the margin/leverage headroom (buying power).
-  const max_margin = is_buy ? preview.buying_power / safe_pps : Infinity;
-  const slider_max = Math.max(1, Math.floor(Math.min(max_affordable, max_margin, preview.max_trade_display_shares)));
+  // Sizing ceilings come from the preview (computed once in core, shared web +
+  // mobile): the shares-mode slider stops at max_trade_shares; the %-mode slider
+  // travel stops at max_percentage so the control can't promise more than is
+  // executable. We only keep the controlled-value clamp here.
+  const slider_max = Math.max(1, preview.max_trade_shares);
+  const pct_max = preview.max_percentage;
+  const eff_percentage = Math.min(percentage, pct_max);
 
-  const can_confirm =
-    phase === "form" && !preview.insufficient_capital && !preview.exceeds_margin && preview.shares > 0;
+  const can_confirm = phase === "form" && !preview.insufficient_capital && preview.shares > 0;
 
   // Switching unit carries the value over instead of resetting to 0.
   const switch_mode = (next: TradeMode) => {
@@ -136,18 +137,23 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
                 Value {fmt_eur_m(current_price)} · {fmt_eur_from_m(preview.price_per_share)}/share
               </Text>
 
-              {/* Buy / Sell */}
+              {/* Buy / Sell — long-only: Sell stays visible but disabled until
+                  you hold the player, so the view never shifts. */}
               <View style={styles.toggle_row}>
                 {(["buy", "sell"] as Kind[]).map(k => {
                   const on = kind === k;
+                  const disabled = k === "sell" && !has_position;
                   const c = k === "buy" ? palette.actionBuy : palette.actionSell;
                   return (
                     <Pressable
                       key={k}
-                      style={[styles.toggle, on && { backgroundColor: c, borderColor: c }]}
+                      disabled={disabled}
+                      style={[styles.toggle, on && { backgroundColor: c, borderColor: c }, disabled && { opacity: 0.35 }]}
                       onPress={() => set_kind(k)}
                     >
-                      <Text style={[styles.toggle_label, on && { color: "#04140a" }]}>{k === "buy" ? "Buy" : "Sell"}</Text>
+                      <Text style={[styles.toggle_label, on && { color: "#04140a" }]}>
+                        {k === "buy" ? "Buy" : "Sell"}
+                      </Text>
                     </Pressable>
                   );
                 })}
@@ -169,8 +175,10 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
 
               {/* Slider — fine control, with quick presets in percent mode */}
               <View style={styles.slider_head}>
-                <Text style={styles.slider_caption}>{mode === "percentage" ? "Amount" : "Shares"}</Text>
-                <Text style={styles.slider_value}>{mode === "percentage" ? `${percentage}%` : fmt_shares(shares)}</Text>
+                <Text style={styles.slider_caption}>
+                  {mode === "percentage" ? (is_buy ? "% of cash" : "% of position") : "Shares"}
+                </Text>
+                <Text style={styles.slider_value}>{mode === "percentage" ? `${eff_percentage}%` : fmt_shares(shares)}</Text>
               </View>
               {mode === "percentage" ? (
                 <Slider
@@ -178,8 +186,8 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
                   minimumValue={1}
                   maximumValue={100}
                   step={1}
-                  value={percentage}
-                  onValueChange={set_percentage}
+                  value={eff_percentage}
+                  onValueChange={v => set_percentage(Math.min(Math.round(v), pct_max))}
                   minimumTrackTintColor={accent}
                   maximumTrackTintColor="rgba(255,255,255,0.15)"
                   thumbTintColor={accent}
@@ -200,14 +208,30 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
               {mode === "percentage" && (
                 <View style={styles.pct_row}>
                   {PCT_PRESETS.map(p => {
-                    const on = percentage === p;
+                    // "Max" lands on the real ceiling; a fixed preset above it is
+                    // disabled (it would do nothing).
+                    const target = p === 100 ? pct_max : p;
+                    const unavailable = p !== 100 && p > pct_max;
+                    const on = eff_percentage === target;
                     return (
-                      <Pressable key={p} style={[styles.pct, on && styles.pct_on]} onPress={() => set_percentage(p)}>
+                      <Pressable
+                        key={p}
+                        disabled={unavailable}
+                        style={[styles.pct, on && styles.pct_on, unavailable && { opacity: 0.35 }]}
+                        onPress={() => set_percentage(target)}
+                      >
                         <Text style={[styles.pct_label, on && styles.pct_label_on]}>{p === 100 ? "Max" : `${p}%`}</Text>
                       </Pressable>
                     );
                   })}
                 </View>
+              )}
+              {/* Cap explainer — why the cash-% slider stops before 100%. */}
+              {mode === "percentage" && is_buy && pct_max < 100 && (
+                <Text style={styles.hint}>
+                  Stops at {pct_max}% of your cash — that already buys the whole {player.name}. A position can&apos;t
+                  exceed 100% of a player.
+                </Text>
               )}
 
               {/* Preview */}
@@ -229,18 +253,13 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
 
               {preview.capped && (
                 <Text style={styles.hint}>
-                  Capped at the whole player: a position can't exceed 100% of {player.name} ({fmt_eur_m(current_price)} ={" "}
-                  {fmt_shares(slider_max)} shares). This is the largest {is_buy ? "position" : "short"} you can take.
+                  {is_buy
+                    ? `Capped at the whole player: a position can't exceed 100% of ${player.name} (${fmt_eur_m(current_price)} = ${fmt_shares(slider_max)} shares).`
+                    : `Capped at your holding: you can sell at most the ${fmt_shares(slider_max)} shares you own.`}
                 </Text>
               )}
               {preview.insufficient_capital && (
                 <Text style={styles.error}>Insufficient cash — short by {fmt_eur_m(preview.shortfall)}.</Text>
-              )}
-              {preview.exceeds_margin && !preview.insufficient_capital && (
-                <Text style={styles.error}>
-                  Exceeds buying power — adds more exposure than {fmt_eur_m(preview.buying_power)} allows. Reduce the
-                  size.
-                </Text>
               )}
               {error && <Text style={styles.error}>{error}</Text>}
 

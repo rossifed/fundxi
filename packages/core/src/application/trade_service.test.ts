@@ -48,9 +48,7 @@ describe("simulate_trade — buy by shares", () => {
     expect(p.cash_before).toBe(100);
     expect(p.cash_after).toBe(97);
   });
-  it("is not a short, has no realized P&L, is affordable and not capped", () => {
-    expect(p.is_short).toBe(false);
-    expect(p.short_quantity).toBe(0);
+  it("has no realized P&L, is affordable and not capped", () => {
     expect(p.realized_pnl).toBe(0);
     expect(p.insufficient_capital).toBe(false);
     expect(p.capped).toBe(false);
@@ -60,30 +58,31 @@ describe("simulate_trade — buy by shares", () => {
   });
 });
 
-describe("simulate_trade — sell beyond the holding (opens a short)", () => {
+describe("simulate_trade — sell beyond the holding is capped (long-only, no short)", () => {
   let p: TradePreview;
   beforeEach(() => {
-    // sell 8 displayed shares = 0.8; held 0.5 → 0.3 of that opens a short.
+    // sell 8 displayed shares = 0.8 requested, but only 0.5 is held → trimmed to
+    // the whole holding (long-only: a sell can never open a short).
     p = simulate_trade({ player, kind: "sell", mode: "shares", shares: 8, current_price: 10 });
   });
 
-  it("flags the short leg (0.8 sold vs 0.5 held)", () => {
-    expect(p.is_short).toBe(true);
-    expect(p.short_quantity).toBeCloseTo(0.3, 12);
-    expect(p.shares_after).toBeCloseTo(-0.3, 12);
-    expect(p.pct_of_player_after).toBeCloseTo(-30, 9);
+  it("trims the sell to the held long — never a short", () => {
+    expect(p.shares).toBeCloseTo(0.5, 12); // capped to the holding
+    expect(p.shares_after).toBeCloseTo(0, 12); // position fully closed
+    expect(p.pct_of_player_after).toBeCloseTo(0, 9);
+    expect(p.capped).toBe(true);
   });
-  it("credits cash on a sell", () => {
-    expect(p.cash_after).toBe(108); // 100 + 0.8×10
+  it("credits cash for the trimmed sell only", () => {
+    expect(p.cash_after).toBe(105); // 100 + 0.5×10 (not 0.8×10)
   });
-  it("realizes P&L only on the closed (held) leg", () => {
-    // closing 0.5 held at €10 vs €8 cost = +1. The 0.3 short leg adds none.
+  it("realizes P&L on the closed holding", () => {
+    // closing 0.5 held at €10 vs €8 cost = +1.
     expect(p.realized_pnl).toBeCloseTo(1, 12);
   });
 });
 
 describe("simulate_trade — percentage mode", () => {
-  it("uses the percentage branch (10% of €104 on a €100M player → 0.1, €10M)", () => {
+  it("uses the percentage branch (10% of €100 cash on a €100M player → 0.1, €10M)", () => {
     const p = simulate_trade({ player, kind: "buy", mode: "percentage", percentage: 10, current_price: 100 });
     // A swapped branch would read input.shares (undefined → 0) and yield 0.
     expect(p.shares).toBeCloseTo(0.1, 12);
@@ -97,7 +96,7 @@ describe("simulate_trade — percentage mode", () => {
 
 describe("simulate_trade — the player-value cap bites", () => {
   it("a large % on a cheap player is clamped to 100% of the player", () => {
-    // 50% of €104 = €52M budget on a €10M player → would be 5.2× the player.
+    // 50% of €100 cash = €50M budget on a €10M player → would be 5× the player.
     // Held 0.5 already, so only 0.5 headroom remains → capped to the whole player.
     const p = simulate_trade({ player, kind: "buy", mode: "percentage", percentage: 50, current_price: 10 });
     expect(p.capped).toBe(true);
@@ -121,11 +120,11 @@ describe("simulate_trade — insufficient capital on a buy", () => {
 });
 
 describe("simulate_trade — no holding for the player", () => {
-  it("defaults held_shares/avg_buy to 0 and reports no realized P&L on a sell", () => {
+  it("a sell with nothing held is trimmed to zero (long-only: no short)", () => {
     const other: Player = { ...player, id: 999 };
     const p = simulate_trade({ player: other, kind: "sell", mode: "shares", shares: 2, current_price: 10 });
     expect(p.held_shares).toBe(0);
-    expect(p.short_quantity).toBeCloseTo(0.2, 12); // entire sell is short
+    expect(p.shares).toBe(0); // nothing to sell, no short opened
     expect(p.realized_pnl).toBe(0);
   });
 });

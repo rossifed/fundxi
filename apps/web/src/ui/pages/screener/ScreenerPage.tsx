@@ -4,6 +4,8 @@ import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import { teams_api } from "@fundxi/core/api/teams_api";
 import type { Player, Position } from "@fundxi/core/domain/player/player";
 import { POSITION_LABEL } from "@fundxi/core/domain/player/player";
+import { BasketButton } from "@/ui/components/BasketButton";
+import type { BasketCandidate } from "@/ui/components/BasketDialog";
 import { PlayerAvatar } from "@/ui/components/PlayerAvatar";
 import { PositionBadge } from "@/ui/components/PositionBadge";
 import { Spark } from "@/ui/components/Spark";
@@ -120,14 +122,19 @@ const POS_W = 60;
 const VALUE_W = 80;
 const ROW_GAP = 8;
 
+// Max filter-result size for the one-shot "Buy" / "Watch" actions. Above this,
+// the buttons stay visible but disabled (you must narrow the filter first).
+const MAX_BULK = 20;
+
 interface ScreenerPageProps {
   on_open_player: (player: Player) => void;
   on_open_team?: (team_id: string) => void;
   watchlist?: Set<number>;
   toggle_watch?: (id: number) => void;
+  add_watch_many?: (ids: number[]) => void;
 }
 
-export function ScreenerPage({ on_open_player, on_open_team, watchlist, toggle_watch }: ScreenerPageProps) {
+export function ScreenerPage({ on_open_player, on_open_team, watchlist, toggle_watch, add_watch_many }: ScreenerPageProps) {
   const { is_mobile } = useViewport();
   const [position_filters, set_position_filters] = useState<Set<Position>>(new Set());
   const [team_filters, set_team_filters] = useState<Set<string>>(new Set());
@@ -192,6 +199,28 @@ export function ScreenerPage({ on_open_player, on_open_team, watchlist, toggle_w
       ),
     [all_entries, position_filters, team_filters, price_range, perf_range, age_range, held_only, watch_only, search, sort_key, sort_dir, held_ids, watchlist],
   );
+
+  // One-shot actions on the filter RESULT — enabled only once it's narrowed to
+  // MAX_BULK or fewer (and non-empty); otherwise the buttons stay visible but
+  // disabled. Candidates reuse the shared BasketDialog shape (real screener data,
+  // no invention) so the same widget powers team and screener baskets.
+  const bulk_enabled = filtered.length > 0 && filtered.length <= MAX_BULK;
+  const bulk_candidates: BasketCandidate[] = useMemo(
+    () =>
+      filtered.map(e => ({
+        id: e.id,
+        name: e.name,
+        position: e.position as Position,
+        jersey_number: e.jersey_number,
+        image_path: e.image_path,
+        value: e.current_price,
+        appearances: e.appearances,
+        minutes_played: e.minutes_played,
+        change_since_inception: e.since_start_pct ?? 0,
+      })),
+    [filtered],
+  );
+  const watch_filtered = () => add_watch_many?.(filtered.map(e => e.id));
 
   const active_count =
     position_filters.size +
@@ -376,6 +405,60 @@ export function ScreenerPage({ on_open_player, on_open_team, watchlist, toggle_w
           ))}
         </div>
       )}
+
+      {/* One-shot actions on the filter result — buy or watch all of them at
+          once. Enabled only once the filter narrows to MAX_BULK or fewer; above
+          that the buttons stay visible but disabled. */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,.55)" }}>
+          {filtered.length} {filtered.length === 1 ? "player" : "players"}
+          {!bulk_enabled && filtered.length > MAX_BULK && (
+            <span style={{ color: "rgba(255,255,255,.35)", fontWeight: 600 }}>
+              {" "}· filter to {MAX_BULK} or fewer to buy / watch all
+            </span>
+          )}
+        </span>
+        <div style={{ display: "flex", gap: 8 }}>
+          <BasketButton
+            label={`Buy ${filtered.length}`}
+            title={`Buy ${filtered.length} players`}
+            accent={color.accentBlue}
+            candidates={bulk_candidates}
+            on_open_player={id => {
+              const p = players_api.get(id);
+              if (p) on_open_player(p);
+            }}
+            disabled={!bulk_enabled}
+            disabled_title={`Narrow the filter to ${MAX_BULK} players or fewer to buy them all at once`}
+            title_text="Buy every player in this filter result in one go"
+          />
+          <button
+            type="button"
+            onClick={watch_filtered}
+            disabled={!bulk_enabled}
+            title={
+              bulk_enabled
+                ? "Add every player in this filter result to your watchlist"
+                : `Narrow the filter to ${MAX_BULK} players or fewer to watch them all`
+            }
+            style={{
+              background: color.accentBlueSoft,
+              border: "1px solid rgba(47,107,255,.6)",
+              borderRadius: 9,
+              padding: "9px 16px",
+              fontSize: 13,
+              fontWeight: 800,
+              color: "#fff",
+              fontFamily: "inherit",
+              whiteSpace: "nowrap",
+              opacity: bulk_enabled ? 1 : 0.4,
+              cursor: bulk_enabled ? "pointer" : "not-allowed",
+            }}
+          >
+            ★ Watch {filtered.length}
+          </button>
+        </div>
+      </div>
 
       {/* Filter sheet (centred modal on desktop, bottom-sheet on phone) —
           sliders + chips + country search, mirroring the native filter. */}

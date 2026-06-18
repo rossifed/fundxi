@@ -10,6 +10,7 @@
 // desktop, bottom-sheet on phone).
 
 import { useEffect, useState } from "react";
+import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import { trades_api } from "@fundxi/core/api/trades_api";
 import { valuations_api } from "@fundxi/core/api/valuations_api";
 import { simulate_trade, type TradeMode } from "@fundxi/core/application/trade_service";
@@ -45,7 +46,7 @@ export function TradeDialog({
   const valuation = valuations_api.get_for_player(player.id);
   const current_price = current_price_override ?? valuation?.current_price ?? 0;
 
-  const [kind, set_kind] = useState<Kind>(initial_kind);
+  const [kind_state, set_kind] = useState<Kind>(initial_kind);
   const [mode, set_mode] = useState<TradeMode>("percentage");
   const [percentage, set_percentage] = useState(10);
   const [shares, set_shares] = useState(0);
@@ -69,23 +70,24 @@ export function TradeDialog({
 
   if (!open) return null;
 
+  // Long-only: selling is only meaningful when there's a position to unwind.
+  // With no holding, Sell can do nothing, so we disable it and force Buy.
+  const has_position = portfolio_api.holds(player.id);
+  const kind: Kind = has_position ? kind_state : "buy";
   const is_buy = kind === "buy";
   const accent = is_buy ? "var(--color-action-buy)" : "var(--color-action-sell)";
 
   const preview = simulate_trade({ player, kind, mode, percentage, shares, current_price });
 
-  // Slider ceiling in shares mode, in DISPLAY shares — bounded by cash (buys),
-  // margin headroom (buys), and the player-value cap (±100%).
-  const safe_pps = preview.price_per_share > 0 ? preview.price_per_share : 1;
-  const max_affordable = is_buy ? preview.cash_before / safe_pps : Infinity;
-  const max_margin = is_buy ? preview.buying_power / safe_pps : Infinity;
-  const slider_max = Math.max(
-    1,
-    Math.floor(Math.min(max_affordable, max_margin, preview.max_trade_display_shares)),
-  );
+  // Sizing ceilings come from the preview (computed once in core, shared web +
+  // mobile): the shares-mode slider stops at max_trade_shares; the %-mode slider
+  // travel stops at max_percentage so the control can't promise more than is
+  // executable. We only keep the controlled-value clamp here.
+  const slider_max = Math.max(1, preview.max_trade_shares);
+  const pct_max = preview.max_percentage;
+  const eff_percentage = Math.min(percentage, pct_max);
 
-  const can_confirm =
-    phase === "form" && !preview.insufficient_capital && !preview.exceeds_margin && preview.shares > 0;
+  const can_confirm = phase === "form" && !preview.insufficient_capital && preview.shares > 0;
 
   // Switching unit carries the value over instead of resetting to 0.
   const switch_mode = (next: TradeMode) => {
@@ -167,15 +169,19 @@ export function TradeDialog({
           </div>
         </div>
 
-        {/* Buy / Sell */}
+        {/* Buy / Sell — long-only: Sell stays visible but is disabled until you
+            hold the player, so the view never shifts. */}
         <div style={{ display: "flex", gap: 8 }}>
           {(["buy", "sell"] as Kind[]).map(k => {
             const on = kind === k;
+            const disabled = k === "sell" && !has_position;
             const c = k === "buy" ? "var(--color-action-buy)" : "var(--color-action-sell)";
             return (
               <button
                 key={k}
-                onClick={() => set_kind(k)}
+                onClick={() => !disabled && set_kind(k)}
+                disabled={disabled}
+                title={disabled ? "You don't hold this player yet" : undefined}
                 style={{
                   flex: 1,
                   padding: "11px 0",
@@ -185,7 +191,8 @@ export function TradeDialog({
                   color: on ? "var(--color-bg)" : "#fff",
                   fontSize: 14,
                   fontWeight: 800,
-                  cursor: "pointer",
+                  cursor: disabled ? "not-allowed" : "pointer",
+                  opacity: disabled ? 0.35 : 1,
                   fontFamily: "inherit",
                 }}
               >
@@ -210,10 +217,10 @@ export function TradeDialog({
         {/* Slider — fine control, with quick presets in percent mode */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
           <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,.4)" }}>
-            {mode === "percentage" ? "Amount" : "Shares"}
+            {mode === "percentage" ? (is_buy ? "% of cash" : "% of position") : "Shares"}
           </span>
           <span style={{ fontSize: 16, fontWeight: 800 }}>
-            {mode === "percentage" ? `${percentage}%` : fmt_shares(shares)}
+            {mode === "percentage" ? `${eff_percentage}%` : fmt_shares(shares)}
           </span>
         </div>
         {mode === "percentage" ? (
@@ -222,8 +229,8 @@ export function TradeDialog({
             min={1}
             max={100}
             step={1}
-            value={percentage}
-            onChange={e => set_percentage(parseInt(e.target.value))}
+            value={eff_percentage}
+            onChange={e => set_percentage(Math.min(parseInt(e.target.value), pct_max))}
             style={{ width: "100%", accentColor: accent }}
           />
         ) : (
@@ -240,13 +247,29 @@ export function TradeDialog({
         {mode === "percentage" && (
           <div style={{ display: "flex", gap: 8 }}>
             {PCT_PRESETS.map(p => {
-              const on = percentage === p;
+              // "Max" always lands on the real ceiling; a fixed preset above the
+              // ceiling is disabled (it would do nothing).
+              const target = p === 100 ? pct_max : p;
+              const unavailable = p !== 100 && p > pct_max;
+              const on = eff_percentage === target;
               return (
-                <button key={p} onClick={() => set_percentage(p)} style={mode_btn_style(on)}>
+                <button
+                  key={p}
+                  disabled={unavailable}
+                  onClick={() => set_percentage(target)}
+                  style={{ ...mode_btn_style(on), opacity: unavailable ? 0.35 : 1, cursor: unavailable ? "not-allowed" : "pointer" }}
+                >
                   {p === 100 ? "Max" : `${p}%`}
                 </button>
               );
             })}
+          </div>
+        )}
+        {/* Cap explainer — why the cash-% slider stops before 100%. */}
+        {mode === "percentage" && is_buy && pct_max < 100 && (
+          <div style={hint_style}>
+            Stops at {pct_max}% of your cash — that already buys the whole {player.name}. A position can't exceed 100% of a
+            player.
           </div>
         )}
 
@@ -269,17 +292,13 @@ export function TradeDialog({
 
         {preview.capped && (
           <div style={hint_style}>
-            Capped at the whole player: a position can't exceed 100% of {player.name} ({fmt_eur_m(current_price)} ={" "}
-            {fmt_shares(slider_max)} shares). This is the largest {is_buy ? "position" : "short"} you can take.
+            {is_buy
+              ? `Capped at the whole player: a position can't exceed 100% of ${player.name} (${fmt_eur_m(current_price)} = ${fmt_shares(slider_max)} shares).`
+              : `Capped at your holding: you can sell at most the ${fmt_shares(slider_max)} shares you own.`}
           </div>
         )}
         {preview.insufficient_capital && (
           <div style={error_style}>Insufficient cash — short by {fmt_eur_m(preview.shortfall)}.</div>
-        )}
-        {preview.exceeds_margin && !preview.insufficient_capital && (
-          <div style={error_style}>
-            Exceeds buying power — adds more exposure than {fmt_eur_m(preview.buying_power)} allows. Reduce the size.
-          </div>
         )}
         {error && <div style={error_style}>{error}</div>}
       </div>

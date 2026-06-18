@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { matches_api } from "@fundxi/core/api/matches_api";
 import { players_api } from "@fundxi/core/api/players_api";
 import { portfolio_api } from "@fundxi/core/api/portfolio_api";
@@ -19,6 +19,7 @@ import { MatchView } from "@/ui/pages/match/MatchView";
 import { TeamPage } from "@/ui/pages/team/TeamPage";
 import { PlayerSheet } from "@/ui/pages/player/PlayerSheet";
 import { useViewport } from "@/ui/hooks/use_viewport";
+import { useAuth } from "@/ui/shell/AuthContext";
 import { Header } from "./Header";
 import { LiveBar } from "./LiveBar";
 import { PortfolioBar } from "./PortfolioBar";
@@ -28,10 +29,33 @@ import { RightRail } from "./RightRail";
 
 type TabId = "home" | "screener" | "fixtures" | "portfolio" | "leagues" | "profile";
 
-// The watchlist starts EMPTY. It is session-only client state today (no
-// backend persistence yet); seeding it with hardcoded player ids was a
-// mock-prototype leftover that mapped to arbitrary real players on the live
-// DB. Users add their own; per-user persistence is a future backend feature.
+// The watchlist is the user's own picks (never seeded with mock ids). Persisted
+// CLIENT-SIDE in localStorage, keyed per user, so it survives a refresh — same
+// pattern as the Fixtures view-mode preference. This is a prototype store: it is
+// per-browser, not cross-device, and NOT the server source of truth. A backend
+// watchlist (per account, cross-device) is the future proper home.
+const watchlist_key = (user_id: number): string => `fundxi:watchlist:${user_id}`;
+
+function read_watchlist(user_id: number): Set<number> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.localStorage.getItem(watchlist_key(user_id));
+    const ids: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(ids) ? new Set(ids.filter((n): n is number => typeof n === "number")) : new Set();
+  } catch {
+    return new Set(); // corrupt / disabled storage — start empty, never crash
+  }
+}
+
+function write_watchlist(user_id: number, ids: Set<number>): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(watchlist_key(user_id), JSON.stringify([...ids]));
+  } catch {
+    /* quota exceeded / storage disabled — non-fatal, stays in memory for the session */
+  }
+}
+
 const APP_MAX_WIDTH = 1800;
 
 // Pages where the right rail adds value (live ticker, watchlist, movers).
@@ -61,6 +85,7 @@ function read_reset_token(): string | null {
 
 export function App() {
   const { is_mobile, rail_ok } = useViewport();
+  const { user } = useAuth();
   const [initial_join_code] = useState<string | null>(consume_join_code);
   const [reset_token, set_reset_token] = useState<string | null>(read_reset_token);
   const [show_login, set_show_login] = useState(false);
@@ -70,12 +95,31 @@ export function App() {
   const [selected_team, set_selected_team] = useState<Team | null>(null);
   const [watchlist, set_watchlist] = useState<Set<number>>(() => new Set());
 
+  // Load the signed-in user's saved watchlist (and clear it on logout). Client
+  // persistence only — see the note on watchlist_key above.
+  useEffect(() => {
+    set_watchlist(user ? read_watchlist(user.id) : new Set());
+  }, [user]);
+
   const toggle_watch = (id: number) => {
-    const next = new Set(watchlist);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    set_watchlist(next);
+    set_watchlist(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      if (user) write_watchlist(user.id, next);
+      return next;
+    });
   };
+
+  // Bulk add (e.g. a screener result) — functional update so a single call adds
+  // every id at once (a per-id loop over toggle_watch would lose all but the last).
+  const add_watch_many = (ids: number[]) =>
+    set_watchlist(prev => {
+      const next = new Set(prev);
+      ids.forEach(id => next.add(id));
+      if (user) write_watchlist(user.id, next);
+      return next;
+    });
 
   const navigate = (id: string) => {
     set_tab(id as TabId);
@@ -174,6 +218,7 @@ export function App() {
         on_open_team={open_team}
         watchlist={watchlist}
         toggle_watch={toggle_watch}
+        add_watch_many={add_watch_many}
       />
     );
   } else if (tab === "fixtures") {

@@ -14,18 +14,32 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
+  buy_quantity_from_cash_pct,
   cap_trade_fraction,
   compute_buy_shortfall,
   compute_cash_after,
-  compute_quantity_from_pct,
   compute_quantity_from_shares,
   compute_realized_pnl,
   compute_shares_after,
-  compute_short_quantity,
   fraction_from_display_shares,
+  sell_quantity_from_position_pct,
   to_display_shares,
   trade_headroom_fraction,
 } from "./trade_calc";
+
+// Size by % the way the app does, dispatching on side: buy = % of cash,
+// sell = % of the held position.
+const quantity_from_pct = (
+  cash: number,
+  pct: number,
+  value: number,
+  n: number,
+  kind: "buy" | "sell",
+  held: number,
+) =>
+  kind === "buy"
+    ? buy_quantity_from_cash_pct(cash, pct, value, n, held)
+    : sell_quantity_from_position_pct(held, pct, value, n);
 
 const f_amount = fc.double({ min: 0, max: 100_000, noNaN: true, noDefaultInfinity: true });
 const f_value = fc.double({ min: 0.01, max: 300, noNaN: true, noDefaultInfinity: true });
@@ -44,7 +58,7 @@ describe("trade_calc — property-based invariants", () => {
     fc.assert(
       fc.property(f_amount, f_pct, f_value, f_n, f_kind, f_frac, (pv, pct, value, n, kind, raw) => {
         const held = held_on_grid(raw < 0.5 ? raw * 2 - 1 : raw, n); // span shorts and longs
-        const { amount, shares } = compute_quantity_from_pct(pv, pct, value, n, kind, held);
+        const { amount, shares } = quantity_from_pct(pv, pct, value, n, kind, held);
         expect(amount).toBe(Math.round(shares * value * 100) / 100);
       }),
     );
@@ -54,7 +68,7 @@ describe("trade_calc — property-based invariants", () => {
     fc.assert(
       fc.property(f_amount, f_pct, f_value, f_n, f_kind, f_frac, (pv, pct, value, n, kind, raw) => {
         const held = held_on_grid(raw * 2 - 1, n);
-        const { shares } = compute_quantity_from_pct(pv, pct, value, n, kind, held);
+        const { shares } = quantity_from_pct(pv, pct, value, n, kind, held);
         expect(is_quantum_multiple(shares, n)).toBe(true);
       }),
     );
@@ -64,7 +78,7 @@ describe("trade_calc — property-based invariants", () => {
     fc.assert(
       fc.property(f_amount, f_pct, f_value, f_n, f_kind, f_frac, (pv, pct, value, n, kind, raw) => {
         const held = held_on_grid(raw * 2 - 1, n);
-        const { shares } = compute_quantity_from_pct(pv, pct, value, n, kind, held);
+        const { shares } = quantity_from_pct(pv, pct, value, n, kind, held);
         expect(shares).toBeGreaterThanOrEqual(0);
         const after = kind === "buy" ? held + shares : held - shares;
         expect(Math.abs(after)).toBeLessThanOrEqual(1 + 1e-9);
@@ -76,7 +90,7 @@ describe("trade_calc — property-based invariants", () => {
     fc.assert(
       fc.property(f_amount, f_pct, f_value, f_n, f_frac, (pv, pct, value, n, raw) => {
         const held = held_on_grid(raw, n); // long side, so the budget — not just the cap — binds
-        const { shares } = compute_quantity_from_pct(pv, pct, value, n, "buy", held);
+        const { shares } = quantity_from_pct(pv, pct, value, n, "buy", held);
         expect(shares * value).toBeLessThanOrEqual((pv * pct) / 100 + 1e-9);
       }),
     );
@@ -151,15 +165,6 @@ describe("trade_calc — property-based invariants", () => {
     );
   });
 
-  it("compute_short_quantity: never negative; > 0 only on a sell that exceeds held", () => {
-    fc.assert(
-      fc.property(f_kind, f_frac, f_frac, (kind, req, held) => {
-        const sq = compute_short_quantity(kind, req, held);
-        expect(sq).toBeGreaterThanOrEqual(0);
-        if (kind === "buy" || req <= held) expect(sq).toBe(0);
-      }),
-    );
-  });
 
   it("compute_buy_shortfall: insufficient iff amount > cash; sells never report a shortfall", () => {
     fc.assert(

@@ -78,6 +78,9 @@ export const PlayerSheet = forwardRef<PlayerSheetHandle, object>(function Player
   };
 
   const current_price = (player ? valuations_api.get_for_player(player.id)?.current_price : 0) ?? 0;
+  // Long-only: Sell only when there's a position to unwind. A re-render after an
+  // order (trade_version bump → PlayerDetail) re-reads this so the footer flips.
+  const has_position = player ? portfolio_api.holds(player.id) : false;
 
   const gate_trade = (k: "buy" | "sell") => {
     if (auth_status === "authenticated") {
@@ -101,7 +104,12 @@ export const PlayerSheet = forwardRef<PlayerSheetHandle, object>(function Player
         <Pressable style={[styles.trade_btn, { backgroundColor: palette.actionBuy }]} onPress={() => gate_trade("buy")}>
           <Text style={styles.trade_label}>Buy</Text>
         </Pressable>
-        <Pressable style={[styles.trade_btn, { backgroundColor: palette.actionSell }]} onPress={() => gate_trade("sell")}>
+        {/* Long-only: Sell stays visible but disabled until you hold the player. */}
+        <Pressable
+          disabled={!has_position}
+          style={[styles.trade_btn, { backgroundColor: palette.actionSell }, !has_position && { opacity: 0.35 }]}
+          onPress={() => gate_trade("sell")}
+        >
           <Text style={styles.trade_label}>Sell</Text>
         </Pressable>
       </View>
@@ -362,7 +370,7 @@ function ValuationRibbon({
   // P&L from the single core source (same as the Your-position card + web), so
   // the header never disagrees with the card or the holdings list.
   const metrics = useMemo(() => portfolio_api.get_holding_metrics(player_id), [player_id, refresh]);
-  const pnl = metrics && metrics.shares !== 0 ? metrics.pnl : null;
+  const pnl = portfolio_api.holds(player_id) ? (metrics?.pnl ?? null) : null;
 
   // Returns come straight from the server valuation — NEVER recomputed in JS —
   // so this sheet and the screener row always reconcile (COHERENCE-INVARIANT).
@@ -543,16 +551,13 @@ function YourPosition({ player, refresh }: { player: Player; refresh: number }) 
   const [closing, set_closing] = useState(false);
   const metrics = useMemo(() => portfolio_api.get_holding_metrics(player.id), [player.id, refresh, closed_bump]);
   const totals = portfolio_api.get_totals();
-  const has_position = !!metrics && metrics.shares !== 0;
+  const has_position = portfolio_api.holds(player.id);
 
   if (!has_position) {
     return (
       <View style={styles.position_card}>
         <View style={styles.position_head}>
           <Text style={styles.position_title}>Your position</Text>
-          <View style={styles.position_badge}>
-            <Text style={styles.position_badge_label}>—</Text>
-          </View>
         </View>
         <Text style={styles.position_empty}>
           You don&apos;t hold this player. Use the trade panel below to open a position.
@@ -564,13 +569,11 @@ function YourPosition({ player, refresh }: { player: Player; refresh: number }) 
   const { shares, display_shares, price_per_share, avg_buy_per_share, current_price, market_value, pnl, return_pct } =
     metrics!;
   const portfolio_pct = compute_portfolio_share(market_value, totals.total_value);
-  const is_long = shares > 0;
 
-  // Close = trade the exact held quantity in the opposite direction (sell a
-  // long, buy back a short). Confirms first; reduces exposure so it never trips
-  // the cap/margin. trades_api.execute refreshes the shared caches.
+  // Close = sell the exact held quantity (long-only). Confirms first; reduces
+  // exposure so it never trips the cap. trades_api.execute refreshes the caches.
   const close_position = () => {
-    Alert.alert("Close position", `Close your ${is_long ? "long" : "short"} on ${player.name}?`, [
+    Alert.alert("Close position", `Close your position on ${player.name}?`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Close",
@@ -578,7 +581,7 @@ function YourPosition({ player, refresh }: { player: Player; refresh: number }) 
         onPress: () => {
           set_closing(true);
           trades_api
-            .execute({ player_id: player.id, kind: is_long ? "sell" : "buy", shares: Math.abs(shares), price: current_price })
+            .execute({ player_id: player.id, kind: "sell", shares: Math.abs(shares), price: current_price })
             .then(() => set_closed_bump(b => b + 1))
             .catch(() => Alert.alert("Couldn't close", "The order failed. Please try again."))
             .finally(() => set_closing(false));
@@ -591,16 +594,6 @@ function YourPosition({ player, refresh }: { player: Player; refresh: number }) 
     <View style={styles.position_card}>
       <View style={styles.position_head}>
         <Text style={styles.position_title}>Your position</Text>
-        <View
-          style={[
-            styles.position_badge,
-            { backgroundColor: is_long ? with_alpha(palette.positive, 0.1) : with_alpha(palette.negative, 0.1) },
-          ]}
-        >
-          <Text style={[styles.position_badge_label, { color: is_long ? palette.positive : palette.negative }]}>
-            {is_long ? "LONG" : "SHORT"}
-          </Text>
-        </View>
       </View>
       <View style={styles.kpi_grid}>
         <SmallKpi label="Shares" value={fmt_shares(Math.abs(display_shares))} />

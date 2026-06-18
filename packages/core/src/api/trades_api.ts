@@ -1,4 +1,9 @@
 import {
+  type BasketBuy,
+  type BasketOutcome,
+  execute_basket as run_execute_basket,
+} from "@fundxi/core/application/basket_service";
+import {
   close_positions as run_close_positions,
   closing_trade,
   type CloseOutcome,
@@ -13,6 +18,7 @@ import {
 import { refresh_trades, trades_repository } from "@fundxi/core/infrastructure/repositories/trades_repository";
 
 export type { CloseOutcome, PositionToClose } from "@fundxi/core/application/close_positions";
+export type { BasketBuy, BasketOutcome } from "@fundxi/core/application/basket_service";
 
 interface TradeOutcomeDTO {
   trade: {
@@ -89,6 +95,24 @@ export const trades_api = {
       );
     });
     if (outcome.closed.length > 0) {
+      await refresh_trades();
+      await refresh_portfolio();
+    }
+    return outcome;
+  },
+  /** Buy a basket of players (a "buy the team" order) — each leg is a normal
+   * buy placed sequentially. Refreshes the local caches once, after the batch.
+   * Never throws on a per-leg failure: the ``BasketOutcome`` partitions the
+   * legs into bought vs failed so the caller can show a partial result. */
+  async execute_basket(buys: BasketBuy[]): Promise<BasketOutcome> {
+    const outcome = await run_execute_basket(buys, async buy => {
+      await api_post<TradeOutcomeDTO>(
+        "/api/trades",
+        { player_id: buy.player_id, kind: "buy", shares: buy.shares, price: buy.price },
+        idempotency_header(),
+      );
+    });
+    if (outcome.bought.length > 0) {
       await refresh_trades();
       await refresh_portfolio();
     }

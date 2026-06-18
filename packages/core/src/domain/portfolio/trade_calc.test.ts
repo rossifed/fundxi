@@ -1,18 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
+  buy_quantity_from_cash_pct,
   cap_trade_fraction,
   compute_buy_shortfall,
   compute_cash_after,
-  compute_quantity_from_pct,
   compute_quantity_from_shares,
   compute_realized_pnl,
   compute_shares_after,
-  compute_short_quantity,
   compute_trade_share,
   fraction_from_display_shares,
   MAX_OWNERSHIP_FRACTION,
   pct_of_player,
   price_per_share,
+  sell_quantity_from_position_pct,
   to_display_shares,
   trade_headroom_fraction,
 } from "./trade_calc";
@@ -38,58 +38,76 @@ describe("denomination helpers", () => {
   });
 });
 
-describe("position cap (±100% of the player)", () => {
+describe("position cap (0–100% of the player, long-only)", () => {
   it("MAX_OWNERSHIP_FRACTION is the whole player", () => {
     expect(MAX_OWNERSHIP_FRACTION).toBe(1);
   });
 
-  it("trade_headroom_fraction: a buy fills toward +1, a sell-to-open toward −1", () => {
+  it("trade_headroom_fraction: a buy fills toward +1, a sell only unwinds the held long", () => {
     expect(trade_headroom_fraction("buy", 0)).toBe(1);
     expect(trade_headroom_fraction("buy", 0.7)).toBeCloseTo(0.3, 12);
     expect(trade_headroom_fraction("buy", 1)).toBe(0); // already own 100%
-    expect(trade_headroom_fraction("sell", 0)).toBe(1); // can short up to 100%
-    expect(trade_headroom_fraction("sell", -1)).toBe(0); // already 100% short
-    expect(trade_headroom_fraction("buy", -0.5)).toBeCloseTo(1.5, 12); // cover short, then go long
+    expect(trade_headroom_fraction("sell", 0)).toBe(0); // nothing held → nothing to sell (no short)
+    expect(trade_headroom_fraction("sell", 0.4)).toBeCloseTo(0.4, 12); // can sell at most the held long
+    expect(trade_headroom_fraction("sell", 1)).toBe(1); // sell the whole position
   });
 
   it("cap_trade_fraction clamps the request to the available headroom", () => {
     expect(cap_trade_fraction("buy", 0, 0.5)).toBe(0.5); // fits
     expect(cap_trade_fraction("buy", 0.7, 0.5)).toBeCloseTo(0.3, 12); // trimmed to 100%
     expect(cap_trade_fraction("buy", 1, 0.2)).toBe(0); // no room
-    expect(cap_trade_fraction("sell", 0, 1.5)).toBe(1); // short capped at 100%
-    expect(cap_trade_fraction("sell", -1, 0.3)).toBe(0); // no room to short more
+    expect(cap_trade_fraction("sell", 0.5, 0.8)).toBeCloseTo(0.5, 12); // sell trimmed to the held long
+    expect(cap_trade_fraction("sell", 0, 0.3)).toBe(0); // nothing to sell (no short)
   });
 });
 
-describe("compute_quantity_from_pct", () => {
-  it("a cheap player: a small portfolio % hits the 100% cap (the real bug)", () => {
-    // €102M book, 10% budget = €10.2M, on a €0.8M player → you'd buy 12.75×
+describe("buy_quantity_from_cash_pct — sizes by % of cash", () => {
+  it("a cheap player: a small cash % hits the 100% cap (the real bug)", () => {
+    // €102M cash, 10% budget = €10.2M, on a €0.8M player → you'd buy 12.75×
     // the whole player. Capped to 100%: 1.0 fraction = €0.8M cost.
-    const { amount, shares, capped } = compute_quantity_from_pct(102, 10, 0.8, N, "buy", 0);
+    const { amount, shares, capped } = buy_quantity_from_cash_pct(102, 10, 0.8, N, 0);
     expect(shares).toBe(MAX_OWNERSHIP_FRACTION);
     expect(amount).toBe(0.8);
     expect(capped).toBe(true);
   });
 
-  it("an expensive player: the budget buys a sub-100% slice, no cap", () => {
-    // €100M book, 10% budget = €10M, on a €200M player → 5% of the player.
-    const { amount, shares, capped } = compute_quantity_from_pct(100, 10, 200, N, "buy", 0);
+  it("an expensive player: the cash budget buys a sub-100% slice, no cap", () => {
+    // €100M cash, 10% budget = €10M, on a €200M player → 5% of the player.
+    const { amount, shares, capped } = buy_quantity_from_cash_pct(100, 10, 200, N, 0);
     expect(shares).toBeCloseTo(0.05, 12);
     expect(amount).toBe(10);
     expect(capped).toBe(false);
   });
 
   it("respects an existing holding's headroom", () => {
-    // Already own 96% of the €200M player; 10% of €100M = €10M budget = 5% more,
-    // but only 4% headroom remains → capped to 4% (€8M).
-    const { amount, shares, capped } = compute_quantity_from_pct(100, 10, 200, N, "buy", 0.96);
+    // Already own 96% of the €200M player; 10% of €100M cash = €10M budget = 5%
+    // more, but only 4% headroom remains → capped to 4% (€8M).
+    const { amount, shares, capped } = buy_quantity_from_cash_pct(100, 10, 200, N, 0.96);
     expect(shares).toBeCloseTo(0.04, 12);
     expect(amount).toBe(8);
     expect(capped).toBe(true);
   });
 
   it("zero total_value → zero shares (avoids div/0, no NaN)", () => {
-    expect(compute_quantity_from_pct(1000, 25, 0, N, "buy", 0).shares).toBe(0);
+    expect(buy_quantity_from_cash_pct(1000, 25, 0, N, 0).shares).toBe(0);
+  });
+});
+
+describe("sell_quantity_from_position_pct — sizes by % of the held position", () => {
+  it("sells a slice of the holding (no cash involved)", () => {
+    // Hold 0.8 of a €200M player; sell 25% of the position → 0.2 fraction = €40M.
+    const { amount, shares, capped } = sell_quantity_from_position_pct(0.8, 25, 200, N);
+    expect(shares).toBeCloseTo(0.2, 12);
+    expect(amount).toBe(40);
+    expect(capped).toBe(false);
+  });
+
+  it("100% of the position closes the whole holding", () => {
+    expect(sell_quantity_from_position_pct(0.5, 100, 200, N).shares).toBeCloseTo(0.5, 12);
+  });
+
+  it("nothing held → nothing to sell", () => {
+    expect(sell_quantity_from_position_pct(0, 100, 200, N).shares).toBe(0);
   });
 });
 
@@ -120,19 +138,6 @@ describe("compute_trade_share", () => {
   });
   it("guards divide-by-zero", () => {
     expect(compute_trade_share(50, 0)).toBe(0);
-  });
-});
-
-describe("compute_short_quantity", () => {
-  it("zero on buys", () => {
-    expect(compute_short_quantity("buy", 0.6, 0.2)).toBe(0);
-  });
-  it("zero when selling within the held quantity", () => {
-    expect(compute_short_quantity("sell", 0.3, 0.5)).toBe(0);
-    expect(compute_short_quantity("sell", 0.5, 0.5)).toBe(0);
-  });
-  it("returns the over-sold fraction (beyond the held long)", () => {
-    expect(compute_short_quantity("sell", 0.8, 0.5)).toBeCloseTo(0.3, 12);
   });
 });
 

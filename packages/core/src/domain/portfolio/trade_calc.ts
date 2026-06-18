@@ -19,9 +19,10 @@
  *   - ``amount`` is the trade's actual cost/proceeds = fraction × total_value,
  *     rounded to the cent (the SAME value the backend debits).
  *
- * Position cap: a single position can never exceed the player's whole value,
- * long OR short — i.e. ``|ownership_fraction| ≤ 1``. Enforced here for the
- * preview and (authoritatively) by the backend on execution.
+ * Position cap: a single position can never exceed the player's whole value
+ * (``ownership_fraction ≤ 1``). Long-only — a sell unwinds the held long down to
+ * zero but never opens a short, so positions stay in ``[0, 1]``. Enforced here
+ * for the preview and (authoritatively) by the backend on execution.
  */
 
 import type { TradeKind } from "./trade";
@@ -55,10 +56,12 @@ export function pct_of_player(ownership_fraction: number): number {
   return ownership_fraction * 100;
 }
 
-/** Headroom (in fraction) still tradeable in the requested direction before the
- * position would breach ±1. Buy fills toward +1, sell-to-open toward −1. */
+/** Headroom (in fraction) still tradeable in the requested direction.
+ * Long-only: a buy fills toward +1 (the whole player); a sell can only unwind
+ * the held long down to zero — never into a short. Mirrors the backend
+ * ``would_open_short`` rule so both ends agree. */
 export function trade_headroom_fraction(kind: TradeKind, held_fraction: number): number {
-  const headroom = kind === "buy" ? MAX_OWNERSHIP_FRACTION - held_fraction : MAX_OWNERSHIP_FRACTION + held_fraction;
+  const headroom = kind === "buy" ? MAX_OWNERSHIP_FRACTION - held_fraction : held_fraction;
   return Math.max(0, headroom);
 }
 
@@ -81,21 +84,31 @@ function floor_to_quantum(raw_fraction: number, shares_per_player: number): numb
   return Math.floor(raw_fraction * shares_per_player) / shares_per_player;
 }
 
-/** Compute (amount, shares) when the user sizes a trade by a % of portfolio.
- * The percentage sets a spend BUDGET; the resulting fraction is floored to the
- * share quantum and then capped so the position never exceeds the player's
- * whole value. ``shares`` is the ownership fraction; ``amount`` its actual cost. */
-export function compute_quantity_from_pct(
-  portfolio_value: number,
+/** Size a BUY by a percentage of available CASH. ``pct`` of cash is the spend
+ * budget; fraction = budget / player value, floored to the quantum and capped at
+ * the remaining headroom to 100% of the player. 100% = deploy all cash (no
+ * "insufficient cash" surprise). */
+export function buy_quantity_from_cash_pct(
+  cash: number,
   pct: number,
   total_value: number,
   shares_per_player: number,
-  kind: TradeKind,
   held_fraction: number,
 ): { amount: number; shares: number; capped: boolean } {
-  const budget = (portfolio_value * pct) / 100;
-  const raw = total_value <= 0 ? 0 : budget / total_value;
-  return _size(raw, total_value, shares_per_player, kind, held_fraction);
+  const raw = total_value <= 0 ? 0 : ((cash * pct) / 100) / total_value;
+  return _size(raw, total_value, shares_per_player, "buy", held_fraction);
+}
+
+/** Size a SELL by a percentage of the HELD position. 100% = close the whole
+ * holding. Cash is irrelevant here — you receive proceeds, not spend. */
+export function sell_quantity_from_position_pct(
+  held_fraction: number,
+  pct: number,
+  total_value: number,
+  shares_per_player: number,
+): { amount: number; shares: number; capped: boolean } {
+  const raw = (held_fraction * pct) / 100;
+  return _size(raw, total_value, shares_per_player, "sell", held_fraction);
 }
 
 /** Compute (amount, shares) when the user sizes a trade by an explicit
@@ -131,17 +144,6 @@ function _size(
 export function compute_trade_share(amount: number, portfolio_value: number): number {
   if (portfolio_value === 0) return 0;
   return Math.round((amount / portfolio_value) * 100);
-}
-
-/** Quantity that would be sold *short* (i.e. beyond the held position).
- * Zero unless kind=sell AND requested shares > current holding. */
-export function compute_short_quantity(
-  kind: TradeKind,
-  requested_shares: number,
-  held_shares: number,
-): number {
-  if (kind !== "sell" || requested_shares <= held_shares) return 0;
-  return requested_shares - held_shares;
 }
 
 /** Holding position after the trade is applied.

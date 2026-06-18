@@ -74,7 +74,7 @@ export function PlayerSheet({
   // Held position → the "Close position" button (mirrors the mobile sheet),
   // routed through the shared ClosePositionsDialog (confirm + execute).
   const holding_metrics = portfolio_api.get_holding_metrics(player.id);
-  const has_position = !!holding_metrics && holding_metrics.shares !== 0;
+  const has_position = portfolio_api.holds(player.id);
   const on_close_position = has_position ? () => set_close_open(true) : undefined;
 
   const handle_trade_click = (kind: "buy" | "sell") => {
@@ -210,9 +210,12 @@ export function PlayerSheet({
       >
         Buy
       </button>
+      {/* Long-only: Sell stays visible but disabled until you hold the player. */}
       <button
-        onClick={() => handle_trade_click("sell")}
-        style={{ flex: 1, padding: "13px 0", fontSize: 14, fontWeight: 800, borderRadius: 10, background: "var(--color-action-sell)", color: "#fff", border: "none", cursor: "pointer", fontFamily: "inherit", boxShadow: "0 4px 16px color-mix(in srgb, var(--color-negative) 25%, transparent)" }}
+        onClick={() => has_position && handle_trade_click("sell")}
+        disabled={!has_position}
+        title={has_position ? undefined : "You don't hold this player yet"}
+        style={{ flex: 1, padding: "13px 0", fontSize: 14, fontWeight: 800, borderRadius: 10, background: "var(--color-action-sell)", color: "#fff", border: "none", cursor: has_position ? "pointer" : "not-allowed", opacity: has_position ? 1 : 0.35, fontFamily: "inherit", boxShadow: has_position ? "0 4px 16px color-mix(in srgb, var(--color-negative) 25%, transparent)" : "none" }}
       >
         Sell
       </button>
@@ -471,8 +474,11 @@ export function PlayerSheet({
               >
                 Buy
               </button>
+              {/* Long-only: Sell stays visible but disabled until you hold the player. */}
               <button
-                onClick={() => handle_trade_click("sell")}
+                onClick={() => has_position && handle_trade_click("sell")}
+                disabled={!has_position}
+                title={has_position ? undefined : "You don't hold this player yet"}
                 style={{
                   flex: 1,
                   padding: "13px 0",
@@ -482,9 +488,10 @@ export function PlayerSheet({
                   background: "var(--color-action-sell)",
                   color: "#fff",
                   border: "none",
-                  cursor: "pointer",
+                  cursor: has_position ? "pointer" : "not-allowed",
+                  opacity: has_position ? 1 : 0.35,
                   fontFamily: "inherit",
-                  boxShadow: "0 4px 16px color-mix(in srgb, var(--color-negative) 25%, transparent)",
+                  boxShadow: has_position ? "0 4px 16px color-mix(in srgb, var(--color-negative) 25%, transparent)" : "none",
                 }}
               >
                 Sell

@@ -58,7 +58,6 @@ function sort_rows<T>(rows: T[], spec: SortState, value_of: (row: T, key: string
 function holding_sort_value(h: HoldingRow, key: string, opened: Map<number, string>): string | number {
   switch (key) {
     case "player": return h.player.name;
-    case "side": return Math.sign(h.shares); // long (+1) vs short (-1)
     case "opened": return opened.get(h.player_id) ?? "";
     case "shares": return h.shares;
     case "avg_buy": return h.average_buy_price;
@@ -87,11 +86,12 @@ function trade_sort_value(t: Trade, key: string): string | number {
 // remainder so the grid is ALWAYS exactly the container width: it never
 // overflows (no horizontal scroll) and never clips. Columns just get
 // tighter on a narrow container; the Player cell ellipsises.
-// Checkbox + 8 columns: Player, Side, Opened, Shares, Avg buy, Price,
-// Value, P&L. (Position is shown as an acronym inside the Player cell,
-// not as a dedicated column — it carries no financial meaning here.)
+// Checkbox + 7 columns: Player, Opened, Shares, Avg buy, Price, Value, P&L.
+// (No "Side" column — the app is long-only, every position is a long, so a
+// long/short label carries no information. Position is shown as an acronym
+// inside the Player cell, not as a dedicated column.)
 const POSITIONS_GRID =
-  "34px minmax(0,2.4fr) minmax(0,0.75fr) minmax(0,0.95fr) minmax(0,0.7fr) " +
+  "34px minmax(0,2.4fr) minmax(0,0.95fr) minmax(0,0.7fr) " +
   "minmax(0,0.95fr) minmax(0,0.95fr) minmax(0,0.95fr) minmax(0,1.15fr)";
 
 // Minimum widths the positions / trades tables hold on a phone, where they
@@ -419,7 +419,6 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
           )
         ) : positions_tab === "stats" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <ExposureCard long_value={totals.long_value} short_value={totals.short_value} />
             <WinLossCard holdings={holdings} />
           </div>
         ) : (
@@ -630,7 +629,6 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
               {(
                 [
                   { key: "player", label: "Player", align: "left" },
-                  { key: "side", label: "Side", align: "left" },
                   { key: "opened", label: "Opened", align: "left" },
                   { key: "shares", label: "Shares", align: "right" },
                   { key: "avg_buy", label: "Avg /sh", align: "right" },
@@ -718,7 +716,6 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
                       </div>
                     </div>
                   </div>
-                  <span><SideBadge shares={h.shares} /></span>
                   <span className="mono" style={{ fontSize: 12, color: "rgba(255,255,255,.55)" }}>
                     {fmt_short_date(opened_by_player.get(h.player_id))}
                   </span>
@@ -895,7 +892,6 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
 
         {/* Right rail — full analytics stack */}
         <aside style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <ExposureCard long_value={totals.long_value} short_value={totals.short_value} />
           <WinLossCard holdings={holdings} />
           <BreakdownCard title="By team" items={team_items} chart="bars" on_open_team={on_open_team} />
           <BreakdownCard title="By position" items={position_items} chart="pie" />
@@ -1100,26 +1096,6 @@ function PlayerAvatar({ player, team_color, size }: { player: Player; team_color
   );
 }
 
-function SideBadge({ shares }: { shares: number }) {
-  const is_short = shares < 0;
-  return (
-    <span
-      style={{
-        fontSize: 9,
-        fontWeight: 800,
-        padding: "1px 5px",
-        borderRadius: 3,
-        letterSpacing: 0.4,
-        flexShrink: 0,
-        background: is_short ? "var(--color-negative)" : "var(--color-positive)",
-        color: "#fff",
-      }}
-    >
-      {is_short ? "SHORT" : "LONG"}
-    </span>
-  );
-}
-
 /** Mono value cell with a one-shot Bloomberg-style pulse on change. */
 function PulseValueCell({ value, display }: { value: number; display: string }) {
   const pulse = usePulse(value);
@@ -1165,9 +1141,8 @@ function KpiCard({
   );
 }
 
-/** Win / Loss card — same layout as ``ExposureCard`` (Long / Short)
- * but counts open positions by P&L sign. Stacked bar at the top,
- * three cells below: Winners / Flat / Losers. */
+/** Win / Loss card — counts open positions by P&L sign. Stacked bar at the
+ * top, three cells below: Winners / Flat / Losers. */
 function WinLossCard({ holdings }: { holdings: HoldingMetrics[] }) {
   const winners = holdings.filter(h => h.pnl > 0).length;
   const losers = holdings.filter(h => h.pnl < 0).length;
@@ -1259,91 +1234,6 @@ function WinLossCard({ holdings }: { holdings: HoldingMetrics[] }) {
   );
 }
 
-function ExposureCard({ long_value, short_value }: { long_value: number; short_value: number }) {
-  return (
-    <div
-      style={{
-        background: "rgba(255,255,255,.02)",
-        border: "1px solid rgba(255,255,255,.04)",
-        borderRadius: 12,
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          padding: "9px 14px",
-          borderBottom: "1px solid rgba(255,255,255,.05)",
-          fontSize: 11,
-          fontWeight: 800,
-          color: "rgba(255,255,255,.55)",
-          letterSpacing: 0.5,
-          textTransform: "uppercase",
-        }}
-      >
-        Position Long / Short
-      </div>
-      <div style={{ padding: "12px 14px" }}>
-        <ExposureView long_value={long_value} short_value={short_value} />
-      </div>
-    </div>
-  );
-}
-
-function ExposureView({ long_value, short_value }: { long_value: number; short_value: number }) {
-  // Gross long vs gross short market value (single source: compute_portfolio_totals).
-  // The bar splits the GROSS exposure (long + short); Net = long − short.
-  const total_exposure = long_value + short_value || 1;
-  const long_pct = ((long_value / total_exposure) * 100).toFixed(1);
-  const short_pct = ((short_value / total_exposure) * 100).toFixed(1);
-  const net_exposure = long_value - short_value;
-  return (
-    <div>
-      <div
-        style={{
-          height: 22,
-          borderRadius: 5,
-          overflow: "hidden",
-          display: "flex",
-          marginBottom: 10,
-          border: "1px solid rgba(255,255,255,.06)",
-        }}
-      >
-        <div
-          style={{
-            width: long_pct + "%",
-            background: "var(--color-positive)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: "#fff" }}>{long_pct}%</span>
-        </div>
-        <div
-          style={{
-            width: short_pct + "%",
-            background: "var(--color-negative)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: "#fff" }}>{short_pct}%</span>
-        </div>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-        <ExposureCell label="Long" value={fmt_eur_m(long_value)} color="rgba(255,255,255,.85)" />
-        <ExposureCell label="Short" value={fmt_eur_m(short_value)} color="rgba(255,255,255,.85)" />
-        <ExposureCell
-          label="Net"
-          value={fmt_eur_m_signed(net_exposure)}
-          color={color_for_sign(net_exposure)}
-        />
-      </div>
-    </div>
-  );
-}
-
 function ExposureCell({ label, value, color }: { label: string; value: string; color: string }) {
   return (
     <div style={{ textAlign: "center", padding: "8px 0" }}>
@@ -1419,7 +1309,6 @@ function MobilePositionCard({
   on_open_team?: (team_id: string) => void;
 }) {
   const team = teams_api.get(h.player.team_id);
-  const is_long = h.shares > 0;
   return (
     <div onClick={on_open} style={{ ...mobile_card_style, padding: "12px", cursor: "pointer" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
@@ -1428,9 +1317,6 @@ function MobilePositionCard({
           <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
             <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,.45)", flexShrink: 0 }}>{h.player.jersey_number}</span>
             <span style={{ fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{h.player.name}</span>
-            <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 800, letterSpacing: 0.4, padding: "1px 5px", borderRadius: 3, color: "var(--color-bg)", background: is_long ? "var(--color-positive)" : "var(--color-negative)" }}>
-              {is_long ? "LONG" : "SHORT"}
-            </span>
           </div>
           <TeamLink team_id={h.player.team_id} on_open_team={on_open_team} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "rgba(255,255,255,.4)", marginTop: 1, minWidth: 0 }}>
             <span style={{ flexShrink: 0 }}>{team?.flag}</span>

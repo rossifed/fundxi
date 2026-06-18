@@ -17,7 +17,7 @@ from src.application.portfolio_snapshot_service import LatestPriceProvider
 from src.application.trade_execution import TradeOutcome, TradeRequest, execute_trade
 from src.domain.portfolio.margin import MarginVerdict, evaluate_margin
 from src.domain.portfolio.portfolio import PortfolioRepository, TradeKind, TradeRepository
-from src.domain.portfolio.position_cap import MAX_OWNERSHIP_FRACTION, would_exceed_player_cap
+from src.domain.portfolio.position_cap import MAX_OWNERSHIP_FRACTION, would_exceed_player_cap, would_open_short
 from src.domain.portfolio.user import UserRepository
 from src.domain.valuation.starting_price_provider import StartingPriceProvider
 
@@ -40,6 +40,22 @@ class PlayerOwnershipCapError(Exception):
         super().__init__(
             f"position cap: a {kind.value} of {requested:.4f} on top of {held:.4f} would exceed "
             f"+/-{MAX_OWNERSHIP_FRACTION:.0f}x the player's value"
+        )
+
+
+class ShortingDisabledError(Exception):
+    """The trade would open or extend a short — disabled by the long-only rule.
+
+    The product is long-only (see domain/portfolio/position_cap.py): a sell may
+    reduce a holding to zero but never go below. Carries the held + requested
+    quantities so the transport layer can explain the rejection."""
+
+    def __init__(self, *, player_id: int, held: float, requested: float) -> None:
+        self.player_id = player_id
+        self.held = held
+        self.requested = requested
+        super().__init__(
+            f"shorting is disabled: cannot sell {requested:.4f} while holding only {held:.4f}"
         )
 
 
@@ -136,6 +152,12 @@ async def place_trade(
     if would_exceed_player_cap(prev_shares=prev_shares, kind=kind, qty=command.shares):
         raise PlayerOwnershipCapError(
             player_id=command.player_id, held=prev_shares, requested=command.shares, kind=kind
+        )
+    # Long-only: a sell can reduce a holding to zero but never open a short.
+    # Authoritative — the client caps its slider too, but it is never trusted.
+    if would_open_short(prev_shares=prev_shares, kind=kind, qty=command.shares):
+        raise ShortingDisabledError(
+            player_id=command.player_id, held=prev_shares, requested=command.shares
         )
 
     # Authoritative execution price = latest server-side valuation tick. The

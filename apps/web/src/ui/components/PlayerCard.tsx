@@ -43,6 +43,10 @@ interface PlayerCardProps {
   spark_data: number[]; // fixed-length price sparkline for the back face
   on_click: () => void;
   on_trade: (kind: "buy" | "sell") => void;
+  // Long-only: SELL only renders when the user holds this player. Defaults to
+  // false so a discovery card (screener, movers) shows BUY only unless a caller
+  // that knows the holding opts in.
+  has_position?: boolean;
 }
 
 /** Count-style stat -> always a number (null means "played, none"). */
@@ -72,6 +76,7 @@ export function PlayerCard({
   spark_data,
   on_click,
   on_trade,
+  has_position = false,
 }: PlayerCardProps) {
   const [img_failed, set_img_failed] = useState(false);
   const [hover, set_hover] = useState(false);
@@ -512,7 +517,8 @@ export function PlayerCard({
               </span>
             </div>
 
-            {/* Buy / Sell — opens the shared TradeDialog. */}
+            {/* Buy / Sell — opens the shared TradeDialog. Long-only: SELL stays
+                visible but is disabled until the user holds this player. */}
             <div style={{ display: "flex", gap: 7 }}>
               <button
                 type="button"
@@ -526,11 +532,17 @@ export function PlayerCard({
               </button>
               <button
                 type="button"
+                disabled={!has_position}
+                title={has_position ? undefined : "You don't hold this player yet"}
                 onClick={e => {
                   e.stopPropagation();
-                  on_trade("sell");
+                  if (has_position) on_trade("sell");
                 }}
-                style={action_button(color.actionSell, "#fff")}
+                style={{
+                  ...action_button(color.actionSell, "#fff"),
+                  cursor: has_position ? "pointer" : "not-allowed",
+                  opacity: has_position ? 1 : 0.35,
+                }}
               >
                 SELL
               </button>

@@ -9,6 +9,7 @@ import { team_stats_api } from "@fundxi/core/api/team_stats_api";
 import { teams_api } from "@fundxi/core/api/teams_api";
 import { valuations_api } from "@fundxi/core/api/valuations_api";
 import type { TeamMatchStats } from "@fundxi/core/domain/match/team_match_stats";
+import { BuyTeamButton } from "@/ui/components/BuyTeamButton";
 import { TeamLink } from "@/ui/components/TeamLink";
 import { TickValue } from "@/ui/components/TickValue";
 import { useFixtureLiveVersion, useLiveRefetch, usePricesLiveVersion } from "@/ui/hooks/use_live_updates";
@@ -374,6 +375,16 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
               );
             })}
           </div>
+
+          {/* Buy the whole selected team — same widget/logic as the team page. */}
+          {(roster_team === "home" ? home_team : away_team) && (
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <BuyTeamButton
+                team={(roster_team === "home" ? home_team : away_team)!}
+                on_open_player={on_open_player_profile}
+              />
+            </div>
+          )}
 
           {match.lineup_published === false ? (
             // Pre-lineup: SAME single-team card view as live, showing the full

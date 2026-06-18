@@ -5,11 +5,16 @@ a portfolio's total exposure may grow relative to its real equity, so a trade
 can no longer mint buying power out of a short.
 
 The rule, in one sentence: the gross exposure (the sum of the absolute market
-value of every position, longs AND shorts) may not exceed equity times the
-leverage limit. Equity is the honest net worth: cash plus the signed market
-value of all positions (a short counts negative). With ``max_leverage = 1.0``
-the total size of all bets can never exceed the portfolio's own money — shorting
-stays possible, just bounded by capital.
+value of every position) may not exceed equity times the leverage limit. Equity
+is the honest net worth: cash plus the signed market value of all positions.
+With ``max_leverage = 1.0`` the total size of all bets can never exceed the
+portfolio's own money.
+
+NOTE: the app is currently LONG-ONLY (shorting is rejected upstream in
+``place_trade`` via ``would_open_short``), so with leverage 1.0 a buy is already
+bounded by free cash and this gate cannot bind. The rule and its negative-share
+handling are kept intact so re-enabling shorts (or leverage > 1) needs no change
+here.
 
 A trade that does NOT increase gross exposure (closing or reducing a position)
 is always allowed, even when the portfolio is already over the limit: you must

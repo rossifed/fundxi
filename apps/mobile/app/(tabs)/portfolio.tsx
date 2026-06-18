@@ -362,7 +362,6 @@ export default function PortfolioScreen() {
                 )
               ) : positions_tab === "stats" ? (
                 <View style={styles.stats_stack}>
-                  <ExposureCard long_value={totals.long_value} short_value={totals.short_value} />
                   <WinLossCard holdings={holdings} />
                 </View>
               ) : (
@@ -397,7 +396,6 @@ function PlayerAvatar({ player, size }: { player: Player; size: number }) {
 
 function PositionRow({ h, on_open }: { h: HoldingDetail; on_open: () => void }) {
   const team = teams_api.get(h.player.team_id);
-  const is_long = h.shares > 0;
   const opened = portfolio_api.opened_at(h.player_id);
   const opened_label = opened ? fmt_short_date(opened.date) : "—"; // date only, no time
   return (
@@ -408,9 +406,6 @@ function PositionRow({ h, on_open }: { h: HoldingDetail; on_open: () => void }) 
           <View style={styles.row_name_line}>
             <Text style={styles.row_jersey}>{h.player.jersey_number}</Text>
             <Text style={styles.row_name} numberOfLines={1}>{h.player.name}</Text>
-            <View style={[styles.side, { backgroundColor: is_long ? palette.positive : palette.negative }]}>
-              <Text style={styles.side_label}>{is_long ? "LONG" : "SHORT"}</Text>
-            </View>
           </View>
           <Text style={styles.row_team} numberOfLines={1}>
             {team?.flag} {team?.name} <Text style={{ color: position_color[h.player.position] }}>· {POSITION_ABBR[h.player.position]}</Text>
@@ -504,35 +499,6 @@ function TradeRow({ trade: t }: { trade: import("@fundxi/core/domain/portfolio/t
         <StripCell label="Total" value={fmt_eur_m(t.total)} />
       </View>
     </View>
-  );
-}
-
-function ExposureCard({ long_value, short_value }: { long_value: number; short_value: number }) {
-  // Gross long vs gross short market value (single source: compute_portfolio_totals).
-  const total = long_value + short_value || 1;
-  const long_pct = (long_value / total) * 100;
-  const short_pct = (short_value / total) * 100;
-  const net = long_value - short_value;
-  return (
-    <Section title="Position Long / Short">
-      <View style={styles.bar}>
-        {long_pct > 0 && (
-          <View style={[styles.bar_seg, { flex: long_pct, backgroundColor: palette.positive }]}>
-            <Text style={styles.bar_label}>{long_pct.toFixed(0)}%</Text>
-          </View>
-        )}
-        {short_pct > 0 && (
-          <View style={[styles.bar_seg, { flex: short_pct, backgroundColor: palette.negative }]}>
-            <Text style={styles.bar_label}>{short_pct.toFixed(0)}%</Text>
-          </View>
-        )}
-      </View>
-      <View style={styles.cells3}>
-        <Cell label="Long" value={fmt_eur_m(long_value)} />
-        <Cell label="Short" value={fmt_eur_m(short_value)} />
-        <Cell label="Net" value={fmt_eur_m_signed(net)} color={color_for_sign(net)} />
-      </View>
-    </Section>
   );
 }
 
@@ -772,8 +738,6 @@ const styles = StyleSheet.create({
   row_name_line: { flexDirection: "row", alignItems: "center", gap: 6 },
   row_jersey: { fontFamily: mono, fontSize: 11, fontWeight: "700", color: text.tertiary },
   row_name: { fontSize: 14, fontWeight: "700", color: "#fff", flexShrink: 1 },
-  side: { borderRadius: 3, paddingHorizontal: 5, paddingVertical: 1 },
-  side_label: { fontSize: 9, fontWeight: "800", letterSpacing: 0.4, color: "#fff" },
   kind: { borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
   kind_label: { fontSize: 9, fontWeight: "800", letterSpacing: 0.5, color: "#fff" },
   row_team: { fontSize: 11, color: text.muted, marginTop: 3 },

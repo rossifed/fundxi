@@ -26,3 +26,12 @@ def would_exceed_player_cap(*, prev_shares: float, kind: TradeKind, qty: float, 
     ``tol`` absorbs float drift so a position landing exactly on the cap (e.g. a
     buy sized precisely to the remaining headroom) is allowed, not rejected."""
     return abs(position_after(prev_shares, kind, qty)) > MAX_OWNERSHIP_FRACTION + tol
+
+
+def would_open_short(*, prev_shares: float, kind: TradeKind, qty: float, tol: float = 1e-6) -> bool:
+    """True when the trade would leave a net SHORT position (negative ownership).
+
+    Long-only product rule: a SELL may reduce a long down to zero but never cross
+    into a short, and a BUY can never produce one. ``tol`` absorbs float drift so a
+    sell sized exactly to the held long (landing on zero) is allowed."""
+    return position_after(prev_shares, kind, qty) < -tol

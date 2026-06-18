@@ -4,7 +4,7 @@ Covers the policy place_trade owns on top of execute_trade:
 - server-side pricing with a synthetic base-value FALLBACK when a player has no
   tick yet (a starting price IS its base_value — it must stay tradeable, not
   409);
-- the margin gate (a short beyond equity is rejected before execution).
+- the long-only gate (a sell beyond the held long is rejected before execution).
 
 The execution math itself is covered by test_trade_execution; here we assert
 place_trade's resolve -> price -> check -> delegate flow.
@@ -17,9 +17,9 @@ from datetime import UTC, datetime
 import pytest
 
 from src.application.place_trade import (
-    InsufficientMarginError,
     NoServerPriceError,
     PlaceTradeCommand,
+    ShortingDisabledError,
     place_trade,
 )
 from src.domain.portfolio.portfolio import Holding, Portfolio, Trade
@@ -184,12 +184,11 @@ def test_buy_uses_the_server_tick_when_present() -> None:
     assert out.portfolio.cash == 1000.0 - 6.0  # 0.5 x €12M
 
 
-def test_short_beyond_equity_is_rejected_by_margin() -> None:
-    # Flat €100M portfolio, no leverage. The per-player cap allows shorting up to
-    # the whole player; margin still rejects when the player's value alone
-    # exceeds equity — short the whole €300M player = €300M gross > €100M.
-    user_repo, portfolio_repo, trade_repo, price_provider = _setup(cash=100.0, prices={7: 300.0})
-    with pytest.raises(InsufficientMarginError):
+def test_short_from_flat_is_rejected_long_only() -> None:
+    # Long-only: selling with no holding would open a short → rejected before any
+    # pricing/margin step. Nothing is written.
+    user_repo, portfolio_repo, trade_repo, price_provider = _setup(cash=100.0, prices={7: 50.0})
+    with pytest.raises(ShortingDisabledError):
         _run(
             place_trade(
                 command=PlaceTradeCommand(user_id=1, player_id=7, kind="sell", shares=1.0),
@@ -201,7 +200,6 @@ def test_short_beyond_equity_is_rejected_by_margin() -> None:
                 max_leverage=1.0,
             )
         )
-    # Nothing was written: no trade appended, no short opened.
     assert trade_repo.trades == []
     assert portfolio_repo.holdings == {}
 
@@ -261,11 +259,15 @@ def test_distinct_idempotency_keys_execute_independently() -> None:
     assert portfolio_repo.holdings[7].shares == pytest.approx(0.6)  # 0.3 + 0.3, within the cap
 
 
-def test_short_within_equity_is_allowed() -> None:
-    user_repo, portfolio_repo, trade_repo, price_provider = _setup(cash=100.0, prices={7: 50.0})
+def test_sell_to_close_held_long_is_allowed() -> None:
+    # Long-only: a sell up to the held long is fine (it closes the position).
+    held = Holding(portfolio_id=1, player_id=7, shares=0.5, average_buy_price=40.0)
+    user_repo, portfolio_repo, trade_repo, price_provider = _setup(
+        cash=100.0, prices={7: 50.0}, holdings=[held]
+    )
     out = _run(
         place_trade(
-            command=PlaceTradeCommand(user_id=1, player_id=7, kind="sell", shares=1.0),
+            command=PlaceTradeCommand(user_id=1, player_id=7, kind="sell", shares=0.5),
             user_repo=user_repo,
             portfolio_repo=portfolio_repo,
             trade_repo=trade_repo,
@@ -274,8 +276,29 @@ def test_short_within_equity_is_allowed() -> None:
             max_leverage=1.0,
         )
     )
-    # Short the whole €50M player = €50M gross <= €100M equity. Cash credited,
-    # short position open at -100% of the player.
-    assert out.portfolio.cash == 150.0
-    assert out.holding is not None
-    assert out.holding.shares == -1.0
+    # 0.5 x €50M = €25M credited; position fully closed.
+    assert out.portfolio.cash == 125.0
+    assert out.holding is None
+
+
+def test_sell_beyond_held_long_is_rejected_long_only() -> None:
+    # Selling more than held would cross into a short → rejected, nothing written.
+    held = Holding(portfolio_id=1, player_id=7, shares=0.5, average_buy_price=40.0)
+    user_repo, portfolio_repo, trade_repo, price_provider = _setup(
+        cash=100.0, prices={7: 50.0}, holdings=[held]
+    )
+    with pytest.raises(ShortingDisabledError):
+        _run(
+            place_trade(
+                command=PlaceTradeCommand(user_id=1, player_id=7, kind="sell", shares=0.6),
+                user_repo=user_repo,
+                portfolio_repo=portfolio_repo,
+                trade_repo=trade_repo,
+                price_provider=price_provider,
+                starting_price_provider=_FakeStartingPriceProvider({}),
+                max_leverage=1.0,
+            )
+        )
+    assert trade_repo.trades == []
+    # The original long is untouched.
+    assert portfolio_repo.holdings[7].shares == 0.5

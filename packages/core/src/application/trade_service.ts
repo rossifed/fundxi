@@ -1,16 +1,16 @@
 import type { Player } from "@fundxi/core/domain/player/player";
 import type { TradeKind } from "@fundxi/core/domain/portfolio/trade";
 import {
+  buy_quantity_from_cash_pct,
   compute_buy_shortfall,
   compute_cash_after,
-  compute_quantity_from_pct,
   compute_quantity_from_shares,
   compute_realized_pnl,
   compute_shares_after,
-  compute_short_quantity,
   compute_trade_share,
   pct_of_player,
   price_per_share,
+  sell_quantity_from_position_pct,
   to_display_shares,
   trade_headroom_fraction,
 } from "@fundxi/core/domain/portfolio/trade_calc";
@@ -45,11 +45,8 @@ export interface TradePreview {
   amount: number; // €M, actual cost = shares × total_value
 
   percentage_of_portfolio: number; // % of the user's AUM this amount represents
-  pct_of_player_after: number; // % of the player owned AFTER the trade (−100..100)
+  pct_of_player_after: number; // % of the player owned AFTER the trade (0..100, long-only)
 
-  is_short: boolean;
-  short_quantity: number; // fraction sold beyond the held long
-  short_display_shares: number; // short_quantity × N
   held_shares: number; // fraction held before the trade
   held_display_shares: number; // held_shares × N
   pct_of_player_held: number; // % of the player owned BEFORE the trade
@@ -65,17 +62,15 @@ export interface TradePreview {
 
   realized_pnl: number;
 
-  // The player-value cap (±100%) trimmed the requested size — the UI tells the
+  // The player-value cap (100%) trimmed the requested size — the UI tells the
   // user they hit "the whole player" and shows the max still tradeable.
   capped: boolean;
-  max_trade_display_shares: number; // headroom toward ±100%, in displayed shares
+  max_trade_display_shares: number; // headroom toward 100%, in displayed shares
 
-  // Portfolio-level margin (leverage limit). ``buying_power`` is the €M still
-  // deployable; ``exceeds_margin`` is true when THIS trade's added gross
-  // exposure would breach it (so the server would reject it). Closing/covering
-  // a position reduces exposure and never exceeds.
-  buying_power: number;
-  exceeds_margin: boolean;
+  // Sizing ceilings the UI binds its slider to (so a control can never request
+  // more than is executable — owns this math here, not in the UI, web+mobile):
+  max_trade_shares: number; // shares-mode ceiling = min(affordable, headroom), floored
+  max_percentage: number; // percentage-mode ceiling: % of cash beyond which the cap binds (sell = 100)
 }
 
 /** Pure orchestration: pulls the live state (portfolio, holding, price)
@@ -92,31 +87,38 @@ export function simulate_trade(input: TradePreviewInput): TradePreview {
 
   const { shares, amount, capped } =
     input.mode === "percentage"
-      ? compute_quantity_from_pct(totals.total_value, input.percentage ?? 0, total_value, n, input.kind, held_shares)
+      ? input.kind === "buy"
+        ? buy_quantity_from_cash_pct(cash_before, input.percentage ?? 0, total_value, n, held_shares)
+        : sell_quantity_from_position_pct(held_shares, input.percentage ?? 0, total_value, n)
       : compute_quantity_from_shares(input.shares ?? 0, total_value, n, input.kind, held_shares);
 
-  const short_quantity = compute_short_quantity(input.kind, shares, held_shares);
   const { insufficient, shortfall } = compute_buy_shortfall(input.kind, amount, cash_before);
   const shares_after = compute_shares_after(input.kind, held_shares, shares);
 
-  // Margin: only the gross-exposure INCREASE consumes buying power (closing or
-  // covering reduces exposure → never exceeds). Equity ≈ AUM, same base the
-  // backend margin rule uses, so the preview agrees with what the server accepts.
-  const added_exposure = Math.max(0, (Math.abs(shares_after) - Math.abs(held_shares)) * total_value);
-  const exceeds_margin = added_exposure > totals.buying_power + 1e-9;
+  // Sizing ceilings (owned here, not in the UI). The headroom to the player cap,
+  // in display shares; the affordable ceiling (cash for a buy); and the % of cash
+  // beyond which a buy stops growing (the cap or cash binds). A sell sizes by % of
+  // the held position, which can never exceed the cap → 100%.
+  const pps = price_per_share(total_value, n);
+  const safe_pps = pps > 0 ? pps : 1;
+  const max_trade_display_shares = to_display_shares(trade_headroom_fraction(input.kind, held_shares), n);
+  const affordable_display = input.kind === "buy" ? cash_before / safe_pps : Infinity;
+  const max_trade_shares = Math.floor(Math.min(affordable_display, max_trade_display_shares));
+  const max_buy_value = max_trade_display_shares * pps; // € headroom to the 100% cap
+  const max_percentage =
+    input.kind === "buy" && cash_before > 0
+      ? Math.max(1, Math.min(100, Math.ceil((Math.min(cash_before, max_buy_value) / cash_before) * 100)))
+      : 100;
 
   return {
     player_id: input.player.id,
     kind: input.kind,
     shares,
     display_shares: to_display_shares(shares, n),
-    price_per_share: price_per_share(total_value, n),
+    price_per_share: pps,
     amount,
     percentage_of_portfolio: compute_trade_share(amount, totals.total_value),
     pct_of_player_after: pct_of_player(shares_after),
-    is_short: short_quantity > 0,
-    short_quantity,
-    short_display_shares: to_display_shares(short_quantity, n),
     held_shares,
     held_display_shares: to_display_shares(held_shares, n),
     pct_of_player_held: pct_of_player(held_shares),
@@ -128,8 +130,8 @@ export function simulate_trade(input: TradePreviewInput): TradePreview {
     shortfall,
     realized_pnl: compute_realized_pnl(input.kind, shares, total_value, avg_buy, held_shares),
     capped,
-    max_trade_display_shares: to_display_shares(trade_headroom_fraction(input.kind, held_shares), n),
-    buying_power: totals.buying_power,
-    exceeds_margin,
+    max_trade_display_shares,
+    max_trade_shares,
+    max_percentage,
   };
 }

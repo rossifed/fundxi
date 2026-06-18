@@ -29,14 +29,15 @@ export function YourPositionCard({
   // message and the populated grid take the same vertical space — keeps
   // Buy/Sell anchored regardless of holding state.
   const BODY_MIN_HEIGHT = 132;
-  const has_position = !!metrics && metrics.shares !== 0;
+  const has_position = portfolio_api.holds(player.id);
 
-  const header = (status_label: string, color: string, bg: string) => (
+  // Long-only: no LONG/SHORT badge — every position is a long, so the label
+  // carried no information. Just the section title.
+  const header = (
     <div
       style={{
         display: "flex",
         alignItems: "center",
-        justifyContent: "space-between",
         padding: "6px 10px",
         background: "rgba(255,255,255,.025)",
         borderBottom: "1px solid rgba(255,255,255,.05)",
@@ -53,19 +54,6 @@ export function YourPositionCard({
       >
         Your position
       </span>
-      <span
-        style={{
-          fontSize: 10,
-          fontWeight: 800,
-          color,
-          background: bg,
-          padding: "3px 8px",
-          borderRadius: 4,
-          letterSpacing: 0.5,
-        }}
-      >
-        {status_label}
-      </span>
     </div>
   );
 
@@ -79,7 +67,7 @@ export function YourPositionCard({
   if (!has_position) {
     return (
       <div style={card_style}>
-        {header("—", "rgba(255,255,255,.4)", "rgba(255,255,255,.04)")}
+        {header}
         <div
           style={{
             minHeight: BODY_MIN_HEIGHT,
@@ -95,18 +83,13 @@ export function YourPositionCard({
     );
   }
 
-  const { shares, display_shares, price_per_share, avg_buy_per_share, current_price, market_value, pnl, return_pct } =
+  const { display_shares, price_per_share, avg_buy_per_share, current_price, market_value, pnl, return_pct } =
     metrics!;
   const portfolio_pct = compute_portfolio_share(market_value, totals.total_value);
-  const is_long = shares > 0;
 
   return (
     <div style={card_style}>
-      {header(
-        is_long ? "LONG" : "SHORT",
-        is_long ? "var(--color-positive)" : "var(--color-negative)",
-        is_long ? "color-mix(in srgb, var(--color-positive) 10%, transparent)" : "color-mix(in srgb, var(--color-negative) 10%, transparent)",
-      )}
+      {header}
       <div
         style={{
           minHeight: BODY_MIN_HEIGHT,

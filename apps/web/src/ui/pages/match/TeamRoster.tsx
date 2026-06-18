@@ -214,7 +214,7 @@ function RichRosterCard({
   const display_name = compact ? (p.full_name ?? p.name) : p.name;
   const exact_position = ref_player?.detailed_position ?? POSITION_FALLBACK[p.position];
   const photo = ref_player?.image_path ?? null;
-  const held = portfolio_api.get_holding_metrics(p.id) != null;
+  const held = portfolio_api.holds(p.id);
   // Real price-history sparkline (resampled, refreshed live on each tick). NOT
   // scoped to this fixture — a true match-scoped curve would need the backend to
   // expose per-player in-match points (deferred decision).

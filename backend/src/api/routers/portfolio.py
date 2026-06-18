@@ -22,6 +22,7 @@ from src.application.place_trade import (
     PlaceTradeCommand,
     PlayerOwnershipCapError,
     PortfolioNotFoundError,
+    ShortingDisabledError,
     UserNotFoundError,
     place_trade,
 )
@@ -138,6 +139,8 @@ async def post_trade(
     except InsufficientMarginError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except PlayerOwnershipCapError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ShortingDisabledError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except TradeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

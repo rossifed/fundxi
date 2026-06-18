@@ -102,9 +102,10 @@ async def execute_trade(
     hydrates the Portfolio (cleaner DI for the web layer that already has
     user_id + portfolio fetched).
 
-    Shorting is allowed: a SELL beyond the held long opens (or extends) a
-    short position, materialised as a Holding with negative shares. A BUY
-    while short covers (and may flip back to long).
+    Long-only: shorting is gated upstream in ``place_trade`` (the authoritative
+    command path) via ``would_open_short`` — a SELL may only reduce a holding to
+    zero. The math below still handles negative shares so the pure helpers stay
+    fully defined, but the live path never reaches a short.
     """
     if request.shares <= 0:
         raise TradeError("shares must be positive")
@@ -136,7 +137,7 @@ async def execute_trade(
             raise TradeError(f"insufficient cash: need €{total:.2f}M, have €{portfolio.cash:.2f}M")
         new_shares = prev_shares + request.shares
         new_cash = portfolio.cash - total
-    else:  # SELL — including selling beyond holding (short) or while flat / already short
+    else:  # SELL — long-only: never below zero (shorting is rejected in place_trade)
         new_shares = prev_shares - request.shares
         new_cash = portfolio.cash + total
 

@@ -16,6 +16,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { matches_api } from "@fundxi/core/api/matches_api";
 import { players_api } from "@fundxi/core/api/players_api";
+import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import { standings_api, type StandingRow } from "@fundxi/core/api/standings_api";
 import { teams_api, type SquadPlayer } from "@fundxi/core/api/teams_api";
 import { valuations_api } from "@fundxi/core/api/valuations_api";
@@ -24,6 +25,7 @@ import type { Match } from "@fundxi/core/domain/match/match";
 import type { Player, Position } from "@fundxi/core/domain/player/player";
 import type { Team } from "@fundxi/core/domain/team/team";
 import { AuthDialog } from "@/ui/components/AuthDialog";
+import { BuyTeamButton } from "@/ui/components/BuyTeamButton";
 import { PlayerCard } from "@/ui/components/PlayerCard";
 import { TeamLink } from "@/ui/components/TeamLink";
 import { TradeDialog } from "@/ui/components/TradeDialog";
@@ -166,7 +168,14 @@ export function TeamPage({ team, on_open_player, on_open_match, on_open_team, on
       {standing && <RecordStrip standing={standing} />}
       {squad && squad.length > 0 && <SquadSummary squad={squad} on_open_player={on_open_player} />}
 
-      <Section title={`Squad${squad ? ` · ${squad.length}` : ""}`}>
+      <Section
+        title={`Squad${squad ? ` · ${squad.length}` : ""}`}
+        action={
+          squad && squad.length > 0 ? (
+            <BuyTeamButton team={team} squad={squad} on_open_player={on_open_player} />
+          ) : undefined
+        }
+      >
         {squad === null ? (
           <Muted>Loading squad…</Muted>
         ) : squad.length === 0 ? (
@@ -259,6 +268,7 @@ export function TeamPage({ team, on_open_player, on_open_match, on_open_team, on
                             spark_data={valuations_api.get_sparkline(p.id)}
                             on_click={() => on_open_player(p.id)}
                             on_trade={kind => open_trade(p.id, kind)}
+                            has_position={portfolio_api.holds(p.id)}
                           />
                         </div>
                       );
@@ -646,19 +656,22 @@ function TeamFixtureRow({
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children, action }: { title: string; children: React.ReactNode; action?: React.ReactNode }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <div
-        style={{
-          fontSize: 11,
-          fontWeight: 800,
-          letterSpacing: 1,
-          textTransform: "uppercase",
-          color: "rgba(255,255,255,.5)",
-        }}
-      >
-        {title}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 800,
+            letterSpacing: 1,
+            textTransform: "uppercase",
+            color: "rgba(255,255,255,.5)",
+          }}
+        >
+          {title}
+        </div>
+        {action}
       </div>
       {children}
     </div>

@@ -30,7 +30,7 @@ export function PlayerValuationRibbon({
   // resolution as the holdings list / AUM and the mobile ribbon, so this header
   // P&L can't diverge across clients or contradict the Your-position card.
   const metrics = portfolio_api.get_holding_metrics(player_id);
-  const pnl = metrics && metrics.shares !== 0 ? metrics.pnl : null;
+  const pnl = portfolio_api.holds(player_id) ? (metrics?.pnl ?? null) : null;
 
   // Since-Start and Last-Match read STRAIGHT from the valuation — the SAME source
   // the roster card and screener use. They used to be recomputed here from the

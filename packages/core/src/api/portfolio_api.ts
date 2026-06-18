@@ -26,6 +26,13 @@ export const portfolio_api = {
   get_holding_metrics(player_id: number): HoldingMetrics | undefined {
     return portfolio_service.get_holding_metrics(player_id);
   },
+  /** Whether the user holds a (long) position in this player — the SINGLE
+   * predicate that gates "can sell / close" and the "Your position" card across
+   * web AND mobile, so the two clients never disagree on the rule. Long-only, so
+   * "holds" means shares > 0. */
+  holds(player_id: number): boolean {
+    return (portfolio_service.get_holding_metrics(player_id)?.shares ?? 0) > 0;
+  },
   get_cash(): number {
     return portfolio_service.get_my_cash();
   },
