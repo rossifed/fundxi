@@ -1,17 +1,16 @@
 /* TeamRoster — single-team rich roster for the match List view.
  *
  * One team at a time, full-width cards grouped by position (XI, then a Bench
- * section). Each card is a small "player tile" built around the FIFA-shirt
- * motif: a kit-coloured shirt panel on the left carrying the portrait with the
- * jersey number embossed behind it (player + number + kit colour tied into one
- * identity block), then the trade signal — name + live match events, exact
- * position + match rating, the IN-MATCH performance curve, the live price with
- * a subtle one-shot tick pulse, and this-match move. A quiet left accent marks
- * a held position. Tap opens the full PlayerSheet (chart + stats + trade).
+ * section). Each card is a clean "player tile": kit-coloured jersey number on
+ * the left, portrait, then the identity (name + markers, exact position + match
+ * rating), and on the right the live price with a subtle one-shot tick pulse +
+ * the MATCH / TOTAL moves. No in-row chart — the row stays calm (matches the
+ * fixture_new design). A quiet left accent marks a held position; a subtle
+ * green/red heat wash scales with the this-match move. Tap opens the full
+ * PlayerSheet (chart + stats + trade).
  *
  * DDD role: presentational UI. All values are real provider data (match rating,
- * in-match price curve, universe valuation, holdings, kit colour) — nothing
- * synthesised. Single responsive component → web/mobile aligned by construction.
+ * universe valuation, holdings, kit colour) — nothing synthesised.
  */
 
 import type { MatchPlayer } from "@fundxi/core/domain/match/match";
@@ -20,10 +19,7 @@ import type { SubInfo } from "@fundxi/core/domain/match/substitutions";
 import { players_api } from "@fundxi/core/api/players_api";
 import { valuations_api } from "@fundxi/core/api/valuations_api";
 import { portfolio_api } from "@fundxi/core/api/portfolio_api";
-import { spark_for_player } from "@fundxi/core/infrastructure/repositories/valuations_repository";
-import { Spark } from "@/ui/components/Spark";
 import { TickValue } from "@/ui/components/TickValue";
-import { useViewport } from "@/ui/hooks/use_viewport";
 import { color } from "@/ui/design/tokens";
 import { color_for_sign, fmt_eur_m, fmt_signed_pct } from "@/ui/helpers/format";
 import { MatchEventBadge, SubBadge, type MatchEventCounts } from "@/ui/pages/match/event_badge";
@@ -48,6 +44,16 @@ function group_by_position(players: MatchPlayer[]): Map<Position, MatchPlayer[]>
   return m;
 }
 
+/** This player's price move OVER THIS MATCH (%), from the single valuation
+ * source (falls back to the match payload). The "market impact" the fixture lens
+ * sorts, tints and surfaces. 0 before the match has moved anything. */
+function match_delta(p: MatchPlayer): number {
+  return valuations_api.get_for_player(p.id)?.change_last_match ?? p.change_last_match ?? 0;
+}
+
+// Below this |Δ| a player isn't a "mover" — keeps pre-match (all ~0) quiet.
+const MOVER_MIN = 0.05;
+
 interface TeamRosterProps {
   xi: MatchPlayer[];
   bench: MatchPlayer[];
@@ -57,33 +63,49 @@ interface TeamRosterProps {
   /** Pre-lineup squad mode: render just the position sections with no "XI"
    * group header (it's the full squad, not a starting XI; bench is empty). */
   squad_mode?: boolean;
+  /** True once THIS fixture is live or finished. The MATCH delta + movers + heat
+   * only make sense then — ``change_last_match`` is the player's LATEST fixture,
+   * which equals THIS one only once it's under way. Before kickoff it would be
+   * the player's PREVIOUS match, so we hide those (keep TOTAL only). */
+  started?: boolean;
   /** Watched player ids — marks the watchlist star on each card. */
   watchlist?: Set<number>;
   on_open_player: (player_id: number) => void;
 }
 
-// Cap the rich-card column to a comfortable reading measure: at the app's
-// 1800px width a full-stretch single-team row leaves a dead gap in the middle.
-// The cap keeps the row tight; the in-match curve fills whatever middle remains.
+// Comfortable reading measure for the single-team rows (centred by the caller).
 const ROSTER_MAX_WIDTH = 720;
 
-export function TeamRoster({ xi, bench, team_color, event_counts, subs, squad_mode, watchlist, on_open_player }: TeamRosterProps) {
-  // Phone width: drop the in-row chart (it gets crushed) and hand the freed
-  // space to the full player name. Desktop keeps the elastic curve.
-  const { is_mobile } = useViewport();
+export function TeamRoster({ xi, bench, team_color, event_counts, subs, squad_mode, started = false, watchlist, on_open_player }: TeamRosterProps) {
   const by_pos = group_by_position(xi);
-  const bench_ordered = POSITION_GROUPS.flatMap(g => group_by_position(bench).get(g.key) ?? []);
+  // Sort by this-match impact only once the match is under way (otherwise the
+  // "impact" would be the previous match) → keep position order before kickoff.
+  const sort_by_impact = (rows: MatchPlayer[]) =>
+    started ? rows.slice().sort((a, b) => Math.abs(match_delta(b)) - Math.abs(match_delta(a))) : rows;
+  const bench_ordered = sort_by_impact(POSITION_GROUPS.flatMap(g => group_by_position(bench).get(g.key) ?? []));
+
+  // Market lens: the biggest movers OVER THIS MATCH — only once it's started
+  // (before kickoff, change_last_match is the previous match → would mislead).
+  const movers = started
+    ? [...xi, ...bench]
+        .map(p => ({ p, d: match_delta(p) }))
+        .filter(m => Math.abs(m.d) >= MOVER_MIN)
+        .sort((a, b) => Math.abs(b.d) - Math.abs(a.d))
+        .slice(0, 3)
+    : [];
 
   return (
     // gap 18 between the two top-level blocks (XI / Bench) so the starter↔sub
     // break reads as a real separation, not just another position group.
     <div style={{ display: "flex", flexDirection: "column", gap: 18, width: "100%", maxWidth: ROSTER_MAX_WIDTH }}>
+      {movers.length > 0 && <MoversBanner movers={movers} on_open={on_open_player} />}
+
       {/* Starting XI — strong group header, then position sub-groups (faint).
           Hidden in squad mode (pre-lineup full squad, no XI/Bench split). */}
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {!squad_mode && <GroupHeader label="XI" />}
         {POSITION_GROUPS.map(g => {
-          const rows = by_pos.get(g.key) ?? [];
+          const rows = sort_by_impact(by_pos.get(g.key) ?? []);
           if (rows.length === 0) return null;
           return (
             <Section key={g.key} label={g.label}>
@@ -94,8 +116,9 @@ export function TeamRoster({ xi, bench, team_color, event_counts, subs, squad_mo
                   team_color={team_color}
                   events={event_counts.get(p.id)}
                   sub_info={subs.get(p.id)}
-                  compact={is_mobile}
                   watched={watchlist?.has(p.id) ?? false}
+                  delta={match_delta(p)}
+                  show_match={started}
                   on_open={on_open_player}
                 />
               ))}
@@ -116,8 +139,9 @@ export function TeamRoster({ xi, bench, team_color, event_counts, subs, squad_mo
               team_color={team_color}
               events={event_counts.get(p.id)}
               sub_info={subs.get(p.id)}
-              compact={is_mobile}
               watched={watchlist?.has(p.id) ?? false}
+              delta={match_delta(p)}
+              show_match={started}
               on_open={on_open_player}
               bench
             />
@@ -177,14 +201,62 @@ function Section({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
+/** "Movers this match" strip — the biggest price moves of the fixture so far,
+ * the fixture's trading headline. Each is tappable to the player. Real Δ only;
+ * hidden entirely before the match has moved anything (see the caller's guard). */
+function MoversBanner({
+  movers,
+  on_open,
+}: {
+  movers: { p: MatchPlayer; d: number }[];
+  on_open: (player_id: number) => void;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "8px 12px",
+        borderRadius: 12,
+        background: "rgba(255,255,255,.03)",
+        border: "1px solid rgba(255,255,255,.06)",
+        flexWrap: "wrap",
+      }}
+    >
+      <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.6, textTransform: "uppercase", color: "rgba(255,255,255,.5)", whiteSpace: "nowrap" }}>
+        Movers this match
+      </span>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        {movers.map(({ p, d }, i) => (
+          <span key={p.id} style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+            {i > 0 && <span style={{ color: "rgba(255,255,255,.2)" }}>·</span>}
+            <button
+              type="button"
+              onClick={() => on_open(p.id)}
+              style={{ display: "inline-flex", alignItems: "baseline", gap: 5, background: "transparent", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit" }}
+            >
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: "#fff" }}>{p.name}</span>
+              <span className="mono" style={{ fontSize: 12, fontWeight: 800, color: color_for_sign(d) }}>
+                {fmt_signed_pct(d, 1)}
+              </span>
+            </button>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function RichRosterCard({
   p,
   team_color,
   events,
   sub_info,
   bench,
-  compact,
   watched,
+  delta,
+  show_match,
   on_open,
 }: {
   p: MatchPlayer;
@@ -192,10 +264,14 @@ function RichRosterCard({
   events?: MatchEventCounts;
   sub_info?: SubInfo;
   bench?: boolean;
-  /** Phone width: hide the in-row chart and show the player's full name. */
-  compact?: boolean;
   /** In the viewer's watchlist → a small grey star next to the name. */
   watched?: boolean;
+  /** This-match price move (%) — drives a subtle green/red heat wash so hot
+   * players pop in the fixture's "market lens". */
+  delta: number;
+  /** Show the MATCH delta + heat tint — only once the fixture is live/finished
+   * (before then ``delta`` is the previous match, which would mislead here). */
+  show_match: boolean;
   on_open: (player_id: number) => void;
 }) {
   const ref_player = players_api.get(p.id);
@@ -209,19 +285,24 @@ function RichRosterCard({
   const match_change = valuation?.change_last_match ?? p.change_last_match; // % over THIS match
   const total_change = valuation?.change_since_inception ?? 0; // % since tournament open
   const rating = p.rating;
-  // On phones the chart is gone, so there's room for the full name; on desktop
-  // keep the short display name (the elastic curve takes the middle).
-  const display_name = compact ? (p.full_name ?? p.name) : p.name;
+  // Full name — the row is clean (no in-row chart) so there's room for it.
+  const display_name = p.full_name ?? p.name;
   const exact_position = ref_player?.detailed_position ?? POSITION_FALLBACK[p.position];
   const photo = ref_player?.image_path ?? null;
   const held = portfolio_api.holds(p.id);
-  // Real price-history sparkline (resampled, refreshed live on each tick). NOT
-  // scoped to this fixture — a true match-scoped curve would need the backend to
-  // expose per-player in-match points (deferred decision).
-  const spark = spark_for_player(p.id);
   // Per-card kit colour (real provider data → literal interpolation is allowed).
   // Guard the empty string ("" is falsy-but-not-nullish, so ?? wouldn't catch it).
   const tc = team_color && team_color.trim() ? team_color : "#8a8a8a";
+  // "Market lens" heat: a subtle green/red wash scaled by this-match move (cap
+  // ±15% → max ~12% wash), so the biggest movers pop. Neutral below ~1%.
+  const base_bg = held
+    ? "color-mix(in srgb, var(--color-accent-blue) 8%, rgba(255,255,255,.022))"
+    : "rgba(255,255,255,.025)";
+  const heat_mag = show_match ? Math.min(Math.abs(delta), 15) / 15 : 0;
+  const heat_bg =
+    heat_mag < 0.06
+      ? base_bg
+      : `color-mix(in srgb, ${delta > 0 ? "var(--color-positive)" : "var(--color-negative)"} ${(heat_mag * 12).toFixed(1)}%, ${base_bg})`;
 
   return (
     <button
@@ -236,9 +317,7 @@ function RichRosterCard({
         width: "100%",
         height: 74,
         padding: 0,
-        background: held
-          ? "color-mix(in srgb, var(--color-accent-blue) 8%, rgba(255,255,255,.022))"
-          : "rgba(255,255,255,.025)",
+        background: heat_bg,
         border: `1px solid ${held ? "color-mix(in srgb, var(--color-accent-blue) 30%, transparent)" : "rgba(255,255,255,.05)"}`,
         // Quiet left accent marking a held position (no loud badge).
         boxShadow: held ? `inset 2px 0 0 0 ${color.accentBlue}` : "none",
@@ -251,36 +330,36 @@ function RichRosterCard({
         opacity: bench ? 0.72 : 1,
       }}
     >
-      {/* Jersey-number tile — its OWN dedicated cell in the kit colour, the
-          number embossed (kit-coloured outline, slight skew) like the back of a
-          shirt. Kept separate from the portrait so the head can never cover it. */}
+      {/* Jersey number — no cell background; the kit colour lives only in the
+          number's outline (the harmonising touch), like fixture_new. */}
       <div
         style={{
-          width: 48,
+          width: 44,
           flexShrink: 0,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           overflow: "hidden",
-          borderRight: "1px solid rgba(255,255,255,.05)",
-          background: `linear-gradient(180deg, ${tc}30, ${tc}0f)`,
         }}
       >
         <span
           aria-hidden
           className="mono"
           style={{
-            fontSize: 32,
+            fontSize: 30,
             fontWeight: 900,
-            letterSpacing: -2,
+            letterSpacing: -1.5,
             lineHeight: 1,
-            transform: "skewX(-7deg)",
-            // White fill cerned by the kit colour (paint-order draws the stroke
-            // UNDER the fill) — legible on dark kits where a kit-only outline
-            // washes out (e.g. France navy), still carrying the team colour.
+            // White fill cerned by a BOLD kit-colour outline (paint-order draws
+            // the stroke UNDER the fill). With the cell background gone, the
+            // outline is now the only team-colour cue, so it's thicker to read
+            // clearly on the dark card. (Grey only when the kit colour is absent
+            // from the provider data — we don't invent one.)
             color: "#fff",
+            // Default paint order (fill THEN stroke) so the kit-colour outline
+            // is drawn fully ON TOP — visible at its real width, unlike
+            // "stroke fill" where the white fill hid the inner half.
             WebkitTextStroke: `2px ${tc}`,
-            paintOrder: "stroke fill",
             whiteSpace: "nowrap",
             userSelect: "none",
             pointerEvents: "none",
@@ -290,14 +369,13 @@ function RichRosterCard({
         </span>
       </div>
 
-      {/* Clean portrait cell — bottom-anchored on a soft kit radial. */}
+      {/* Portrait — no cell background (transparent), bottom-anchored headshot. */}
       <div
         style={{
           position: "relative",
-          width: 54,
+          width: 50,
           flexShrink: 0,
           overflow: "hidden",
-          background: `radial-gradient(120% 85% at 50% 24%, ${tc}40, transparent 74%)`,
         }}
       >
         {photo && (
@@ -319,10 +397,9 @@ function RichRosterCard({
         )}
       </div>
 
-      {/* Identity — takes its natural width (full name + markers); NOT capped,
-          so the name isn't truncated. The curve (flex:1) absorbs the remaining
-          width and yields first when the row is tight — the name has priority. */}
-      <div style={{ flex: compact ? 1 : "0 1 auto", minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: 4, padding: "0 10px" }}>
+      {/* Identity — takes the row's middle (clean, no in-row chart): full name,
+          markers, then position + rating. */}
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: 4, padding: "0 12px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
           <span style={{ minWidth: 0, fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: -0.1 }}>
             {display_name}
@@ -355,28 +432,19 @@ function RichRosterCard({
         </div>
       </div>
 
-      {/* Performance curve — elastic: fills the row's middle (the dead space at
-          the capped width). Hidden on phones, where the space goes to the full
-          name instead (the squeezed thumbnail wasn't readable). Live-refreshed. */}
-      {!compact && (
-        <div style={{ flex: 1, minWidth: 0, alignSelf: "center", padding: "0 16px" }}>
-          <Spark data={spark} width={240} height={26} responsive />
-        </div>
-      )}
-
-      {/* Live price + BOTH moves we keep: THIS match and TOTAL (since the player
-          entered our universe), labelled like the legacy card. TickValue gives
-          the subtle one-shot pulse (tinted bg + ▲/▼ for 450ms) on each tick —
-          no constant blinking. */}
+      {/* Live price + the two moves (THIS match, TOTAL), stacked + labelled like
+          the fixture_new mock. TickValue gives the subtle one-shot pulse on each
+          tick — no constant blinking, no in-row chart. */}
       <div style={{ flexShrink: 0, alignSelf: "center", textAlign: "right", padding: "0 12px 0 8px", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
         <span className="mono" style={{ fontSize: 14, fontWeight: 800, lineHeight: 1 }}>
           <TickValue value={price}>{fmt_eur_m(price)}</TickValue>
         </span>
-        {/* Phone: stack the two deltas (each on one line) so the price block
-            stays narrow and never clips; desktop keeps them side by side. */}
-        <div style={{ display: "flex", flexDirection: compact ? "column" : "row", gap: compact ? 2 : 10, alignItems: "flex-end" }}>
-          <DeltaStat label="match" value={match_change} inline={compact} />
-          <DeltaStat label="total" value={total_change} dim inline={compact} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 2, alignItems: "flex-end" }}>
+          {/* MATCH = THIS fixture's move. Before kickoff it's 0% (nothing has
+              happened in this match yet) — NOT the player's previous match, which
+              ``change_last_match`` would otherwise show here. */}
+          <DeltaStat label="match" value={show_match ? match_change : 0} inline />
+          <DeltaStat label="total" value={total_change} dim inline />
         </div>
       </div>
     </button>

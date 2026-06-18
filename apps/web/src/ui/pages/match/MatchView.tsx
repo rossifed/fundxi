@@ -1,5 +1,6 @@
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import type { Match, MatchEvent, MatchPlayer } from "@fundxi/core/domain/match/match";
+import type { Team } from "@fundxi/core/domain/team/team";
 import type { MatchComment } from "@fundxi/core/domain/match/match_comment";
 import type { Position } from "@fundxi/core/domain/player/player";
 import { comments_api } from "@fundxi/core/api/comments_api";
@@ -32,6 +33,10 @@ interface MatchViewProps {
 }
 
 const GREEN = "var(--color-positive)";
+
+// Single centered reading column (brief: one column, ~max 820, whitespace on the
+// sides on desktop is the price of web/mobile parity).
+const COLUMN_MAX = 760;
 
 const POSITION_GROUPS: readonly { key: Position; label: string }[] = [
   { key: "GK", label: "Goalkeeper" },
@@ -113,6 +118,9 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
   // One team at a time in the roster (home/away) — full-width rich cards beat the
   // old cramped two-column list (truncated names, no room for the trade signal).
   const [roster_team, set_roster_team] = useState<"home" | "away">("home");
+  // Single-column layout (desktop = mobile, per the brief): the lineup, match
+  // stats and commentary live in top-level tabs instead of a desktop side rail.
+  const [top_tab, set_top_tab] = useState<"compos" | "stats" | "events">("compos");
 
   const goals = useMemo(
     () =>
@@ -245,8 +253,6 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
     [commentaries],
   );
 
-  const is_desktop = useIsDesktop();
-
   const card: CSSProperties = {
     background: "rgba(255,255,255,.02)",
     border: "1px solid rgba(255,255,255,.05)",
@@ -264,7 +270,7 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
         animation: "fu .25s ease",
       }}
     >
-      <div>
+      <div style={{ width: "100%", maxWidth: COLUMN_MAX, alignSelf: "center" }}>
         <button
           onClick={on_back}
           style={{
@@ -284,7 +290,7 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
       </div>
 
       {/* Score header */}
-      <div style={{ ...card, padding: "18px 20px" }}>
+      <div style={{ ...card, padding: "18px 20px", width: "100%", maxWidth: COLUMN_MAX, alignSelf: "center" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           {/* Top-left: a small pulsing green dot + minute as the live marker
               (the big "LIVE" pill is redundant with the global LiveBar). */}
@@ -332,140 +338,64 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
         )}
       </div>
 
-      {/* The live commentary ticker now lives in the global LiveBar (app-wide),
-          so it's not duplicated here. The Commentary panel below stays as this
-          match's full feed. */}
+      {/* Single centered column (desktop = mobile, per the brief): a
+          Compos / Stats / Events tab bar, then the selected tab. Replaces the
+          old desktop two-column side rail. */}
+      <div style={{ width: "100%", maxWidth: COLUMN_MAX, alignSelf: "center", display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
+        <MatchTabBar tab={top_tab} on_change={set_top_tab} />
 
-      {/* Two-column grid on desktop: lineup on the left, sticky Stats +
-          Commentary panel on the right. On mobile / narrow viewports the
-          same widgets stack vertically — same content, just laid out by
-          available width. */}
-      <div
-        style={
-          is_desktop
-            ? {
-                display: "grid",
-                gridTemplateColumns: "minmax(0, 1fr) 340px",
-                gap: 16,
-                alignItems: "start",
-              }
-            : { display: "flex", flexDirection: "column", gap: 16 }
-        }
-      >
-        {/* Left column: lineup view toggle + rosters / pitch */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
-          {/* Team selector — drives the roster (and the Pitch when live). Shown
-              both pre-lineup AND live so the two views stay consistent (same
-              single-team card style, same control). */}
-          <div style={{ display: "flex", gap: 8 }}>
-            {(["home", "away"] as const).map(t => {
-              const tm = t === "home" ? home_team : away_team;
-              const id = t === "home" ? match.home_team_id : match.away_team_id;
-              const kit = t === "home" ? match.home_kit_color : match.away_kit_color;
-              return (
-                <TeamChip
-                  key={t}
-                  name={tm?.name ?? id}
-                  flag={tm?.flag}
-                  flag_url={tm?.flag_url}
-                  color={kit ?? tm?.color ?? "rgba(255,255,255,.5)"}
-                  active={roster_team === t}
-                  onClick={() => set_roster_team(t)}
-                />
-              );
-            })}
-          </div>
-
-          {/* Buy the whole selected team — same widget/logic as the team page. */}
-          {(roster_team === "home" ? home_team : away_team) && (
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <BuyTeamButton
-                team={(roster_team === "home" ? home_team : away_team)!}
-                on_open_player={on_open_player_profile}
-              />
+        {top_tab === "compos" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
+            {/* Team selector — drives the roster (and the Pitch when live). */}
+            <div style={{ display: "flex", gap: 8 }}>
+              {(["home", "away"] as const).map(t => {
+                const tm = t === "home" ? home_team : away_team;
+                const id = t === "home" ? match.home_team_id : match.away_team_id;
+                const kit = t === "home" ? match.home_kit_color : match.away_kit_color;
+                return (
+                  <TeamChip
+                    key={t}
+                    name={tm?.name ?? id}
+                    flag={tm?.flag}
+                    flag_url={tm?.flag_url}
+                    color={kit ?? tm?.color ?? "rgba(255,255,255,.5)"}
+                    active={roster_team === t}
+                    onClick={() => set_roster_team(t)}
+                  />
+                );
+              })}
             </div>
-          )}
 
-          {match.lineup_published === false ? (
-            // Pre-lineup: SAME single-team card view as live, showing the full
-            // squad (who COULD play) with a "not confirmed" banner — no XI/Bench
-            // split, no pitch (no formation yet). Consistent with the live view.
-            <>
-              <div
-                style={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: "rgba(255,255,255,.6)",
-                  background: "rgba(255,255,255,.03)",
-                  border: "1px solid rgba(255,255,255,.06)",
-                  borderRadius: 8,
-                  padding: "8px 12px",
-                }}
-              >
-                Lineup not announced yet — full squad shown, not confirmed to play.
-              </div>
-              <TeamRoster
-                xi={(roster_team === "home" ? match.home_squad : match.away_squad) ?? []}
-                bench={[]}
-                team_color={
-                  roster_team === "home"
-                    ? (match.home_kit_color ?? home_team?.color)
-                    : (match.away_kit_color ?? away_team?.color)
-                }
-                event_counts={event_counts}
-                subs={subs}
-                squad_mode
-                watchlist={watchlist}
+            {/* Squad summary + "Buy team" — count, avg age, total value (all real
+                data), with the basket trigger, like the team page header. */}
+            {(roster_team === "home" ? home_team : away_team) && (
+              <SquadSummaryCard
+                team={(roster_team === "home" ? home_team : away_team)!}
+                squad={(roster_team === "home" ? match.home_squad : match.away_squad) ?? []}
                 on_open_player={on_open_player_profile}
               />
-            </>
-          ) : (
-            <>
-              {/* View tabs — List / Pitch, applied to the selected team. */}
-              <div
-                role="tablist"
-                style={{
-                  display: "inline-flex",
-                  alignSelf: "flex-start",
-                  background: "rgba(255,255,255,.03)",
-                  border: "1px solid rgba(255,255,255,.06)",
-                  borderRadius: 8,
-                  padding: 3,
-                  gap: 2,
-                }}
-              >
-                {(["list", "pitch"] as const).map(m => {
-                  const active = view_mode === m;
-                  return (
-                    <button
-                      key={m}
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
-                      onClick={() => set_view_mode(m)}
-                      style={{
-                        padding: "5px 14px",
-                        border: "none",
-                        background: active ? "rgba(255,255,255,.08)" : "transparent",
-                        color: active ? "#fff" : "rgba(255,255,255,.5)",
-                        fontSize: 11,
-                        fontWeight: 700,
-                        letterSpacing: 0.3,
-                        borderRadius: 6,
-                        cursor: "pointer",
-                        fontFamily: "inherit",
-                      }}
-                    >
-                      {m === "list" ? "List" : "Pitch"}
-                    </button>
-                  );
-                })}
-              </div>
+            )}
 
-              {view_mode === "list" ? (
+            {match.lineup_published === false ? (
+              // Pre-lineup: full squad (who COULD play) with a "not confirmed"
+              // banner — no XI/Bench split, no pitch (no formation yet).
+              <>
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "rgba(255,255,255,.6)",
+                    background: "rgba(255,255,255,.03)",
+                    border: "1px solid rgba(255,255,255,.06)",
+                    borderRadius: 8,
+                    padding: "8px 12px",
+                  }}
+                >
+                  Lineup not announced yet — full squad shown, not confirmed to play.
+                </div>
                 <TeamRoster
-                  xi={(roster_team === "home" ? home_effective : away_effective).on_field}
-                  bench={(roster_team === "home" ? home_effective : away_effective).bench}
+                  xi={(roster_team === "home" ? match.home_squad : match.away_squad) ?? []}
+                  bench={[]}
                   team_color={
                     roster_team === "home"
                       ? (match.home_kit_color ?? home_team?.color)
@@ -473,43 +403,88 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
                   }
                   event_counts={event_counts}
                   subs={subs}
+                  squad_mode
+                  started={is_live || match.status === "finished"}
                   watchlist={watchlist}
                   on_open_player={on_open_player_profile}
                 />
-              ) : (
-                <div>
-                  <PitchView
-                    match={match}
+              </>
+            ) : (
+              <>
+                {/* View toggle — List / Pitch, applied to the selected team. */}
+                <div
+                  role="tablist"
+                  style={{
+                    display: "inline-flex",
+                    alignSelf: "flex-start",
+                    background: "rgba(255,255,255,.03)",
+                    border: "1px solid rgba(255,255,255,.06)",
+                    borderRadius: 8,
+                    padding: 3,
+                    gap: 2,
+                  }}
+                >
+                  {(["list", "pitch"] as const).map(m => {
+                    const active = view_mode === m;
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        onClick={() => set_view_mode(m)}
+                        style={{
+                          padding: "5px 14px",
+                          border: "none",
+                          background: active ? "rgba(255,255,255,.08)" : "transparent",
+                          color: active ? "#fff" : "rgba(255,255,255,.5)",
+                          fontSize: 11,
+                          fontWeight: 700,
+                          letterSpacing: 0.3,
+                          borderRadius: 6,
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                        }}
+                      >
+                        {m === "list" ? "List" : "Pitch"}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {view_mode === "list" ? (
+                  <TeamRoster
+                    xi={(roster_team === "home" ? home_effective : away_effective).on_field}
+                    bench={(roster_team === "home" ? home_effective : away_effective).bench}
+                    team_color={
+                      roster_team === "home"
+                        ? (match.home_kit_color ?? home_team?.color)
+                        : (match.away_kit_color ?? away_team?.color)
+                    }
+                    event_counts={event_counts}
                     subs={subs}
-                    team={roster_team}
-                    home_color={match.home_kit_color ?? home_team?.color}
-                    away_color={match.away_kit_color ?? away_team?.color}
+                    started={is_live || match.status === "finished"}
+                    watchlist={watchlist}
                     on_open_player={on_open_player_profile}
                   />
-                </div>
-              )}
-            </>
-          )}
-        </div>
+                ) : (
+                  <div>
+                    <PitchView
+                      match={match}
+                      subs={subs}
+                      team={roster_team}
+                      home_color={match.home_kit_color ?? home_team?.color}
+                      away_color={match.away_kit_color ?? away_team?.color}
+                      on_open_player={on_open_player_profile}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
-        {/* Right column: Stats + Commentary, both bounded so they never
-            push the page height beyond the viewport. Sticky on desktop. */}
-        <aside
-          style={
-            is_desktop
-              ? {
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 14,
-                  position: "sticky",
-                  top: 16,
-                  alignSelf: "start",
-                  maxHeight: "calc(100vh - 32px)",
-                  overflowY: "auto",
-                }
-              : { display: "flex", flexDirection: "column", gap: 14 }
-          }
-        >
+        {top_tab === "stats" && (
           <TeamStatsPanel
             stats={team_stats}
             home_team_id={match.home_team_id}
@@ -518,17 +493,10 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
             away_color={match.away_kit_color ?? away_team?.color}
             card={card}
           />
-          {/* Commentary: FIXED height, independent of content and of the
-              stats panel. The pane never resizes as live comments arrive
-              — only its inner list scrolls. */}
-          <div
-            style={{
-              ...card,
-              display: "flex",
-              flexDirection: "column",
-              flex: "none",
-            }}
-          >
+        )}
+
+        {top_tab === "events" && (
+          <div style={{ ...card, display: "flex", flexDirection: "column" }}>
             <div
               style={{
                 padding: "12px 16px",
@@ -541,36 +509,113 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
             >
               Commentary
             </div>
-            <div
-              style={{
-                overflowY: "auto",
-                height: is_desktop ? 460 : 360,
-                flexShrink: 0,
-              }}
-            >
+            <div style={{ overflowY: "auto", maxHeight: "calc(100vh - 220px)" }}>
               <Commentary comments={commentaries_chrono} loading={commentaries === null} />
             </div>
           </div>
-        </aside>
+        )}
       </div>
     </div>
   );
 }
 
-function useIsDesktop(): boolean {
-  const [is_desktop, set_is_desktop] = useState<boolean>(() => {
-    if (typeof window === "undefined") return true;
-    return window.matchMedia("(min-width: 1024px)").matches;
-  });
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mql = window.matchMedia("(min-width: 1024px)");
-    const handler = (e: MediaQueryListEvent) => set_is_desktop(e.matches);
-    mql.addEventListener("change", handler);
-    return () => mql.removeEventListener("change", handler);
-  }, []);
-  return is_desktop;
+/** Squad summary card — count · avg age · total value + the "Buy team" basket
+ * trigger. All real data (squad list, per-player age + live valuation). Mirrors
+ * the team-page header and the fixture_new design. */
+function SquadSummaryCard({
+  team,
+  squad,
+  on_open_player,
+}: {
+  team: Team;
+  squad: MatchPlayer[];
+  on_open_player: (player_id: number) => void;
+}) {
+  const count = squad.length;
+  const ages = squad.map(p => players_api.get(p.id)?.age).filter((a): a is number => a != null);
+  const avg_age = ages.length ? ages.reduce((s, a) => s + a, 0) / ages.length : null;
+  const value = squad.reduce((s, p) => s + (valuations_api.get_for_player(p.id)?.current_price ?? p.value), 0);
+  const value_label = value >= 1000 ? `€${(value / 1000).toFixed(2)}B` : `€${Math.round(value)}M`;
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 12,
+        flexWrap: "wrap",
+        padding: "12px 14px",
+        background: "rgba(255,255,255,.025)",
+        border: "1px solid rgba(255,255,255,.06)",
+        borderRadius: 14,
+      }}
+    >
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: -0.2 }}>{team.name} squad</div>
+        <div style={{ fontSize: 11.5, color: "rgba(255,255,255,.5)", marginTop: 2 }}>
+          {count} {count === 1 ? "player" : "players"}
+          {avg_age != null ? ` · avg age ${avg_age.toFixed(1)}` : ""}
+        </div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: "rgba(255,255,255,.35)" }}>
+            Squad value
+          </div>
+          <div className="mono" style={{ fontSize: 15, fontWeight: 800, marginTop: 1 }}>{value_label}</div>
+        </div>
+        <BuyTeamButton team={team} on_open_player={on_open_player} />
+      </div>
+    </div>
+  );
 }
+
+/** Top-level match tabs — single column (desktop = mobile). */
+function MatchTabBar({
+  tab,
+  on_change,
+}: {
+  tab: "compos" | "stats" | "events";
+  on_change: (t: "compos" | "stats" | "events") => void;
+}) {
+  const tabs: { key: "compos" | "stats" | "events"; label: string }[] = [
+    { key: "compos", label: "Compos" },
+    { key: "stats", label: "Stats" },
+    { key: "events", label: "Events" },
+  ];
+  return (
+    <div role="tablist" style={{ display: "flex", gap: 4, background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.06)", borderRadius: 10, padding: 4 }}>
+      {tabs.map(t => {
+        const active = tab === t.key;
+        return (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => on_change(t.key)}
+            style={{
+              flex: 1,
+              padding: "9px 0",
+              border: "none",
+              background: active ? "rgba(255,255,255,.08)" : "transparent",
+              color: active ? "#fff" : "rgba(255,255,255,.5)",
+              fontSize: 12.5,
+              fontWeight: 800,
+              letterSpacing: 0.4,
+              borderRadius: 7,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            {t.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 
 // Subset of Sportmonks stat codes surfaced in the side panel. Presentational
 // localization only — the data itself is the provider's. Order matters: it
