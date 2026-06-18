@@ -57,13 +57,21 @@ async def backfill_fixture_kit(
     raw_archive: RawEventArchive,
     fixture_repo: FixtureRepository,
     season_id: int | None = None,
+    only_missing: bool = False,
 ) -> FixtureKitReport:
     """Fetch kit metadata for every fixture (optionally scoped to one
     season), write the kit colors/palettes, then derive team accent
-    colors. Returns a count report."""
+    colors. Returns a count report.
+
+    ``only_missing=True`` restricts the fetch to fixtures whose kit palette is
+    still NULL — the incremental mode the daily refresh uses, so only newly
+    added / reloaded fixtures cost a Sportmonks call (the rest were filled on a
+    previous run). The one-shot CLI leaves it False to (re)fetch everything."""
     stmt = select(FixtureORM.sportmonks_id).where(FixtureORM.sportmonks_id.is_not(None))
     if season_id is not None:
         stmt = stmt.where(FixtureORM.season_id == season_id)
+    if only_missing:
+        stmt = stmt.where(FixtureORM.home_kit_palette.is_(None))
     smk_ids = [int(row) for row in (await session.execute(stmt)).scalars().all() if row is not None]
 
     log.info("backfill_fixture_kit.start", fixtures=len(smk_ids), season_id=season_id)

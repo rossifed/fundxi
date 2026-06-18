@@ -30,6 +30,7 @@ from datetime import UTC, datetime
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.backfill_fixture_kit import backfill_fixture_kit
 from src.application.bootstrap import bootstrap_fixtures, bootstrap_player_stats, bootstrap_squads, bootstrap_teams
 from src.application.derive_team_colors import derive_team_colors
 from src.infrastructure.db.repositories.coach import SqlAlchemyCoachRepository
@@ -113,13 +114,28 @@ class ReferenceRefresher:
             teams=team_pairs,
             season_id=self.season_id,
         )
-        # Re-derive team accent colours from the kit palettes. bootstrap_teams
-        # above carries an empty placeholder colour but no longer overwrites the
-        # stored one (the team upsert omits ``color``), so this is the single
-        # writer of core.team.color. Running it here keeps colours fresh as new
-        # fixtures expose kit palettes — without it the daily refresh left teams
-        # colourless even after a manual one-shot derive.
-        await derive_team_colors(session)
+        # Kit colours, made self-healing. The plain /fixtures fetch above does
+        # NOT carry kit metadata, so a newly added / reloaded fixture lands with
+        # a NULL palette — and team colours derived from palettes go grey. This
+        # is why colours used to be "lost" after every fixtures reload and needed
+        # a manual one-shot worker. We now fold that enrichment into the daily
+        # refresh: ``only_missing=True`` fetches kit metadata ONLY for fixtures
+        # still missing a palette (cheap — already-filled fixtures cost nothing),
+        # then derives ``core.team.color`` (the single writer; the team upsert
+        # omits ``color``). Best-effort: a Sportmonks hiccup must not abort the
+        # whole refresh, so on failure we still derive from existing palettes.
+        try:
+            await backfill_fixture_kit(
+                session=session,
+                client=self.client,
+                raw_archive=raw_archive,
+                fixture_repo=SqlAlchemyFixtureRepository(session),
+                season_id=self.season_id,
+                only_missing=True,
+            )
+        except Exception as exc:  # kit enrichment is best-effort — never abort the refresh
+            log.warning("ingest.reference.kit_backfill_failed", season_id=self.season_id, error=str(exc))
+            await derive_team_colors(session)
         # Reads see the session's pending writes (autoflush) — the maps
         # are consistent with what we are about to commit.
         new_maps = await load_sportmonks_id_maps(session)
