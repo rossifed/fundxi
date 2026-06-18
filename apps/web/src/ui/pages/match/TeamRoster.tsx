@@ -280,9 +280,10 @@ function RichRosterCard({
   // "Market lens" heat: a subtle green/red wash scaled by this-match move (cap
   // ±15% → max ~12% wash), so the biggest movers pop. Neutral below ~1%. ``delta``
   // (change_this_match) is already 0 pre-kickoff / for non-participants.
-  const base_bg = held
-    ? "color-mix(in srgb, var(--color-accent-blue) 8%, rgba(255,255,255,.022))"
-    : "rgba(255,255,255,.025)";
+  // Held state is marked by ONE signal only — the small blue dot by the name (see
+  // below). No card tint / border / left-bar (that "blue around the card" read as
+  // a team colour and doubled up with the dot). So the bg is neutral for everyone.
+  const base_bg = "rgba(255,255,255,.025)";
   const heat_mag = Math.min(Math.abs(delta), 15) / 15;
   const heat_bg =
     heat_mag < 0.06
@@ -303,9 +304,7 @@ function RichRosterCard({
         height: 74,
         padding: 0,
         background: heat_bg,
-        border: `1px solid ${held ? "color-mix(in srgb, var(--color-accent-blue) 30%, transparent)" : "rgba(255,255,255,.05)"}`,
-        // Quiet left accent marking a held position (no loud badge).
-        boxShadow: held ? `inset 2px 0 0 0 ${color.accentBlue}` : "none",
+        border: "1px solid rgba(255,255,255,.05)",
         borderRadius: 14,
         cursor: "pointer",
         overflow: "hidden",
