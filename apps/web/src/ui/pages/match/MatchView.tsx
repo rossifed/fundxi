@@ -432,6 +432,7 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
                   subs={subs}
                   squad_mode
                   watchlist={watchlist}
+                  side={roster_team === "home" ? "left" : "right"}
                   on_open_player={on_open_player_profile}
                 />
               </>
@@ -490,6 +491,7 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
                     event_counts={event_counts}
                     subs={subs}
                     watchlist={watchlist}
+                    side={roster_team === "home" ? "left" : "right"}
                     on_open_player={on_open_player_profile}
                   />
                 ) : (

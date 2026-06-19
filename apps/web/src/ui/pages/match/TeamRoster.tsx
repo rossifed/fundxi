@@ -62,13 +62,16 @@ interface TeamRosterProps {
   squad_mode?: boolean;
   /** Watched player ids — marks the watchlist star on each card. */
   watchlist?: Set<number>;
+  /** Which edge carries the team-colour glow spine: home team → "left",
+   * away team → "right" (mirrors the score header / mobile ColumnGlow). */
+  side?: "left" | "right";
   on_open_player: (player_id: number) => void;
 }
 
 // Comfortable reading measure for the single-team rows (centred by the caller).
 const ROSTER_MAX_WIDTH = 720;
 
-export function TeamRoster({ xi, bench, team_color, event_counts, subs, squad_mode, watchlist, on_open_player }: TeamRosterProps) {
+export function TeamRoster({ xi, bench, team_color, event_counts, subs, squad_mode, watchlist, side = "left", on_open_player }: TeamRosterProps) {
   const by_pos = group_by_position(xi);
   // ``match_delta`` (= change_this_match) is 0 before kickoff and for players who
   // didn't feature, so sorting/movers/heat are correct by construction — no
@@ -77,10 +80,42 @@ export function TeamRoster({ xi, bench, team_color, event_counts, subs, squad_mo
     rows.slice().sort((a, b) => Math.abs(match_delta(b)) - Math.abs(match_delta(a)));
   const bench_ordered = sort_by_impact(POSITION_GROUPS.flatMap(g => group_by_position(bench).get(g.key) ?? []));
 
+  // Team-colour glow SPINE down one side of the compo (home → left edge, away
+  // → right edge), fading out top & bottom — like the mobile ColumnGlow. Not a
+  // frame: a single luminous vertical line carrying the kit colour (provider
+  // data → literal interpolation allowed). Rendered only when a real colour is
+  // present; otherwise the roster is spine-less (unchanged).
+  const glow = team_color && team_color.trim() ? team_color : null;
+  const on_left = side !== "right";
+  const wrap_style: React.CSSProperties = {
+    position: "relative",
+    display: "flex",
+    flexDirection: "column",
+    gap: 18,
+    width: "100%",
+    maxWidth: ROSTER_MAX_WIDTH,
+    // Make room for the spine on its side so it never overlaps the cards.
+    paddingLeft: glow && on_left ? 16 : 0,
+    paddingRight: glow && !on_left ? 16 : 0,
+  };
+  const spine_style: React.CSSProperties = {
+    position: "absolute",
+    top: 4,
+    bottom: 4,
+    left: on_left ? 3 : undefined,
+    right: on_left ? undefined : 3,
+    width: 3,
+    borderRadius: 3,
+    background: `linear-gradient(to bottom, transparent 0%, ${glow ?? "transparent"} 14%, ${glow ?? "transparent"} 86%, transparent 100%)`,
+    boxShadow: glow ? `0 0 14px 1px ${glow}` : undefined,
+    pointerEvents: "none",
+  };
+
   return (
     // gap 18 between the two top-level blocks (XI / Bench) so the starter↔sub
     // break reads as a real separation, not just another position group.
-    <div style={{ display: "flex", flexDirection: "column", gap: 18, width: "100%", maxWidth: ROSTER_MAX_WIDTH }}>
+    <div style={wrap_style}>
+      {glow && <div aria-hidden style={spine_style} />}
       {/* Starting XI — strong group header, then position sub-groups (faint).
           Hidden in squad mode (pre-lineup full squad, no XI/Bench split). */}
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -232,7 +267,7 @@ function RichRosterCard({
         display: "flex",
         alignItems: "stretch",
         width: "100%",
-        height: 90,
+        height: 70,
         padding: 0,
         background: base_bg,
         border: "1px solid rgba(255,255,255,.05)",
@@ -273,15 +308,16 @@ function RichRosterCard({
         )}
       </div>
 
-      {/* Identity — THREE fixed rows so the textual info (number, name,
-          position) never shifts or truncates as live events come in:
-            1. name line  — small jersey number + full name, ON ITS OWN ROW
-            2. match line — held/watch markers + event & sub chips, own row
-            3. position line
-          ``space-between`` pins the name to the top and the position to the
-          bottom, so neither moves when the middle row gains a goal/card chip
-          (the old single-row layout let stacked chips push & truncate the name). */}
-      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "space-between", padding: "10px 12px" }}>
+      {/* Identity — a tight, vertically-centred stack so the textual info
+          (number, name, position) never shifts or truncates:
+            1. name line     — small jersey number + full name, own row
+            2. position line — own row, right under the name (no gap)
+            3. live line     — rating chip THEN the match-event / sub chips and
+                               the held/watch markers, all after the rating
+          Putting the events on the LAST line (after the rating) means an empty
+          match state no longer opens a hole between the name and the position;
+          events extend this line rightwards without moving the rows above. */}
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: 3, padding: "0 12px" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 7, minWidth: 0 }}>
           <span aria-hidden className="mono" style={{ flexShrink: 0, fontSize: 12, fontWeight: 800, color: tc, letterSpacing: -0.3 }}>
             {p.jersey_number}
@@ -290,7 +326,13 @@ function RichRosterCard({
             {display_name}
           </span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0, flexWrap: "wrap", minHeight: 18 }}>
+        <span style={{ fontSize: 10.5, color: "rgba(255,255,255,.4)", letterSpacing: 0.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {exact_position}
+        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0, flexWrap: "wrap" }}>
+          {rating != null && <RatingChip rating={rating} />}
+          <MatchEventBadge events={events} variant="inline" />
+          <SubBadge sub={sub_info} variant="inline" />
           {/* In your portfolio → small accent dot (same colour as the card's
               held accent). */}
           {held && (
@@ -306,14 +348,6 @@ function RichRosterCard({
               ★
             </span>
           )}
-          <MatchEventBadge events={events} variant="inline" />
-          <SubBadge sub={sub_info} variant="inline" />
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
-          <span style={{ fontSize: 10.5, color: "rgba(255,255,255,.4)", letterSpacing: 0.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {exact_position}
-          </span>
-          {rating != null && <RatingChip rating={rating} />}
         </div>
       </div>
 

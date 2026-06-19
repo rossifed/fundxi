@@ -462,9 +462,15 @@ function RosterCard({
         {/* Name on its OWN line — no event chips competing, so it never
             truncates early or shifts as events come in. */}
         <Text style={styles.rc_name} numberOfLines={1}>{p.full_name ?? p.name}</Text>
-        {/* Match line — event chips on their own RESERVED row, so the position
-            below never moves when a goal/card lands. */}
-        <View style={styles.rc_events}>
+        {position ? <Text style={styles.rc_pos} numberOfLines={1}>{position}</Text> : null}
+        {/* Last line — price + delta (always present), THEN the event chips, so
+            an empty match state never opens a gap above the position; events
+            extend this line without moving the name/position rows above. */}
+        <View style={styles.rc_stat_row}>
+          <TickValue value={live_price}>
+            <Text style={styles.rc_price}>€{live_price}M</Text>
+          </TickValue>
+          <Text style={[styles.rc_delta, { color: color_for_sign(match_change) }]}>{fmt_signed_pct(match_change, 1)}</Text>
           {counts && (counts.goals > 0 || counts.own_goals > 0 || counts.yellow > 0 || counts.red > 0) ? (
             <Text style={styles.rc_badges} numberOfLines={1}>
               {counts.goals > 0 ? `⚽${counts.goals > 1 ? counts.goals : ""}` : ""}
@@ -480,13 +486,6 @@ function RosterCard({
               {counts.red > 0 ? "🟥" : ""}
             </Text>
           ) : null}
-        </View>
-        {position ? <Text style={styles.rc_pos} numberOfLines={1}>{position}</Text> : null}
-        <View style={styles.rc_stat_row}>
-          <TickValue value={live_price}>
-            <Text style={styles.rc_price}>€{live_price}M</Text>
-          </TickValue>
-          <Text style={[styles.rc_delta, { color: color_for_sign(match_change) }]}>{fmt_signed_pct(match_change, 1)}</Text>
         </View>
       </View>
     </Pressable>
@@ -734,13 +733,10 @@ const styles = StyleSheet.create({
   rc_num: { position: "absolute", bottom: -3, right: -3, fontFamily: mono, fontSize: 8, fontWeight: "700", color: "rgba(255,255,255,0.7)", backgroundColor: `${palette.bg}e6`, borderRadius: 6, paddingHorizontal: 3, paddingVertical: 0.5, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)", overflow: "hidden" },
   rc_meta: { flex: 1, minWidth: 0 },
   rc_name: { fontSize: 12, fontWeight: "600", color: "#fff" },
-  // Reserved match-event row: keeps a fixed height even when empty so the
-  // position line below never moves when a goal/card chip appears.
-  rc_events: { minHeight: 14, flexDirection: "row", alignItems: "center", flexWrap: "wrap", marginTop: 1 },
   rc_pos: { fontSize: 9, fontWeight: "600", color: text.tertiary, letterSpacing: 0.2, marginTop: 1 },
   rc_badges: { fontSize: 10 },
   rc_og: { fontSize: 7.5, fontWeight: "700", color: text.secondary },
-  rc_stat_row: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: 1 },
+  rc_stat_row: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 7, marginTop: 1 },
   rc_price: { fontFamily: mono, fontSize: 11.5, fontWeight: "700", color: "rgba(255,255,255,0.78)" },
   rc_delta: { fontFamily: mono, fontSize: 10, fontWeight: "700" },
 
