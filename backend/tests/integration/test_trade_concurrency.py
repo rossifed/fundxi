@@ -5,7 +5,13 @@ the ``FOR UPDATE`` lock taken in ``place_trade``. A lock can only be tested for
 real: two transactions racing on the SAME portfolio row. This test fires two
 concurrent ``place_trade`` BUYs on one portfolio and asserts cash is debited
 twice (no lost update). Without the lock the two read-modify-writes would race
-and one debit would be lost (final cash 90 instead of 80).
+and one debit would be lost (final cash 99 instead of 98).
+
+Each leg buys 0.1 of the player (ownership fraction), NOT the whole player:
+``shares`` is the ownership fraction (1.0 = 100% of the player), and a position
+may never exceed the player cap (``MAX_OWNERSHIP_FRACTION`` = 1). Two whole-player
+buys would (correctly) trip the cap on the second leg, which would mask the lock
+behaviour we want to assert here.
 
 Unlike the other integration files this one COMMITS (the lock is only released
 at commit, and the second transaction must observe the first's committed
@@ -46,7 +52,7 @@ async def test_concurrent_trades_serialize_on_portfolio_row_lock() -> None:
         """One BUY in its own transaction, mirroring a single HTTP request."""
         async with maker() as session:
             await place_trade(
-                command=PlaceTradeCommand(user_id=uid, player_id=pid, kind="buy", shares=1.0),
+                command=PlaceTradeCommand(user_id=uid, player_id=pid, kind="buy", shares=0.1),
                 user_repo=SqlAlchemyUserRepository(session),
                 portfolio_repo=SqlAlchemyPortfolioRepository(session),
                 trade_repo=SqlAlchemyTradeRepository(session),
@@ -90,7 +96,7 @@ async def test_concurrent_trades_serialize_on_portfolio_row_lock() -> None:
             )
             await s.commit()
 
-        # --- race: two BUYs of 1 share @ 10 on the same portfolio ---
+        # --- race: two BUYs of 0.1 of the player @ 10 on the same portfolio ---
         assert user_id is not None and player_id is not None
         await asyncio.gather(_buy_once(user_id, player_id), _buy_once(user_id, player_id))
 
@@ -98,8 +104,8 @@ async def test_concurrent_trades_serialize_on_portfolio_row_lock() -> None:
         async with maker() as s:
             final = await SqlAlchemyPortfolioRepository(s).get_by_user_id(user_id)
             assert final is not None
-            # 100 - 2*(1*10) = 80. A lost update would leave 90.
-            assert final.cash == 80.0
+            # 100 - 2*(0.1*10) = 98. A lost update would leave 99.
+            assert final.cash == 98.0
     finally:
         # cleanup the throwaway rows regardless of outcome
         async with maker() as s:
