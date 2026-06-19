@@ -277,18 +277,9 @@ function RichRosterCard({
   // Per-card kit colour (real provider data → literal interpolation is allowed).
   // Guard the empty string ("" is falsy-but-not-nullish, so ?? wouldn't catch it).
   const tc = team_color && team_color.trim() ? team_color : "#8a8a8a";
-  // "Market lens" heat: a subtle green/red wash scaled by this-match move (cap
-  // ±15% → max ~12% wash), so the biggest movers pop. Neutral below ~1%. ``delta``
-  // (change_this_match) is already 0 pre-kickoff / for non-participants.
-  // Held state is marked by ONE signal only — the small blue dot by the name (see
-  // below). No card tint / border / left-bar (that "blue around the card" read as
-  // a team colour and doubled up with the dot). So the bg is neutral for everyone.
+  // Neutral card background for everyone — no perf-driven tint. Held state is
+  // marked by ONE signal only: the small blue dot by the name (see below).
   const base_bg = "rgba(255,255,255,.025)";
-  const heat_mag = Math.min(Math.abs(delta), 15) / 15;
-  const heat_bg =
-    heat_mag < 0.06
-      ? base_bg
-      : `color-mix(in srgb, ${delta > 0 ? "var(--color-positive)" : "var(--color-negative)"} ${(heat_mag * 12).toFixed(1)}%, ${base_bg})`;
 
   return (
     <button
@@ -303,7 +294,7 @@ function RichRosterCard({
         width: "100%",
         height: 74,
         padding: 0,
-        background: heat_bg,
+        background: base_bg,
         border: "1px solid rgba(255,255,255,.05)",
         borderRadius: 14,
         cursor: "pointer",
@@ -334,16 +325,15 @@ function RichRosterCard({
             fontWeight: 900,
             letterSpacing: -1.5,
             lineHeight: 1,
-            // White fill cerned by a BOLD kit-colour outline (paint-order draws
-            // the stroke UNDER the fill). With the cell background gone, the
-            // outline is now the only team-colour cue, so it's thicker to read
-            // clearly on the dark card. (Grey only when the kit colour is absent
-            // from the provider data — we don't invent one.)
+            // White fill cerned by a thin kit-colour outline — the only
+            // team-colour cue now that the cell background is gone. (Grey only
+            // when the kit colour is absent from the provider data — we don't
+            // invent one.)
             color: "#fff",
             // Default paint order (fill THEN stroke) so the kit-colour outline
             // is drawn fully ON TOP — visible at its real width, unlike
             // "stroke fill" where the white fill hid the inner half.
-            WebkitTextStroke: `2px ${tc}`,
+            WebkitTextStroke: `1.5px ${tc}`,
             whiteSpace: "nowrap",
             userSelect: "none",
             pointerEvents: "none",
