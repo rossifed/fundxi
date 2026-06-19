@@ -15,7 +15,7 @@ import { trades_api } from "@fundxi/core/api/trades_api";
 import type { TradeMode } from "@fundxi/core/application/trade_service";
 import type { Player } from "@fundxi/core/domain/player/player";
 
-import { fmt_eur_from_m, fmt_eur_m, fmt_eur_m_signed, fmt_shares } from "@/lib/format";
+import { fmt_eur_from_m, fmt_eur_m, fmt_eur_m_cash, fmt_eur_m_signed, fmt_shares } from "@/lib/format";
 import { palette, text } from "@/theme/tokens";
 
 type Kind = "buy" | "sell";
@@ -249,7 +249,7 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
                 <PreviewRow label="Amount" value={fmt_eur_m(preview.amount)} />
                 <PreviewRow label="Owned after" value={`${Math.round(preview.pct_of_player_after)}% of player`} />
                 <PreviewRow label="% of portfolio" value={`${preview.percentage_of_portfolio.toFixed(1)}%`} />
-                <PreviewRow label="Cash after" value={fmt_eur_m(preview.cash_after)} />
+                <PreviewRow label="Cash after" value={fmt_eur_m_cash(preview.cash_after)} />
                 {preview.realized_pnl !== 0 && (
                   <PreviewRow
                     label="Realized P&L"

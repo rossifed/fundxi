@@ -30,7 +30,7 @@ import { TickValue } from "@/components/TickValue";
 import { PlayerSheet, type PlayerSheetHandle } from "@/components/PlayerSheet";
 import { useLiveRefetch, usePricesLiveVersion } from "@/components/live";
 import { useRefresh } from "@/components/use_refresh";
-import { color_for_sign, fmt_eur_from_m, fmt_eur_m, fmt_eur_m_signed, fmt_shares, fmt_signed_pct } from "@/lib/format";
+import { color_for_sign, fmt_eur_from_m, fmt_eur_m, fmt_eur_m_cash, fmt_eur_m_signed, fmt_shares, fmt_signed_pct } from "@/lib/format";
 import { mono, palette, position_color, text } from "@/theme/tokens";
 
 // Flat detail panel: four peer tabs, max one sub-level (Allocation only).
@@ -230,10 +230,10 @@ export default function PortfolioScreen() {
           <View style={styles.hero_card}>
             <Text style={styles.hero_label}>Buying power</Text>
             <Text style={styles.hero_value} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
-              {fmt_eur_m(totals.buying_power)}
+              {fmt_eur_m_cash(totals.buying_power)}
             </Text>
             <Text style={[styles.hero_delta, { color: text.secondary }]} numberOfLines={1}>
-              {fmt_eur_m(totals.cash)} cash
+              {fmt_eur_m_cash(totals.cash)} cash
             </Text>
             <Text style={styles.hero_note}>Deployable now</Text>
           </View>

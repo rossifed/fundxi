@@ -16,7 +16,7 @@ import { valuations_api } from "@fundxi/core/api/valuations_api";
 import { simulate_trade, type TradeMode } from "@fundxi/core/application/trade_service";
 import type { Player } from "@fundxi/core/domain/player/player";
 import { Sheet } from "@/ui/components/Sheet";
-import { fmt_eur_from_m, fmt_eur_m, fmt_eur_m_signed, fmt_shares } from "@/ui/helpers/format";
+import { fmt_eur_from_m, fmt_eur_m, fmt_eur_m_cash, fmt_eur_m_signed, fmt_shares } from "@/ui/helpers/format";
 
 type Kind = "buy" | "sell";
 type Phase = "form" | "submitting" | "done";
@@ -290,7 +290,7 @@ export function TradeDialog({
           <PreviewRow label="Amount" value={fmt_eur_m(preview.amount)} />
           <PreviewRow label="Owned after" value={`${Math.round(preview.pct_of_player_after)}% of player`} />
           <PreviewRow label="% of portfolio" value={`${preview.percentage_of_portfolio.toFixed(1)}%`} />
-          <PreviewRow label="Cash after" value={fmt_eur_m(preview.cash_after)} />
+          <PreviewRow label="Cash after" value={fmt_eur_m_cash(preview.cash_after)} />
           {preview.realized_pnl !== 0 && (
             <PreviewRow
               label="Realized P&L"

@@ -15,7 +15,7 @@ import { PerformanceChart } from "@/ui/components/PerformanceChart";
 import { Donut } from "@/ui/components/Donut";
 import { SortableHeader, type SortDir } from "@/ui/components/SortableHeader";
 import { TeamLink } from "@/ui/components/TeamLink";
-import { color_for_sign, fmt_eur_from_m, fmt_eur_m, fmt_eur_m_signed, fmt_shares, fmt_signed_pct } from "@/ui/helpers/format";
+import { color_for_sign, fmt_eur_from_m, fmt_eur_m, fmt_eur_m_cash, fmt_eur_m_signed, fmt_shares, fmt_signed_pct } from "@/ui/helpers/format";
 import { position_color } from "@/ui/design/tokens";
 
 function fmt_short_date(iso: string | undefined): string {
@@ -296,7 +296,7 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
         {/* Hero — Total value + Buying power */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           <HeroCard label="Total value" value={fmt_eur_m(total_value)} delta={inception_delta} delta_color={color_for_sign(pnl_since_inception)} note="Since inception" />
-          <HeroCard label="Buying power" value={fmt_eur_m(totals.buying_power)} delta={`${fmt_eur_m(totals.cash)} cash`} delta_color="rgba(255,255,255,.5)" note="Deployable now" />
+          <HeroCard label="Buying power" value={fmt_eur_m_cash(totals.buying_power)} delta={`${fmt_eur_m_cash(totals.cash)} cash`} delta_color="rgba(255,255,255,.5)" note="Deployable now" />
         </div>
 
         {/* Portfolio value chart — the perf % now lives in the Total value card
@@ -456,7 +456,7 @@ export function PortfolioPage({ on_open_player, on_open_team }: PortfolioPagePro
           value={fmt_eur_m(total_value)}
           title="Everything you own right now: free cash + market value of every position"
         />
-        <KpiCard label="Cash" value={fmt_eur_m(totals.cash)} title="Free cash available to trade" />
+        <KpiCard label="Cash" value={fmt_eur_m_cash(totals.cash)} title="Free cash available to trade" />
         <KpiCard
           label="Invested"
           value={fmt_eur_m(totals.gross_cost)}
