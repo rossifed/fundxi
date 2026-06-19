@@ -12,6 +12,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
 import { comments_api } from "@fundxi/core/api/comments_api";
+import { match_stats_api } from "@fundxi/core/api/match_stats_api";
 import { matches_api } from "@fundxi/core/api/matches_api";
 import { players_api } from "@fundxi/core/api/players_api";
 import { team_stats_api } from "@fundxi/core/api/team_stats_api";
@@ -19,9 +20,11 @@ import { teams_api } from "@fundxi/core/api/teams_api";
 import { valuations_api } from "@fundxi/core/api/valuations_api";
 import type { Match, MatchEvent, MatchPlayer } from "@fundxi/core/domain/match/match";
 import type { MatchComment } from "@fundxi/core/domain/match/match_comment";
+import type { PlayerMatchStat } from "@fundxi/core/domain/match/player_match_stats";
 import type { TeamMatchStats } from "@fundxi/core/domain/match/team_match_stats";
 import type { Player, Position } from "@fundxi/core/domain/player/player";
 
+import { MatchLeaders } from "@/components/MatchLeaders";
 import { PlayerSheet, type PlayerSheetHandle } from "@/components/PlayerSheet";
 import { TickValue } from "@/components/TickValue";
 import { useFixtureLiveVersion, useLiveRefetch, usePricesLiveVersion } from "@/components/live";
@@ -119,6 +122,7 @@ export default function MatchScreen() {
   const [match, set_match] = useState<Match | null>(null);
   const [comments, set_comments] = useState<MatchComment[] | null>(null);
   const [stats, set_stats] = useState<TeamMatchStats | null>(null);
+  const [player_stats, set_player_stats] = useState<PlayerMatchStat[]>([]);
   const [, bump] = useState(0);
 
   useEffect(() => {
@@ -136,6 +140,10 @@ export default function MatchScreen() {
       s => !cancelled && set_stats(s),
       () => !cancelled && set_stats({}),
     );
+    match_stats_api.for_fixture(fixture_id).then(
+      s => !cancelled && set_player_stats(s),
+      () => !cancelled && set_player_stats([]),
+    );
     return () => {
       cancelled = true;
     };
@@ -150,6 +158,7 @@ export default function MatchScreen() {
     matches_api.refresh_match_by_fixture_id(fixture_id).then(m => m && set_match(m)).catch(() => {});
     comments_api.refresh_for_fixture(fixture_id).then(set_comments).catch(() => {});
     team_stats_api.refresh_for_fixture(fixture_id).then(set_stats).catch(() => {});
+    match_stats_api.refresh_for_fixture(fixture_id).then(set_player_stats).catch(() => {});
   });
   useLiveRefetch(usePricesLiveVersion(), () => {
     void valuations_api.refresh().then(() => bump(v => v + 1));
@@ -170,6 +179,7 @@ export default function MatchScreen() {
           match={match}
           comments={comments}
           stats={stats}
+          player_stats={player_stats}
           on_open={p => sheet_ref.current?.open(p)}
           top_pad={insets.top + 12}
           on_back={() => router.back()}
@@ -184,6 +194,7 @@ function MatchBody({
   match,
   comments,
   stats,
+  player_stats,
   on_open,
   top_pad,
   on_back,
@@ -191,6 +202,7 @@ function MatchBody({
   match: Match;
   comments: MatchComment[] | null;
   stats: TeamMatchStats | null;
+  player_stats: PlayerMatchStat[];
   on_open: (player: Player) => void;
   top_pad: number;
   on_back: () => void;
@@ -302,7 +314,24 @@ function MatchBody({
       )}
 
       {tab === "stats" && (
-        <StatsPanel stats={stats} home_id={match.home_team_id} away_id={match.away_team_id} home_color={home_color} away_color={away_color} />
+        <View style={{ gap: 16 }}>
+          <MatchLeaders
+            players={[
+              ...only_players(match.home_xi),
+              ...only_players(match.away_xi),
+              ...(match.home_bench ?? []),
+              ...(match.away_bench ?? []),
+            ]}
+            stats={player_stats}
+            team_color_for={team_id =>
+              team_id && team_id === match.away_team_id
+                ? (away_color ?? "#8a8a8a")
+                : (home_color ?? "#8a8a8a")
+            }
+            on_open={on_open}
+          />
+          <StatsPanel stats={stats} home_id={match.home_team_id} away_id={match.away_team_id} home_color={home_color} away_color={away_color} />
+        </View>
       )}
 
       {tab === "events" && (

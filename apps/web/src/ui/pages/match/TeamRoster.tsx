@@ -46,13 +46,10 @@ function group_by_position(players: MatchPlayer[]): Map<Position, MatchPlayer[]>
 
 /** This player's price move WITHIN THIS fixture (%) — the backend-computed
  * "perf of this match" (0 before kickoff, 0 for players who didn't feature).
- * Drives the MATCH delta, the heat tint and the movers banner. */
+ * Drives the MATCH delta and the per-position impact sort. */
 function match_delta(p: MatchPlayer): number {
   return p.change_this_match ?? 0;
 }
-
-// Below this |Δ| a player isn't a "mover" — keeps pre-match (all ~0) quiet.
-const MOVER_MIN = 0.05;
 
 interface TeamRosterProps {
   xi: MatchPlayer[];
@@ -80,20 +77,10 @@ export function TeamRoster({ xi, bench, team_color, event_counts, subs, squad_mo
     rows.slice().sort((a, b) => Math.abs(match_delta(b)) - Math.abs(match_delta(a)));
   const bench_ordered = sort_by_impact(POSITION_GROUPS.flatMap(g => group_by_position(bench).get(g.key) ?? []));
 
-  // Market lens: the biggest movers WITHIN THIS MATCH (non-participants are 0 →
-  // filtered out by MOVER_MIN; pre-kickoff everyone is 0 → banner hidden).
-  const movers = [...xi, ...bench]
-    .map(p => ({ p, d: match_delta(p) }))
-    .filter(m => Math.abs(m.d) >= MOVER_MIN)
-    .sort((a, b) => Math.abs(b.d) - Math.abs(a.d))
-    .slice(0, 3);
-
   return (
     // gap 18 between the two top-level blocks (XI / Bench) so the starter↔sub
     // break reads as a real separation, not just another position group.
     <div style={{ display: "flex", flexDirection: "column", gap: 18, width: "100%", maxWidth: ROSTER_MAX_WIDTH }}>
-      {movers.length > 0 && <MoversBanner movers={movers} on_open={on_open_player} />}
-
       {/* Starting XI — strong group header, then position sub-groups (faint).
           Hidden in squad mode (pre-lineup full squad, no XI/Bench split). */}
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -193,53 +180,6 @@ function Section({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
-/** "Movers this match" strip — the biggest price moves of the fixture so far,
- * the fixture's trading headline. Each is tappable to the player. Real Δ only;
- * hidden entirely before the match has moved anything (see the caller's guard). */
-function MoversBanner({
-  movers,
-  on_open,
-}: {
-  movers: { p: MatchPlayer; d: number }[];
-  on_open: (player_id: number) => void;
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        padding: "8px 12px",
-        borderRadius: 12,
-        background: "rgba(255,255,255,.03)",
-        border: "1px solid rgba(255,255,255,.06)",
-        flexWrap: "wrap",
-      }}
-    >
-      <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.6, textTransform: "uppercase", color: "rgba(255,255,255,.5)", whiteSpace: "nowrap" }}>
-        Movers this match
-      </span>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        {movers.map(({ p, d }, i) => (
-          <span key={p.id} style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
-            {i > 0 && <span style={{ color: "rgba(255,255,255,.2)" }}>·</span>}
-            <button
-              type="button"
-              onClick={() => on_open(p.id)}
-              style={{ display: "inline-flex", alignItems: "baseline", gap: 5, background: "transparent", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit" }}
-            >
-              <span style={{ fontSize: 12.5, fontWeight: 700, color: "#fff" }}>{p.name}</span>
-              <span className="mono" style={{ fontSize: 12, fontWeight: 800, color: color_for_sign(d) }}>
-                {fmt_signed_pct(d, 1)}
-              </span>
-            </button>
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function RichRosterCard({
   p,
   team_color,
@@ -333,7 +273,7 @@ function RichRosterCard({
             // Default paint order (fill THEN stroke) so the kit-colour outline
             // is drawn fully ON TOP — visible at its real width, unlike
             // "stroke fill" where the white fill hid the inner half.
-            WebkitTextStroke: `1.5px ${tc}`,
+            WebkitTextStroke: `1px ${tc}`,
             whiteSpace: "nowrap",
             userSelect: "none",
             pointerEvents: "none",

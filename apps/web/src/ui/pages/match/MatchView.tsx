@@ -4,17 +4,20 @@ import type { Team } from "@fundxi/core/domain/team/team";
 import type { MatchComment } from "@fundxi/core/domain/match/match_comment";
 import type { Position } from "@fundxi/core/domain/player/player";
 import { comments_api } from "@fundxi/core/api/comments_api";
+import { match_stats_api } from "@fundxi/core/api/match_stats_api";
 import { matches_api } from "@fundxi/core/api/matches_api";
 import { players_api } from "@fundxi/core/api/players_api";
 import { team_stats_api } from "@fundxi/core/api/team_stats_api";
 import { teams_api } from "@fundxi/core/api/teams_api";
 import { valuations_api } from "@fundxi/core/api/valuations_api";
+import type { PlayerMatchStat } from "@fundxi/core/domain/match/player_match_stats";
 import type { TeamMatchStats } from "@fundxi/core/domain/match/team_match_stats";
 import { BuyTeamButton } from "@/ui/components/BuyTeamButton";
 import { TeamLink } from "@/ui/components/TeamLink";
 import { TickValue } from "@/ui/components/TickValue";
 import { useFixtureLiveVersion, useLiveRefetch, usePricesLiveVersion } from "@/ui/hooks/use_live_updates";
 import { useViewport } from "@/ui/hooks/use_viewport";
+import { MatchLeaders } from "@/ui/pages/match/MatchLeaders";
 import { PitchView, TeamChip } from "@/ui/pages/match/PitchView";
 import { TeamRoster } from "@/ui/pages/match/TeamRoster";
 import { count_match_events, MatchEventBadge, SubBadge, type MatchEventCounts } from "@/ui/pages/match/event_badge";
@@ -155,15 +158,18 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
   const fixture_live_version = useFixtureLiveVersion(match.fixture_id);
   const [commentaries, set_commentaries] = useState<MatchComment[] | null>(null);
   const [team_stats, set_team_stats] = useState<TeamMatchStats | null>(null);
+  const [player_stats, set_player_stats] = useState<PlayerMatchStat[]>([]);
   useEffect(() => {
     if (!match.fixture_id) {
       set_commentaries([]);
       set_team_stats({});
+      set_player_stats([]);
       return;
     }
     let cancelled = false;
     set_commentaries(null);
     set_team_stats(null);
+    set_player_stats([]);
     comments_api
       .for_fixture(match.fixture_id)
       .then(items => {
@@ -179,6 +185,14 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
       })
       .catch(() => {
         if (!cancelled) set_team_stats({});
+      });
+    match_stats_api
+      .for_fixture(match.fixture_id)
+      .then(stats => {
+        if (!cancelled) set_player_stats(stats);
+      })
+      .catch(() => {
+        if (!cancelled) set_player_stats([]);
       });
     return () => {
       cancelled = true;
@@ -220,6 +234,12 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
       .then(set_team_stats)
       .catch(() => {
         /* keep the current stats on a transient error */
+      });
+    match_stats_api
+      .refresh_for_fixture(match.fixture_id)
+      .then(set_player_stats)
+      .catch(() => {
+        /* keep the current player stats on a transient error */
       });
   });
 
@@ -490,14 +510,31 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
         )}
 
         {top_tab === "stats" && (
-          <TeamStatsPanel
-            stats={team_stats}
-            home_team_id={match.home_team_id}
-            away_team_id={match.away_team_id}
-            home_color={match.home_kit_color ?? home_team?.color}
-            away_color={match.away_kit_color ?? away_team?.color}
-            card={card}
-          />
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <MatchLeaders
+              players={[
+                ...only_match_players(match.home_xi),
+                ...only_match_players(match.away_xi),
+                ...(match.home_bench ?? []),
+                ...(match.away_bench ?? []),
+              ]}
+              stats={player_stats}
+              team_color_for={team_id =>
+                team_id && team_id === match.away_team_id
+                  ? (match.away_kit_color ?? away_team?.color ?? "#8a8a8a")
+                  : (match.home_kit_color ?? home_team?.color ?? "#8a8a8a")
+              }
+              on_open_player={on_open_player_profile}
+            />
+            <TeamStatsPanel
+              stats={team_stats}
+              home_team_id={match.home_team_id}
+              away_team_id={match.away_team_id}
+              home_color={match.home_kit_color ?? home_team?.color}
+              away_color={match.away_kit_color ?? away_team?.color}
+              card={card}
+            />
+          </div>
         )}
 
         {top_tab === "events" && (
