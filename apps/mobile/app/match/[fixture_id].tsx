@@ -459,10 +459,14 @@ function RosterCard({
         <Text style={styles.rc_num} numberOfLines={1}>{p.jersey_number}</Text>
       </View>
       <View style={styles.rc_meta}>
-        <View style={styles.rc_name_row}>
-          <Text style={styles.rc_name} numberOfLines={1}>{p.full_name ?? p.name}</Text>
-          {counts && (counts.goals > 0 || counts.own_goals > 0 || counts.yellow > 0 || counts.red > 0) && (
-            <Text style={styles.rc_badges}>
+        {/* Name on its OWN line — no event chips competing, so it never
+            truncates early or shifts as events come in. */}
+        <Text style={styles.rc_name} numberOfLines={1}>{p.full_name ?? p.name}</Text>
+        {/* Match line — event chips on their own RESERVED row, so the position
+            below never moves when a goal/card lands. */}
+        <View style={styles.rc_events}>
+          {counts && (counts.goals > 0 || counts.own_goals > 0 || counts.yellow > 0 || counts.red > 0) ? (
+            <Text style={styles.rc_badges} numberOfLines={1}>
               {counts.goals > 0 ? `⚽${counts.goals > 1 ? counts.goals : ""}` : ""}
               {/* Own goal: same ball glyph, tagged with a small "(og)" — the
                   scorer is NOT credited a goal for his team. */}
@@ -475,7 +479,7 @@ function RosterCard({
               {counts.yellow > 0 ? "🟨" : ""}
               {counts.red > 0 ? "🟥" : ""}
             </Text>
-          )}
+          ) : null}
         </View>
         {position ? <Text style={styles.rc_pos} numberOfLines={1}>{position}</Text> : null}
         <View style={styles.rc_stat_row}>
@@ -729,8 +733,10 @@ const styles = StyleSheet.create({
   // Jersey number — small, dim, secondary (kept visible, not dominant).
   rc_num: { position: "absolute", bottom: -3, right: -3, fontFamily: mono, fontSize: 8, fontWeight: "700", color: "rgba(255,255,255,0.7)", backgroundColor: `${palette.bg}e6`, borderRadius: 6, paddingHorizontal: 3, paddingVertical: 0.5, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)", overflow: "hidden" },
   rc_meta: { flex: 1, minWidth: 0 },
-  rc_name_row: { flexDirection: "row", alignItems: "center", gap: 4 },
-  rc_name: { fontSize: 12, fontWeight: "600", color: "#fff", flexShrink: 1 },
+  rc_name: { fontSize: 12, fontWeight: "600", color: "#fff" },
+  // Reserved match-event row: keeps a fixed height even when empty so the
+  // position line below never moves when a goal/card chip appears.
+  rc_events: { minHeight: 14, flexDirection: "row", alignItems: "center", flexWrap: "wrap", marginTop: 1 },
   rc_pos: { fontSize: 9, fontWeight: "600", color: text.tertiary, letterSpacing: 0.2, marginTop: 1 },
   rc_badges: { fontSize: 10 },
   rc_og: { fontSize: 7.5, fontWeight: "700", color: text.secondary },

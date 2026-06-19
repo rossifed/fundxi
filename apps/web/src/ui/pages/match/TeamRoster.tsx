@@ -232,7 +232,7 @@ function RichRosterCard({
         display: "flex",
         alignItems: "stretch",
         width: "100%",
-        height: 74,
+        height: 90,
         padding: 0,
         background: base_bg,
         border: "1px solid rgba(255,255,255,.05)",
@@ -245,44 +245,6 @@ function RichRosterCard({
         opacity: bench ? 0.72 : 1,
       }}
     >
-      {/* Jersey number — no cell background; the kit colour lives only in the
-          number's outline (the harmonising touch), like fixture_new. */}
-      <div
-        style={{
-          width: 44,
-          flexShrink: 0,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          overflow: "hidden",
-        }}
-      >
-        <span
-          aria-hidden
-          className="mono"
-          style={{
-            fontSize: 30,
-            fontWeight: 900,
-            letterSpacing: -1.5,
-            lineHeight: 1,
-            // White fill cerned by a thin kit-colour outline — the only
-            // team-colour cue now that the cell background is gone. (Grey only
-            // when the kit colour is absent from the provider data — we don't
-            // invent one.)
-            color: "#fff",
-            // Default paint order (fill THEN stroke) so the kit-colour outline
-            // is drawn fully ON TOP — visible at its real width, unlike
-            // "stroke fill" where the white fill hid the inner half.
-            WebkitTextStroke: `1px ${tc}`,
-            whiteSpace: "nowrap",
-            userSelect: "none",
-            pointerEvents: "none",
-          }}
-        >
-          {p.jersey_number}
-        </span>
-      </div>
-
       {/* Portrait — no cell background (transparent), bottom-anchored headshot. */}
       <div
         style={{
@@ -311,32 +273,41 @@ function RichRosterCard({
         )}
       </div>
 
-      {/* Identity — takes the row's middle (clean, no in-row chart): full name,
-          markers, then position + rating. */}
-      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: 4, padding: "0 12px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+      {/* Identity — THREE fixed rows so the textual info (number, name,
+          position) never shifts or truncates as live events come in:
+            1. name line  — small jersey number + full name, ON ITS OWN ROW
+            2. match line — held/watch markers + event & sub chips, own row
+            3. position line
+          ``space-between`` pins the name to the top and the position to the
+          bottom, so neither moves when the middle row gains a goal/card chip
+          (the old single-row layout let stacked chips push & truncate the name). */}
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "space-between", padding: "10px 12px" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 7, minWidth: 0 }}>
+          <span aria-hidden className="mono" style={{ flexShrink: 0, fontSize: 12, fontWeight: 800, color: tc, letterSpacing: -0.3 }}>
+            {p.jersey_number}
+          </span>
           <span style={{ minWidth: 0, fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: -0.1 }}>
             {display_name}
           </span>
-          <span style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4 }}>
-            {/* In your watchlist → grey star (brief: grey, never gold). */}
-            {watched && (
-              <span title="In your watchlist" aria-label="In your watchlist" style={{ fontSize: 11, lineHeight: 1, color: "rgba(255,255,255,.55)" }}>
-                ★
-              </span>
-            )}
-            {/* In your portfolio → small accent dot (same colour as the card's
-                held accent). */}
-            {held && (
-              <span
-                aria-label="In your portfolio"
-                title="In your portfolio"
-                style={{ width: 6, height: 6, borderRadius: "50%", background: color.accentBlue, display: "inline-block" }}
-              />
-            )}
-            <MatchEventBadge events={events} variant="inline" />
-            <SubBadge sub={sub_info} variant="inline" />
-          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0, flexWrap: "wrap", minHeight: 18 }}>
+          {/* In your portfolio → small accent dot (same colour as the card's
+              held accent). */}
+          {held && (
+            <span
+              aria-label="In your portfolio"
+              title="In your portfolio"
+              style={{ width: 6, height: 6, borderRadius: "50%", background: color.accentBlue, display: "inline-block", flexShrink: 0 }}
+            />
+          )}
+          {/* In your watchlist → grey star (brief: grey, never gold). */}
+          {watched && (
+            <span title="In your watchlist" aria-label="In your watchlist" style={{ fontSize: 11, lineHeight: 1, color: "rgba(255,255,255,.55)" }}>
+              ★
+            </span>
+          )}
+          <MatchEventBadge events={events} variant="inline" />
+          <SubBadge sub={sub_info} variant="inline" />
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
           <span style={{ fontSize: 10.5, color: "rgba(255,255,255,.4)", letterSpacing: 0.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
