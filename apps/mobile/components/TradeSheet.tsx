@@ -31,9 +31,12 @@ interface TradeSheetProps {
   on_close: () => void;
   /** Called after a successful execution so the opener can refresh its view. */
   on_done?: () => void;
+  /** Called when the DONE confirmation is dismissed after a trade executed —
+   *  lets the opener also close the player sheet. Falls back to on_close. */
+  on_finish?: () => void;
 }
 
-export function TradeSheet({ visible, player, current_price, initial_kind, on_close, on_done }: TradeSheetProps) {
+export function TradeSheet({ visible, player, current_price, initial_kind, on_close, on_done, on_finish }: TradeSheetProps) {
   const [kind_state, set_kind] = useState<Kind>(initial_kind);
   const [mode, set_mode] = useState<TradeMode>("percentage");
   const [percentage, set_percentage] = useState(10);
@@ -102,13 +105,18 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
   };
 
   const close = () => {
+    // A trade actually executed iff we're leaving the DONE confirmation →
+    // hand back to on_finish so the opener can also close the player sheet.
+    // Cancelling from the form/submitting phase keeps on_close (dialog only).
+    const traded = phase === "done";
     // Reset for next open.
     set_mode("percentage");
     set_percentage(10);
     set_shares(0);
     set_phase("form");
     set_error(null);
-    on_close();
+    if (traded && on_finish) on_finish();
+    else on_close();
   };
 
   return (

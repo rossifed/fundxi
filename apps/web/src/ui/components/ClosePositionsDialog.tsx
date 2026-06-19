@@ -22,7 +22,12 @@ export type ClosablePosition = HoldingMetrics & { player: Player };
 interface ClosePositionsDialogProps {
   open: boolean;
   positions: ClosablePosition[];
+  // Dismiss the dialog (cancel before executing, or close the result view when
+  // no on_finish is given). Closes the dialog only.
   on_close: () => void;
+  // Dismiss the RESULT view after positions were actually closed. Lets the
+  // opener also close the player sheet. Falls back to on_close when absent.
+  on_finish?: () => void;
 }
 
 type Phase = "confirm" | "submitting" | "result";
@@ -30,7 +35,10 @@ type Phase = "confirm" | "submitting" | "result";
 const SURFACE = "rgba(255,255,255,.025)";
 const SURFACE_BORDER = "1px solid rgba(255,255,255,.05)";
 
-export function ClosePositionsDialog({ open, positions, on_close }: ClosePositionsDialogProps) {
+export function ClosePositionsDialog({ open, positions, on_close, on_finish }: ClosePositionsDialogProps) {
+  // Leaving the result view means the close went through → hand back to the
+  // opener so it can also dismiss the player sheet (cancel keeps on_close).
+  const finish = on_finish ?? on_close;
   const [phase, set_phase] = useState<Phase>("confirm");
   const [result, set_result] = useState<CloseOutcome | null>(null);
   const [error, set_error] = useState<string | null>(null);
@@ -77,10 +85,10 @@ export function ClosePositionsDialog({ open, positions, on_close }: ClosePositio
     return (
       <Sheet
         open={true}
-        on_close={on_close}
+        on_close={finish}
         max_width={460}
         footer={
-          <button onClick={on_close} style={primary_button_style}>
+          <button onClick={finish} style={primary_button_style}>
             Done
           </button>
         }

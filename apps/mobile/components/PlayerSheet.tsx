@@ -132,7 +132,13 @@ export const PlayerSheet = forwardRef<PlayerSheetHandle, object>(function Player
         <SheetGlow />
         <BottomSheetScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           {player && (
-            <PlayerDetail player={player} on_open_team={open_team} on_open_match={open_match} trade_version={trade_version} />
+            <PlayerDetail
+              player={player}
+              on_open_team={open_team}
+              on_open_match={open_match}
+              trade_version={trade_version}
+              on_closed={() => sheet_ref.current?.close()}
+            />
           )}
         </BottomSheetScrollView>
       </BottomSheet>
@@ -144,6 +150,10 @@ export const PlayerSheet = forwardRef<PlayerSheetHandle, object>(function Player
           initial_kind={trade_kind ?? "buy"}
           on_close={() => set_trade_kind(null)}
           on_done={() => set_trade_version(v => v + 1)}
+          on_finish={() => {
+            set_trade_kind(null);
+            sheet_ref.current?.close();
+          }}
         />
       )}
     </>
@@ -155,11 +165,14 @@ function PlayerDetail({
   on_open_team,
   on_open_match,
   trade_version,
+  on_closed,
 }: {
   player: Player;
   on_open_team: (team_id: string) => void;
   on_open_match: (fixture_id: number) => void;
   trade_version: number;
+  /** Close the whole player sheet after a position was closed. */
+  on_closed: () => void;
 }) {
   const team = teams_api.get(player.team_id);
   const valuation = valuations_api.get_for_player(player.id);
@@ -229,7 +242,7 @@ function PlayerDetail({
         <>
           <ValuationRibbon player_id={player.id} valuation={valuation} stats={stats} refresh={trade_version} />
           <PriceChart price_history={price_history} />
-          <YourPosition player={player} refresh={trade_version} />
+          <YourPosition player={player} refresh={trade_version} on_closed={on_closed} />
         </>
       ) : stats != null ? (
         <StatisticsCard stats={stats} />
@@ -541,7 +554,7 @@ function MatchEvents({ m }: { m: PlayerMatchEntry }) {
   );
 }
 
-function YourPosition({ player, refresh }: { player: Player; refresh: number }) {
+function YourPosition({ player, refresh, on_closed }: { player: Player; refresh: number; on_closed: () => void }) {
   // Single source: market_value / pnl / return come from the core metrics —
   // the SAME function the web card uses — so the two clients are aligned by
   // construction and reconcile with the holdings list + AUM.
@@ -582,7 +595,12 @@ function YourPosition({ player, refresh }: { player: Player; refresh: number }) 
           set_closing(true);
           trades_api
             .execute({ player_id: player.id, kind: "sell", shares: Math.abs(shares), price: current_price })
-            .then(() => set_closed_bump(b => b + 1))
+            .then(() => {
+              set_closed_bump(b => b + 1);
+              // Position closed → leave the sheet and return to where we were
+              // (parity with the web ClosePositionsDialog on_finish).
+              on_closed();
+            })
             .catch(() => Alert.alert("Couldn't close", "The order failed. Please try again."))
             .finally(() => set_closing(false));
         },

@@ -27,7 +27,13 @@ interface TradeDialogProps {
   open: boolean;
   player: Player;
   initial_kind: Kind;
+  // Dismiss WITHOUT a completed trade (cancel / backdrop on the form). Closes
+  // the dialog only — the player sheet behind it stays open.
   on_close: () => void;
+  // Dismiss the DONE confirmation after a trade actually executed. Lets the
+  // opener also close the player sheet and return to where the user was.
+  // Falls back to on_close when not provided.
+  on_finish?: () => void;
   // Kept for call-site compatibility (PlayerSheet passes it); the native-style
   // done view has a single "Done" action, so it is not used here.
   go_portfolio?: () => void;
@@ -41,8 +47,12 @@ export function TradeDialog({
   player,
   initial_kind,
   on_close,
+  on_finish,
   current_price: current_price_override,
 }: TradeDialogProps) {
+  // Dismissing the DONE confirmation means the trade went through → hand back to
+  // the opener so it can also close the player sheet (cancel keeps on_close).
+  const finish = on_finish ?? on_close;
   const valuation = valuations_api.get_for_player(player.id);
   const current_price = current_price_override ?? valuation?.current_price ?? 0;
 
@@ -120,10 +130,10 @@ export function TradeDialog({
     return (
       <Sheet
         open={true}
-        on_close={on_close}
+        on_close={finish}
         max_width={460}
         footer={
-          <button onClick={on_close} style={{ ...confirm_btn_style, background: accent }}>
+          <button onClick={finish} style={{ ...confirm_btn_style, background: accent }}>
             Done
           </button>
         }

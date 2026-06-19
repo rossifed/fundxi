@@ -293,6 +293,10 @@ export function PlayerSheet({
           player={player}
           initial_kind={trade_dialog_kind ?? "buy"}
           on_close={() => set_trade_dialog_kind(null)}
+          on_finish={() => {
+            set_trade_dialog_kind(null);
+            on_close();
+          }}
           go_portfolio={() => {
             set_trade_dialog_kind(null);
             on_close();
@@ -301,7 +305,15 @@ export function PlayerSheet({
         />
         {auth_prompt_open && <AuthDialog initial_mode="register" on_close={() => set_auth_prompt_open(false)} />}
         {close_open && holding_metrics && (
-          <ClosePositionsDialog open positions={[{ ...holding_metrics, player }]} on_close={() => set_close_open(false)} />
+          <ClosePositionsDialog
+            open
+            positions={[{ ...holding_metrics, player }]}
+            on_close={() => set_close_open(false)}
+            on_finish={() => {
+              set_close_open(false);
+              on_close();
+            }}
+          />
         )}
       </Sheet>
     );
@@ -506,6 +518,10 @@ export function PlayerSheet({
         player={player}
         initial_kind={trade_dialog_kind ?? "buy"}
         on_close={() => set_trade_dialog_kind(null)}
+        on_finish={() => {
+          set_trade_dialog_kind(null);
+          on_close();
+        }}
         go_portfolio={() => {
           set_trade_dialog_kind(null);
           on_close();
