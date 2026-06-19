@@ -257,21 +257,26 @@ export function App() {
       />
       {/* Faint full-screen WC backdrop. ``screen`` blend keeps only the
           bright parts of the image (gold trophy, stadium lights, sky)
-          visible through the dark page tint — shadows blend away. */}
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          backgroundImage: "url('/wc-bg.jpg')",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          backgroundRepeat: "no-repeat",
-          opacity: 0.08,
-          mixBlendMode: "screen",
-          pointerEvents: "none",
-          zIndex: 0,
-        }}
-      />
+          visible through the dark page tint — shadows blend away. Desktop
+          only: it exists to fill the empty side gutters around the centred
+          column. On mobile the content is edge-to-edge so the image only
+          shows as faint noise behind the surfaces — drop it there. */}
+      {!is_mobile && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundImage: "url('/wc-bg.jpg')",
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            backgroundRepeat: "no-repeat",
+            opacity: 0.08,
+            mixBlendMode: "screen",
+            pointerEvents: "none",
+            zIndex: 0,
+          }}
+        />
+      )}
 
       <div
         style={{
