@@ -1,7 +1,7 @@
 /* TeamRoster — single-team rich roster for the match List view.
  *
  * One team at a time, full-width cards grouped by position (XI, then a Bench
- * section). Each card is a clean "player tile": kit-coloured jersey number on
+ * section). Each card is a clean "player tile": neutral jersey number on
  * the left, portrait, then the identity (name + markers, exact position + match
  * rating), and on the right the live price with a subtle one-shot tick pulse +
  * the MATCH / TOTAL moves. No in-row chart — the row stays calm (matches the
@@ -129,7 +129,6 @@ export function TeamRoster({ xi, bench, team_color, event_counts, subs, squad_mo
                 <RichRosterCard
                   key={p.id}
                   p={p}
-                  team_color={team_color}
                   events={event_counts.get(p.id)}
                   sub_info={subs.get(p.id)}
                   watched={watchlist?.has(p.id) ?? false}
@@ -151,7 +150,6 @@ export function TeamRoster({ xi, bench, team_color, event_counts, subs, squad_mo
             <RichRosterCard
               key={p.id}
               p={p}
-              team_color={team_color}
               events={event_counts.get(p.id)}
               sub_info={subs.get(p.id)}
               watched={watchlist?.has(p.id) ?? false}
@@ -217,7 +215,6 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 
 function RichRosterCard({
   p,
-  team_color,
   events,
   sub_info,
   bench,
@@ -226,7 +223,6 @@ function RichRosterCard({
   on_open,
 }: {
   p: MatchPlayer;
-  team_color?: string;
   events?: MatchEventCounts;
   sub_info?: SubInfo;
   bench?: boolean;
@@ -249,9 +245,6 @@ function RichRosterCard({
   const exact_position = ref_player?.detailed_position ?? POSITION_FALLBACK[p.position];
   const photo = ref_player?.image_path ?? null;
   const held = portfolio_api.holds(p.id);
-  // Per-card kit colour (real provider data → literal interpolation is allowed).
-  // Guard the empty string ("" is falsy-but-not-nullish, so ?? wouldn't catch it).
-  const tc = team_color && team_color.trim() ? team_color : "#8a8a8a";
   // Neutral card background for everyone — no perf-driven tint. Held state is
   // marked by ONE signal only: the small blue dot by the name (see below).
   const base_bg = "rgba(255,255,255,.025)";
@@ -319,7 +312,10 @@ function RichRosterCard({
           events extend this line rightwards without moving the rows above. */}
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: 3, padding: "0 12px" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 7, minWidth: 0 }}>
-          <span aria-hidden className="mono" style={{ flexShrink: 0, fontSize: 12, fontWeight: 800, color: tc, letterSpacing: -0.3 }}>
+          {/* Jersey number is identity data — it must NEVER depend on the kit
+              colour being present. Neutral white (parity with mobile rc_num); the
+              team colour lives only on the glow spine, never on the number. */}
+          <span aria-hidden className="mono" style={{ flexShrink: 0, fontSize: 12, fontWeight: 800, color: "rgba(255,255,255,.7)", letterSpacing: -0.3 }}>
             {p.jersey_number}
           </span>
           <span style={{ minWidth: 0, fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: -0.1 }}>
