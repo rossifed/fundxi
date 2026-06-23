@@ -124,7 +124,7 @@ const ROW_GAP = 8;
 
 // Max filter-result size for the one-shot "Buy" / "Watch" actions. Above this,
 // the buttons stay visible but disabled (you must narrow the filter first).
-const MAX_BULK = 20;
+const MAX_BULK = 30;
 
 interface ScreenerPageProps {
   on_open_player: (player: Player) => void;
