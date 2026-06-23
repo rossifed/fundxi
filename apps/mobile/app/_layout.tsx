@@ -15,6 +15,7 @@ import { set_stream_base } from '@fundxi/core/infrastructure/stream_client';
 import { AppBackground } from '@/components/AppBackground';
 import { AuthProvider } from '@/components/AuthContext';
 import { BootstrapGate } from '@/components/BootstrapGate';
+import { HowToPlay } from '@/components/HowToPlay';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { sans } from '@/theme/tokens';
 
@@ -80,6 +81,10 @@ export default function RootLayout() {
                 <Stack.Screen name="reset-password" options={{ headerShown: false }} />
               </Stack>
               <OfflineBanner />
+              {/* Self-contained onboarding overlay (floating "?" + "How fundXI
+                  works" sheet). Mounted once; auto-opens on first launch, then
+                  on demand. No data, no coupling — zero impact elsewhere. */}
+              <HowToPlay />
             </AuthProvider>
           </BootstrapGate>
         </ThemeProvider>

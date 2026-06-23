@@ -15,6 +15,7 @@ import { LeaguesPage } from "@/ui/pages/leagues/LeaguesPage";
 import { ProfilePage } from "@/ui/pages/profile/ProfilePage";
 import { ResetPasswordPage } from "@/ui/pages/auth/ResetPasswordPage";
 import { AuthDialog } from "@/ui/components/AuthDialog";
+import { HowToPlay } from "@/ui/components/HowToPlay";
 import { MatchView } from "@/ui/pages/match/MatchView";
 import { TeamPage } from "@/ui/pages/team/TeamPage";
 import { PlayerSheet } from "@/ui/pages/player/PlayerSheet";
@@ -359,6 +360,11 @@ export function App() {
       {/* Opened after a successful password reset to sign in with the new
           password (the Header owns its own dialog for normal sign-in). */}
       {show_login && <AuthDialog initial_mode="login" on_close={() => set_show_login(false)} />}
+
+      {/* Self-contained onboarding overlay (floating "?" + "How fundXI works"
+          panel). Mounted once here; auto-opens on first visit, otherwise on
+          demand. No data, no coupling — zero impact on the rest of the app. */}
+      <HowToPlay />
     </div>
   );
 }
