@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { color_for_sign, fmt_eur_m, fmt_eur_m_cash, fmt_eur_m_signed, fmt_signed_pct } from "@/ui/helpers/format";
+import { color_for_sign, fmt_eur_m, fmt_eur_m_signed, fmt_signed_pct } from "@/ui/helpers/format";
 import { leagues_api } from "@fundxi/core/api/leagues_api";
 import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import { refresh_leagues, subscribe_leagues } from "@fundxi/core/infrastructure/repositories/leagues_repository";
@@ -138,7 +138,7 @@ export function LeaguesPage({ initial_join_code }: LeaguesPageProps = {}) {
       {/* Your portfolio at a glance — the same value you're ranked on. */}
       <div style={{ display: "flex", gap: 8, background: "rgba(255,255,255,.025)", border: "1px solid rgba(255,255,255,.05)", borderRadius: 12, padding: "11px 12px" }}>
         <StatCell label="Value" value={fmt_eur_m(totals.total_value)} sub={fmt_signed_pct(totals.return_pct, 1)} sub_color={color_for_sign(totals.return_pct)} />
-        <StatCell label="Cash" value={fmt_eur_m_cash(totals.cash)} />
+        <StatCell label="Cash" value={fmt_eur_m(totals.cash)} />
         <StatCell label="Positions" value={String(positions)} />
         <StatCell label="P&L" value={fmt_eur_m_signed(totals.pnl)} value_color={color_for_sign(totals.pnl)} />
       </div>

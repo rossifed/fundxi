@@ -8,19 +8,6 @@ export const price_label = (value: number): string => (value >= 999 ? "∞" : "�
 
 export const fmt_eur_m = (value_m: number): string => `€${value_m.toFixed(1)}M`;
 
-/** Format a CASH BALANCE in €M. Like fmt_eur_m, but never collapses a non-zero
- * residual to a misleading "€0.0M": when the balance still rounds to flat at
- * 1 dp, it widens precision (up to 3 dp) so leftover cash after a "100%" buy
- * stays visible (e.g. "€0.04M"). A genuinely empty balance shows "€0.0M"; a
- * sub-thousandth dust shows "<€0.001M". Pure presentation. */
-export const fmt_eur_m_cash = (value_m: number): string => {
-  if (value_m === 0) return fmt_eur_m(0);
-  for (const dp of [1, 2, 3]) {
-    if (Number(value_m.toFixed(dp)) !== 0) return `€${value_m.toFixed(dp)}M`;
-  }
-  return `${value_m < 0 ? "-" : "<"}€0.001M`;
-};
-
 /** A value that rounds to flat renders a neutral "€0.0M" (no sign), so it never
  * shows "€-0.0M" against the positive colour color_for_sign assigns it. */
 export const fmt_eur_m_signed = (value_m: number): string => {

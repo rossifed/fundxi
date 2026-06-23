@@ -16,8 +16,11 @@
  *     purely for DISPLAY: ``price_per_share = total_value / N`` and a position's
  *     share count = ``fraction × N``. N never enters the money math — drop or
  *     change it and persisted fractions stay valid.
- *   - ``amount`` is the trade's actual cost/proceeds = fraction × total_value,
- *     rounded to the cent (the SAME value the backend debits).
+ *   - ``amount`` is the trade's actual cost/proceeds = fraction × total_value.
+ *     There are NO whole-share round lots: a BUY is sized on the €1 money grid
+ *     (floored down so it never exceeds its budget), so deploying 100% of cash
+ *     leaves only a sub-euro, invisible residual instead of a usable dust
+ *     position. A SELL trades the exact held fraction (100% fully closes).
  *
  * Position cap: a single position can never exceed the player's whole value
  * (``ownership_fraction ≤ 1``). Long-only — a sell unwinds the held long down to
@@ -72,22 +75,21 @@ export function cap_trade_fraction(kind: TradeKind, held_fraction: number, reque
   return Math.max(0, Math.min(requested_fraction, trade_headroom_fraction(kind, held_fraction)));
 }
 
-/** Smallest tradeable fraction = one displayed share. */
-function quantum_fraction(shares_per_player: number): number {
-  return shares_per_player <= 0 ? 0 : 1 / shares_per_player;
-}
-
-/** Floor a raw fraction down to the share quantum (whole displayed shares),
- * so a trade never costs more than the budget that sized it. */
-function floor_to_quantum(raw_fraction: number, shares_per_player: number): number {
-  if (shares_per_player <= 0) return 0;
-  return Math.floor(raw_fraction * shares_per_player) / shares_per_player;
+/** Floor a €M amount DOWN to the backend money grid (€1 = 1e-6 €M; cash and
+ * amounts are NUMERIC(18,6)). A BUY is sized on this MONEY grid, never on a
+ * whole-share quantum: the leftover after "100% of cash" is sub-euro (invisible)
+ * instead of up to one share (~€84 at N = 1e6), so a full deploy lands on ~0
+ * cash with no usable round-lot residual. Flooring down also keeps the cost
+ * within budget (no fp overshoot at the cash boundary); the +ε absorbs float
+ * noise in the scale-up before the floor. */
+function floor_to_money_grid(amount_m: number): number {
+  return Math.floor(amount_m * 1_000_000 + 1e-6) / 1_000_000;
 }
 
 /** Size a BUY by a percentage of available CASH. ``pct`` of cash is the spend
- * budget; fraction = budget / player value, floored to the quantum and capped at
- * the remaining headroom to 100% of the player. 100% = deploy all cash (no
- * "insufficient cash" surprise). */
+ * budget; fraction = budget / player value, with the cost floored to the €1
+ * money grid and capped at the remaining headroom to 100% of the player. 100% =
+ * deploy (almost) all cash → cash lands on ~0, no round-lot residual. */
 export function buy_quantity_from_cash_pct(
   cash: number,
   pct: number,
@@ -96,7 +98,7 @@ export function buy_quantity_from_cash_pct(
   held_fraction: number,
 ): { amount: number; shares: number; capped: boolean } {
   const raw = total_value <= 0 ? 0 : ((cash * pct) / 100) / total_value;
-  return _size(raw, total_value, shares_per_player, "buy", held_fraction);
+  return _size(raw, total_value, "buy", held_fraction);
 }
 
 /** Size a SELL by a percentage of the HELD position. 100% = close the whole
@@ -108,12 +110,12 @@ export function sell_quantity_from_position_pct(
   shares_per_player: number,
 ): { amount: number; shares: number; capped: boolean } {
   const raw = (held_fraction * pct) / 100;
-  return _size(raw, total_value, shares_per_player, "sell", held_fraction);
+  return _size(raw, total_value, "sell", held_fraction);
 }
 
 /** Compute (amount, shares) when the user sizes a trade by an explicit
- * (displayed) share count. The count is converted to a fraction, floored to the
- * quantum, then capped to ±1 of the player's value. */
+ * (displayed) share count. The count is converted to a fraction and capped to
+ * the player's headroom; a BUY's cost is then floored to the €1 money grid. */
 export function compute_quantity_from_shares(
   display_shares: number,
   total_value: number,
@@ -122,21 +124,31 @@ export function compute_quantity_from_shares(
   held_fraction: number,
 ): { amount: number; shares: number; capped: boolean } {
   const raw = fraction_from_display_shares(display_shares, shares_per_player);
-  return _size(raw, total_value, shares_per_player, kind, held_fraction);
+  return _size(raw, total_value, kind, held_fraction);
 }
 
-/** Shared sizing tail: floor the raw fraction to the quantum, cap to ±1, and
- * report whether the player-value cap bit (the request was trimmed). */
+/** Shared sizing tail. Cap the request to the player headroom, then price it —
+ * NO whole-share round lots (the canonical quantity is the ownership fraction):
+ *  - BUY: cost is floored to the €1 money grid and the fraction re-derived from
+ *    it, so the charge matches the cost exactly and never exceeds the budget;
+ *    the leftover is sub-euro, so "100% of cash" lands on ~0.
+ *  - SELL: the held fraction is sold as-is (100% fully closes the position);
+ *    proceeds are rounded to the cent for display.
+ * ``capped`` reports whether the PLAYER cap (not the money grid) trimmed it. */
 function _size(
   raw_fraction: number,
   total_value: number,
-  shares_per_player: number,
   kind: TradeKind,
   held_fraction: number,
 ): { amount: number; shares: number; capped: boolean } {
-  const floored = floor_to_quantum(raw_fraction, shares_per_player);
-  const shares = cap_trade_fraction(kind, held_fraction, floored);
-  return { amount: round_money(shares * total_value), shares, capped: floored > shares + quantum_fraction(shares_per_player) / 2 };
+  const capped = raw_fraction > trade_headroom_fraction(kind, held_fraction) + 1e-9;
+  const fraction = cap_trade_fraction(kind, held_fraction, Math.max(0, raw_fraction));
+  if (kind === "buy") {
+    const amount = total_value > 0 ? floor_to_money_grid(fraction * total_value) : 0;
+    const shares = total_value > 0 ? amount / total_value : 0;
+    return { amount, shares, capped };
+  }
+  return { amount: round_money(fraction * total_value), shares: fraction, capped };
 }
 
 /** Percentage of the portfolio represented by the trade amount.

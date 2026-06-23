@@ -22,7 +22,7 @@ import type { Position } from "@fundxi/core/domain/player/player";
 import { PlayerAvatar } from "@/ui/components/PlayerAvatar";
 import { Sheet } from "@/ui/components/Sheet";
 import { color, position_color } from "@/ui/design/tokens";
-import { color_for_sign, fmt_eur_m, fmt_eur_m_cash, fmt_signed_pct } from "@/ui/helpers/format";
+import { color_for_sign, fmt_eur_m, fmt_signed_pct } from "@/ui/helpers/format";
 
 const PCT_PRESETS = [10, 25, 50, 100];
 
@@ -176,7 +176,7 @@ export function BasketDialog({ open, title, accent, players, initial_selected, o
         <div>
           <div style={{ fontSize: 20, fontWeight: 800 }}>{title}</div>
           <div style={{ fontSize: 13, color: "rgba(255,255,255,.55)", marginTop: 2 }}>
-            Cash {fmt_eur_m_cash(preview.cash_before)} · investing {fmt_eur_m(preview.total_amount)}
+            Cash {fmt_eur_m(preview.cash_before)} · investing {fmt_eur_m(preview.total_amount)}
           </div>
         </div>
 
@@ -352,7 +352,7 @@ export function BasketDialog({ open, title, accent, players, initial_selected, o
         <div style={preview_box_style}>
           <PreviewRow label="Players" value={`${selected_ids.length} of ${players.length} selected`} />
           <PreviewRow label="Total exposure" value={fmt_eur_m(preview.total_amount)} color={accent} />
-          <PreviewRow label="Cash after" value={fmt_eur_m_cash(preview.cash_after)} />
+          <PreviewRow label="Cash after" value={fmt_eur_m(preview.cash_after)} />
         </div>
 
         {buyable === 0 && selected_ids.length > 0 && (

@@ -19,7 +19,7 @@ import type { League } from "@fundxi/core/domain/league/league";
 import { Avatar } from "@/components/Avatar";
 import { useLiveRefetch, usePricesLiveVersion } from "@/components/live";
 import { useRefresh } from "@/components/use_refresh";
-import { color_for_sign, fmt_eur_m, fmt_eur_m_cash, fmt_eur_m_signed, fmt_signed_pct } from "@/lib/format";
+import { color_for_sign, fmt_eur_m, fmt_eur_m_signed, fmt_signed_pct } from "@/lib/format";
 import { mono, palette, text, with_alpha } from "@/theme/tokens";
 
 type View_ = "board" | "create" | "join";
@@ -124,7 +124,7 @@ export default function LeaguesScreen() {
         {/* Your portfolio at a glance — the same value you're ranked on. */}
         <View style={styles.stats_bar}>
           <StatCell label="Value" value={fmt_eur_m(totals.total_value)} sub={fmt_signed_pct(totals.return_pct, 1)} sub_color={color_for_sign(totals.return_pct)} />
-          <StatCell label="Cash" value={fmt_eur_m_cash(totals.cash)} />
+          <StatCell label="Cash" value={fmt_eur_m(totals.cash)} />
           <StatCell label="Positions" value={String(positions)} />
           <StatCell label="P&L" value={fmt_eur_m_signed(totals.pnl)} value_color={color_for_sign(totals.pnl)} />
         </View>

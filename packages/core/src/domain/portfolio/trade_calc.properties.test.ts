@@ -51,25 +51,27 @@ const f_kind = fc.constantFrom("buy", "sell") as fc.Arbitrary<"buy" | "sell">;
 // from quantised trades, so the cap can never produce an off-grid result).
 const held_on_grid = (raw: number, n: number) => Math.max(-1, Math.min(1, Math.round(raw * n) / n));
 
-const is_quantum_multiple = (shares: number, n: number) => Math.abs(shares * n - Math.round(shares * n)) < 1e-6;
-
 describe("trade_calc — property-based invariants", () => {
-  it("from_pct: amount is the resulting fraction's actual cost, rounded to the cent", () => {
+  it("from_pct: amount is the resulting fraction's actual cost", () => {
     fc.assert(
       fc.property(f_amount, f_pct, f_value, f_n, f_kind, f_frac, (pv, pct, value, n, kind, raw) => {
         const held = held_on_grid(raw < 0.5 ? raw * 2 - 1 : raw, n); // span shorts and longs
         const { amount, shares } = quantity_from_pct(pv, pct, value, n, kind, held);
-        expect(amount).toBe(Math.round(shares * value * 100) / 100);
+        // A BUY's cost is floored to the money grid and the fraction re-derived
+        // from it → amount == shares × value (to fp). A SELL's proceeds are
+        // rounded to the cent for display → within half a cent.
+        expect(Math.abs(amount - shares * value)).toBeLessThanOrEqual(kind === "buy" ? 1e-6 : 0.005 + 1e-9);
       }),
     );
   });
 
-  it("from_pct: shares are always a 1/N multiple (the quantum invariant)", () => {
+  it("from_pct: a BUY's cost lands on the €1 money grid (no round-lot residual)", () => {
     fc.assert(
-      fc.property(f_amount, f_pct, f_value, f_n, f_kind, f_frac, (pv, pct, value, n, kind, raw) => {
-        const held = held_on_grid(raw * 2 - 1, n);
-        const { shares } = quantity_from_pct(pv, pct, value, n, kind, held);
-        expect(is_quantum_multiple(shares, n)).toBe(true);
+      fc.property(f_amount, f_pct, f_value, f_n, f_frac, (pv, pct, value, n, raw) => {
+        const held = held_on_grid(raw, n);
+        const { amount } = quantity_from_pct(pv, pct, value, n, "buy", held);
+        const grid_units = amount * 1_000_000; // €1 grid
+        expect(Math.abs(grid_units - Math.round(grid_units))).toBeLessThan(1e-3);
       }),
     );
   });
@@ -96,12 +98,12 @@ describe("trade_calc — property-based invariants", () => {
     );
   });
 
-  it("from_shares: amount == round-to-cent(shares × value); position within cap", () => {
+  it("from_shares: amount is the actual cost of shares; position within cap", () => {
     fc.assert(
       fc.property(fc.double({ min: 0, max: 5_000_000, noNaN: true, noDefaultInfinity: true }), f_value, f_n, f_kind, f_frac, (ds, value, n, kind, raw) => {
         const held = held_on_grid(raw * 2 - 1, n);
         const { amount, shares } = compute_quantity_from_shares(ds, value, n, kind, held);
-        expect(amount).toBe(Math.round(shares * value * 100) / 100);
+        expect(Math.abs(amount - shares * value)).toBeLessThanOrEqual(kind === "buy" ? 1e-6 : 0.005 + 1e-9);
         const after = kind === "buy" ? held + shares : held - shares;
         expect(Math.abs(after)).toBeLessThanOrEqual(1 + 1e-9);
       }),

@@ -91,6 +91,23 @@ describe("buy_quantity_from_cash_pct — sizes by % of cash", () => {
   it("zero total_value → zero shares (avoids div/0, no NaN)", () => {
     expect(buy_quantity_from_cash_pct(1000, 25, 0, N, 0).shares).toBe(0);
   });
+
+  it("100% of cash deploys it all — no round-lot residual (the dust fix)", () => {
+    // €100M cash, 100%, on a €500M player → 0.2 of the player = €100M exactly,
+    // so cash lands on 0 (no whole-share flooring leftover).
+    const { amount, shares } = buy_quantity_from_cash_pct(100, 100, 500, N, 0);
+    expect(amount).toBe(100);
+    expect(shares).toBeCloseTo(0.2, 12);
+    expect(compute_cash_after("buy", 100, amount)).toBe(0);
+  });
+
+  it("100% of a scale-6 cash balance still lands on 0 (no sub-euro dust)", () => {
+    // A real residual cash like €8.995928M, fully redeployed → exactly 0 left.
+    const cash = 8.995928;
+    const { amount } = buy_quantity_from_cash_pct(cash, 100, 500, N, 0);
+    expect(amount).toBe(cash);
+    expect(compute_cash_after("buy", cash, amount)).toBe(0);
+  });
 });
 
 describe("sell_quantity_from_position_pct — sizes by % of the held position", () => {
@@ -126,9 +143,12 @@ describe("compute_quantity_from_shares", () => {
     expect(capped).toBe(true);
   });
 
-  it("floors a fractional displayed share to the quantum (one whole share)", () => {
-    const { shares } = compute_quantity_from_shares(50_000.7, 200, N, "buy", 0);
-    expect(shares).toBeCloseTo(0.05, 12); // 50000.7 → 50000 shares
+  it("honours a fractional displayed share — no whole-share round lots", () => {
+    // 50000.7 shares is kept as-is (not floored to 50000); the BUY cost lands on
+    // the €1 money grid: 0.0500007 × €200M = €10.00014M.
+    const { shares, amount } = compute_quantity_from_shares(50_000.7, 200, N, "buy", 0);
+    expect(shares).toBeCloseTo(0.0500007, 9);
+    expect(amount).toBeCloseTo(10.00014, 6);
   });
 });
 

@@ -24,6 +24,14 @@ class TradeError(Exception):
     """Raised when a trade can't be executed (insufficient cash, oversell, …)."""
 
 
+# Float slack on the cash check (€M). A buy sized to spend ALL cash arrives as
+# shares * price, whose product can land a fraction of a femto-euro above the
+# cash due to IEEE-754 rounding; without slack a legitimate "deploy 100%" would
+# be wrongly rejected. 1e-9 €M = €0.001 — far below the scale-6 (€1) storage
+# grain, so it tolerates fp noise only, never a real over-spend.
+_CASH_EPSILON_M = 1e-9
+
+
 @dataclass(frozen=True, slots=True)
 class TradeRequest:
     portfolio_id: int
@@ -133,7 +141,7 @@ async def execute_trade(
         # cash. So even with max_gross_leverage > 1 a buy beyond cash is rejected
         # here; relax this check (not the margin rule) if leveraged longs are ever
         # wanted. See domain/portfolio/margin.py and config.max_gross_leverage.
-        if portfolio.cash < total:
+        if portfolio.cash < total - _CASH_EPSILON_M:
             raise TradeError(f"insufficient cash: need €{total:.2f}M, have €{portfolio.cash:.2f}M")
         new_shares = prev_shares + request.shares
         new_cash = portfolio.cash - total
