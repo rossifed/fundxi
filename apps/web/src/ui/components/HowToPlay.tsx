@@ -1,16 +1,14 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { Sheet } from "@/ui/components/Sheet";
-import { color } from "@/ui/design/tokens";
-import { useViewport } from "@/ui/hooks/use_viewport";
 
-// Self-contained onboarding overlay: a floating "?" launcher + a "How fundXI
-// works" panel (centered modal on desktop, bottom sheet on phone, via the shared
-// Sheet primitive). It auto-opens ONCE on a browser's first visit, then only on
-// demand. Reads no data and touches no other component, so it has zero impact on
-// the rest of the app. Pure presentation.
+// Onboarding panel: a "How fundXI works" sheet (centered modal on desktop, bottom
+// sheet on phone, via the shared Sheet primitive). The trigger is a small "?" in
+// the Header next to Sign in (see Header.tsx) — this module only owns the panel +
+// its open state. Auto-opens ONCE on a browser's first visit, then on demand.
+// Reads no data; pure presentation.
 //
-// First-run flag persisted in localStorage exactly like the watchlist / fixtures
-// view-mode preferences (per-browser, client-only, fine for a UI hint).
+// A tiny singleton store decouples the trigger (Header) from the panel (mounted
+// once at the app root) so neither needs prop threading through App.
 
 const SEEN_KEY = "fundxi:howtoplay:seen";
 
@@ -32,128 +30,129 @@ function mark_seen(): void {
   }
 }
 
+let panel_open = false;
+const subscribers = new Set<() => void>();
+
+function emit(): void {
+  for (const f of subscribers) f();
+}
+
+function subscribe(f: () => void): () => void {
+  subscribers.add(f);
+  return () => {
+    subscribers.delete(f);
+  };
+}
+
+// Public control used by the Header "?" button.
+export const how_to_play = {
+  open(): void {
+    panel_open = true;
+    emit();
+  },
+  close(): void {
+    panel_open = false;
+    emit();
+  },
+};
+
 export function HowToPlay() {
-  const { is_mobile } = useViewport();
-  const [open, set_open] = useState(false);
+  const open = useSyncExternalStore(
+    subscribe,
+    () => panel_open,
+    () => panel_open,
+  );
 
   // Auto-open once, on the very first visit only.
   useEffect(() => {
     if (!already_seen()) {
-      set_open(true);
+      how_to_play.open();
       mark_seen();
     }
   }, []);
 
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => set_open(true)}
-        aria-label="How to play"
-        title="How to play"
-        style={{
-          position: "fixed",
-          right: 18,
-          bottom: is_mobile ? 92 : 22, // raised to clear the mobile BottomNav
-          zIndex: 150,
-          width: 44,
-          height: 44,
-          borderRadius: "50%",
-          background: "rgba(255,255,255,.06)",
-          border: `1px solid ${color.brandGreen}`,
-          color: color.brandGreen,
-          fontSize: 20,
-          fontWeight: 800,
-          fontFamily: "inherit",
-          cursor: "pointer",
-          boxShadow: "0 8px 24px rgba(0,0,0,.4)",
-        }}
-      >
-        ?
-      </button>
-
-      <Sheet
-        open={open}
-        on_close={() => set_open(false)}
-        max_width={460}
-        footer={
-          <button
-            type="button"
-            onClick={() => set_open(false)}
-            style={{
-              width: "100%",
-              padding: "12px 16px",
-              background: "var(--color-action-buy)",
-              color: "#0d0d0f",
-              border: "none",
-              borderRadius: 8,
-              fontWeight: 800,
-              fontSize: 14,
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}
-          >
-            Got it, let's play
-          </button>
-        }
-      >
-        <div style={{ padding: "26px 22px 6px", color: "#fff" }}>
-          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: -0.4 }}>How fundXI works</div>
-          <div style={{ fontSize: 13, color: "rgba(255,255,255,.55)", marginTop: 4, marginBottom: 18 }}>
-            New here? Here is the game in one minute.
-          </div>
-
-          <Step
-            n={1}
-            title="The goal"
-            body="You start with play money in euros, shown in millions (like €10M). You spend it on shares of real World Cup players, like tiny stocks. When your players do well, their value rises and you climb your league."
-          />
-
-          <Step n={2} title="How to play">
-            <Bullet label="Buy" text="open a player and tap Buy, then choose how much of your cash to put in." />
-            <Bullet
-              label="Buy many"
-              text="in the Screener, filter the list and buy all of them at once. Or open a team and buy the whole squad in one tap."
-            />
-            <Bullet label="Sell" text="tap Sell any time to bank a gain or stop a loss." />
-          </Step>
-
-          <Step n={3} title="When prices move">
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
-              <Pill tone="up" label="Goes up" text="he scores, makes an assist, plays well, or his team wins." />
-              <Pill tone="down" label="Goes down" text="he plays badly, sits on the bench, or his team goes out." />
-            </div>
-            <div style={{ fontSize: 13, color: "rgba(255,255,255,.6)", marginTop: 10, lineHeight: 1.5 }}>
-              During a live match, prices move in real time. That is the fun part.
-            </div>
-          </Step>
-
-          <Step n={4} title="The five tabs">
-            <Bullet label="Home" text="what is hot right now: news and the biggest movers." />
-            <Bullet label="Screener" text="the full list of players. Search and filter to find who to buy." />
-            <Bullet label="Fixtures" text="the match schedule. Tap a match to follow it live." />
-            <Bullet label="Portfolio" text="your players, your cash, and how you are doing." />
-            <Bullet label="Leagues" text="create or join a league to play against your friends." />
-          </Step>
-
-          <div
-            style={{
-              marginTop: 8,
-              padding: "12px 14px",
-              background: "rgba(255,255,255,.03)",
-              border: "1px solid rgba(255,255,255,.06)",
-              borderRadius: 10,
-              fontSize: 13,
-              color: "rgba(255,255,255,.7)",
-              lineHeight: 1.5,
-            }}
-          >
-            <b style={{ color: "#fff" }}>Start here:</b> open the Screener, pick two or three players you
-            like, then watch their matches.
-          </div>
+    <Sheet
+      open={open}
+      on_close={how_to_play.close}
+      max_width={460}
+      footer={
+        <button
+          type="button"
+          onClick={how_to_play.close}
+          style={{
+            width: "100%",
+            padding: "12px 16px",
+            background: "var(--color-action-buy)",
+            color: "#0d0d0f",
+            border: "none",
+            borderRadius: 8,
+            fontWeight: 800,
+            fontSize: 14,
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          Got it, let's play
+        </button>
+      }
+    >
+      <div style={{ padding: "26px 22px 6px", color: "#fff" }}>
+        <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: -0.4 }}>How fundXI works</div>
+        <div style={{ fontSize: 13, color: "rgba(255,255,255,.55)", marginTop: 4, marginBottom: 18 }}>
+          New here? Here is the game in one minute.
         </div>
-      </Sheet>
-    </>
+
+        <Step
+          n={1}
+          title="The goal"
+          body="You start with play money in euros, shown in millions (like €10M). You spend it on shares of real World Cup players, like tiny stocks. When your players do well, their value rises and you climb your league."
+        />
+
+        <Step n={2} title="How to play">
+          <Bullet label="Buy" text="open a player and tap Buy, then choose how much of your cash to put in." />
+          <Bullet
+            label="Buy many"
+            text="in the Screener, filter the list and buy all of them at once. Or open a team and buy the whole squad in one tap."
+          />
+          <Bullet label="Sell" text="tap Sell any time to bank a gain or stop a loss." />
+        </Step>
+
+        <Step n={3} title="When prices move">
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+            <Pill tone="up" label="Goes up" text="he scores, makes an assist, plays well, or his team wins." />
+            <Pill tone="down" label="Goes down" text="he plays badly, sits on the bench, or his team goes out." />
+          </div>
+          <div style={{ fontSize: 13, color: "rgba(255,255,255,.6)", marginTop: 10, lineHeight: 1.5 }}>
+            During a live match, prices move in real time. That is the fun part.
+          </div>
+        </Step>
+
+        <Step n={4} title="The five tabs">
+          <Bullet label="Home" text="what is hot right now: news and the biggest movers." />
+          <Bullet label="Screener" text="the full list of players. Search and filter to find who to buy." />
+          <Bullet label="Fixtures" text="the match schedule. Tap a match to follow it live." />
+          <Bullet label="Portfolio" text="your players, your cash, and how you are doing." />
+          <Bullet label="Leagues" text="create or join a league to play against your friends." />
+        </Step>
+
+        <div
+          style={{
+            marginTop: 8,
+            padding: "12px 14px",
+            background: "rgba(255,255,255,.03)",
+            border: "1px solid rgba(255,255,255,.06)",
+            borderRadius: 10,
+            fontSize: 13,
+            color: "rgba(255,255,255,.7)",
+            lineHeight: 1.5,
+          }}
+        >
+          <b style={{ color: "#fff" }}>Start here:</b> open the Screener, pick two or three players you like,
+          then watch their matches.
+        </div>
+      </div>
+    </Sheet>
   );
 }
 

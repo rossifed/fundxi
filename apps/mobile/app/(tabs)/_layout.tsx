@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { themes } from "@fundxi/core/design/palette";
 
 import { useAuth } from "@/components/AuthContext";
+import { how_to_play } from "@/components/HowToPlay";
 import { LiveBar } from "@/components/LiveBar";
 import { PortfolioBar } from "@/components/PortfolioBar";
 
@@ -52,7 +53,15 @@ function TabHeader({ title, portfolio_bar = true }: { title: string; portfolio_b
     <View style={{ paddingTop: insets.top }}>
       <View style={header_styles.title_row}>
         <Text style={header_styles.title}>{title}</Text>
-        <AuthControl />
+        <View style={header_styles.right}>
+          {/* Discreet onboarding launcher, sits just before the auth control. */}
+          <Pressable onPress={() => how_to_play.open()} hitSlop={8} accessibilityLabel="How to play">
+            <View style={header_styles.help}>
+              <Text style={header_styles.help_q}>?</Text>
+            </View>
+          </Pressable>
+          <AuthControl />
+        </View>
       </View>
       {portfolio_bar && <PortfolioBar />}
       <LiveBar />
@@ -69,6 +78,18 @@ const header_styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   title: { color: "#fff", fontSize: 20, fontWeight: "800" },
+  right: { flexDirection: "row", alignItems: "center", gap: 12 },
+  // Small, low-key circle: muted grey "?", no fill — ignorable until needed.
+  help: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  help_q: { color: "rgba(255,255,255,0.4)", fontSize: 12, fontWeight: "700" },
   signin: { color: "#fff", fontSize: 13, fontWeight: "700" },
   avatar: {
     width: 28,

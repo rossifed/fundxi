@@ -1,21 +1,49 @@
-// HowToPlay — onboarding overlay. RN port of
-// apps/web/src/ui/components/HowToPlay.tsx: a floating "?" launcher + a
-// "How fundXI works" bottom sheet (same copy, same sections). Pure presentation:
-// reads no data and touches no other screen, mounted once at the root layout, so
-// it has zero impact on the rest of the app.
+// HowToPlay — onboarding panel. RN port of
+// apps/web/src/ui/components/HowToPlay.tsx: a "How fundXI works" bottom sheet
+// (same copy, same sections). The trigger is a small "?" in the tab header next
+// to Sign in (see app/(tabs)/_layout.tsx) — this module only owns the panel + its
+// open state. Pure presentation: reads no data, mounted once at the root layout.
+//
+// A tiny singleton store decouples the trigger (tab header) from the panel
+// (mounted at the root) so neither needs prop threading.
 //
 // First-run persistence trade-off: web stores a "seen" flag in localStorage
 // (shows once, ever). RN has no zero-dependency durable store wired here, so we
 // gate on an in-memory module flag (shows once per cold launch), then only on
-// demand via the "?". Swapping this single flag for
-// @react-native-async-storage/async-storage upgrades it to "once, ever" to match
-// web exactly, the day a native dependency is acceptable.
+// demand via the "?". Swapping this flag for
+// @react-native-async-storage/async-storage upgrades it to "once, ever".
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { palette, surface, text, with_alpha } from "@/theme/tokens";
+
+let panel_open = false;
+const subscribers = new Set<() => void>();
+
+function emit(): void {
+  for (const f of subscribers) f();
+}
+
+function subscribe(f: () => void): () => void {
+  subscribers.add(f);
+  return () => {
+    subscribers.delete(f);
+  };
+}
+
+// Public control used by the tab-header "?" button.
+export const how_to_play = {
+  open(): void {
+    panel_open = true;
+    emit();
+  },
+  close(): void {
+    panel_open = false;
+    emit();
+  },
+};
 
 // Module-level: survives tab navigation within one app launch, resets only on a
 // full cold restart. See the header note on the persistence trade-off.
@@ -23,79 +51,73 @@ let auto_shown = false;
 
 export function HowToPlay() {
   const insets = useSafeAreaInsets();
-  const [open, set_open] = useState(false);
+  const open = useSyncExternalStore(
+    subscribe,
+    () => panel_open,
+    () => panel_open,
+  );
 
   useEffect(() => {
     if (!auto_shown) {
       auto_shown = true;
-      set_open(true);
+      how_to_play.open();
     }
   }, []);
 
   return (
-    <>
-      <Pressable
-        accessibilityLabel="How to play"
-        onPress={() => set_open(true)}
-        style={[styles.fab, { bottom: 88 + insets.bottom }]}
-      >
-        <Text style={styles.fab_q}>?</Text>
-      </Pressable>
+    <Modal visible={open} transparent animationType="slide" onRequestClose={how_to_play.close}>
+      <Pressable style={styles.backdrop} onPress={how_to_play.close}>
+        {/* Stop propagation so taps inside the sheet don't dismiss it. */}
+        <Pressable style={[styles.sheet, { paddingBottom: 14 + insets.bottom }]} onPress={() => {}}>
+          <ScrollView showsVerticalScrollIndicator={false} style={styles.scroll}>
+            <Text style={styles.title}>How fundXI works</Text>
+            <Text style={styles.subtitle}>New here? Here is the game in one minute.</Text>
 
-      <Modal visible={open} transparent animationType="slide" onRequestClose={() => set_open(false)}>
-        <Pressable style={styles.backdrop} onPress={() => set_open(false)}>
-          {/* Stop propagation so taps inside the sheet don't dismiss it. */}
-          <Pressable style={[styles.sheet, { paddingBottom: 14 + insets.bottom }]} onPress={() => {}}>
-            <ScrollView showsVerticalScrollIndicator={false} style={styles.scroll}>
-              <Text style={styles.title}>How fundXI works</Text>
-              <Text style={styles.subtitle}>New here? Here is the game in one minute.</Text>
+            <Step
+              n={1}
+              title="The goal"
+              body="You start with play money in euros, shown in millions (like €10M). You spend it on shares of real World Cup players, like tiny stocks. When your players do well, their value rises and you climb your league."
+            />
 
-              <Step
-                n={1}
-                title="The goal"
-                body="You start with play money in euros, shown in millions (like €10M). You spend it on shares of real World Cup players, like tiny stocks. When your players do well, their value rises and you climb your league."
+            <Step n={2} title="How to play">
+              <Bullet label="Buy" body="open a player and tap Buy, then choose how much of your cash to put in." />
+              <Bullet
+                label="Buy many"
+                body="in the Screener, filter the list and buy all of them at once. Or open a team and buy the whole squad in one tap."
               />
+              <Bullet label="Sell" body="tap Sell any time to bank a gain or stop a loss." />
+            </Step>
 
-              <Step n={2} title="How to play">
-                <Bullet label="Buy" body="open a player and tap Buy, then choose how much of your cash to put in." />
-                <Bullet
-                  label="Buy many"
-                  body="in the Screener, filter the list and buy all of them at once. Or open a team and buy the whole squad in one tap."
-                />
-                <Bullet label="Sell" body="tap Sell any time to bank a gain or stop a loss." />
-              </Step>
-
-              <Step n={3} title="When prices move">
-                <View style={{ gap: 8, marginTop: 8 }}>
-                  <Pill tone="up" label="Goes up" body="he scores, makes an assist, plays well, or his team wins." />
-                  <Pill tone="down" label="Goes down" body="he plays badly, sits on the bench, or his team goes out." />
-                </View>
-                <Text style={styles.note}>During a live match, prices move in real time. That is the fun part.</Text>
-              </Step>
-
-              <Step n={4} title="The five tabs">
-                <Bullet label="Home" body="what is hot right now: news and the biggest movers." />
-                <Bullet label="Screener" body="the full list of players. Search and filter to find who to buy." />
-                <Bullet label="Fixtures" body="the match schedule. Tap a match to follow it live." />
-                <Bullet label="Portfolio" body="your players, your cash, and how you are doing." />
-                <Bullet label="Leagues" body="create or join a league to play against your friends." />
-              </Step>
-
-              <View style={styles.start}>
-                <Text style={styles.start_text}>
-                  <Text style={styles.start_bold}>Start here: </Text>
-                  open the Screener, pick two or three players you like, then watch their matches.
-                </Text>
+            <Step n={3} title="When prices move">
+              <View style={{ gap: 8, marginTop: 8 }}>
+                <Pill tone="up" label="Goes up" body="he scores, makes an assist, plays well, or his team wins." />
+                <Pill tone="down" label="Goes down" body="he plays badly, sits on the bench, or his team goes out." />
               </View>
-            </ScrollView>
+              <Text style={styles.note}>During a live match, prices move in real time. That is the fun part.</Text>
+            </Step>
 
-            <Pressable style={styles.cta} onPress={() => set_open(false)}>
-              <Text style={styles.cta_label}>Got it, let's play</Text>
-            </Pressable>
+            <Step n={4} title="The five tabs">
+              <Bullet label="Home" body="what is hot right now: news and the biggest movers." />
+              <Bullet label="Screener" body="the full list of players. Search and filter to find who to buy." />
+              <Bullet label="Fixtures" body="the match schedule. Tap a match to follow it live." />
+              <Bullet label="Portfolio" body="your players, your cash, and how you are doing." />
+              <Bullet label="Leagues" body="create or join a league to play against your friends." />
+            </Step>
+
+            <View style={styles.start}>
+              <Text style={styles.start_text}>
+                <Text style={styles.start_bold}>Start here: </Text>
+                open the Screener, pick two or three players you like, then watch their matches.
+              </Text>
+            </View>
+          </ScrollView>
+
+          <Pressable style={styles.cta} onPress={how_to_play.close}>
+            <Text style={styles.cta_label}>Got it, let's play</Text>
           </Pressable>
         </Pressable>
-      </Modal>
-    </>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -136,20 +158,6 @@ function Pill({ tone, label, body }: { tone: "up" | "down"; label: string; body:
 }
 
 const styles = StyleSheet.create({
-  fab: {
-    position: "absolute",
-    right: 16,
-    zIndex: 50,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: surface.active,
-    borderWidth: 1,
-    borderColor: palette.brandGreen,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  fab_q: { color: palette.brandGreen, fontSize: 20, fontWeight: "800" },
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
   sheet: {
     backgroundColor: palette.surfaceDeep,

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { AuthDialog } from "@/ui/components/AuthDialog";
+import { how_to_play } from "@/ui/components/HowToPlay";
 import { Avatar } from "@/ui/components/Avatar";
 import { Logo } from "@/ui/shell/Logo";
 import { useAuth } from "@/ui/shell/AuthContext";
@@ -58,6 +59,15 @@ export function Header({ on_logo_click, on_open_profile }: HeaderProps) {
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        {/* Discreet onboarding launcher, sits just before the auth control. */}
+        <button
+          onClick={() => how_to_play.open()}
+          aria-label="How to play"
+          title="How to play"
+          style={help_btn}
+        >
+          ?
+        </button>
         {status === "authenticated" && user ? (
           <>
             <button
@@ -98,6 +108,26 @@ const ghost_btn: React.CSSProperties = {
   fontWeight: 700,
   cursor: "pointer",
   fontFamily: "inherit",
+};
+
+// Small, low-key circle: muted grey "?", no fill — meant to be ignorable until
+// needed, unlike a bright floating button.
+const help_btn: React.CSSProperties = {
+  width: 24,
+  height: 24,
+  borderRadius: "50%",
+  background: "transparent",
+  color: "rgba(255,255,255,.4)",
+  border: "1px solid rgba(255,255,255,.14)",
+  fontSize: 12,
+  fontWeight: 700,
+  lineHeight: 1,
+  cursor: "pointer",
+  fontFamily: "inherit",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 0,
 };
 
 const primary_btn: React.CSSProperties = {
