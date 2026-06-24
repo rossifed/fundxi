@@ -52,6 +52,15 @@ def _classify_type(payload: dict[str, Any]) -> MatchEventType:
     return MatchEventType.OTHER
 
 
+def is_goal_event(payload: dict[str, Any]) -> bool:
+    """True iff this raw event payload is a scored GOAL (not own-goal/penalty).
+
+    Used to read, from the CURRENT Sportmonks feed, the minutes at which a player
+    still has a goal — so a VAR retraction can drop only the goals Sportmonks has
+    REMOVED (the disallowed ones), never a goal the player legitimately kept."""
+    return _classify_type(payload) is MatchEventType.GOAL
+
+
 def is_goal_disallowed_var(payload: dict[str, Any]) -> bool:
     """True iff this event is a VAR review that DISALLOWED a goal.
 

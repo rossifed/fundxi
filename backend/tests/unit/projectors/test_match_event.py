@@ -99,7 +99,10 @@ def test_missing_minute_raises() -> None:
 
 # --- VAR goal-disallowed detection (real Sportmonks shape, Korea-Czech 77') ---
 
-from src.infrastructure.sportmonks.projectors.match_event import is_goal_disallowed_var  # noqa: E402
+from src.infrastructure.sportmonks.projectors.match_event import (  # noqa: E402
+    is_goal_disallowed_var,
+    is_goal_event,
+)
 
 
 def _soucek_var_disallowed() -> dict[str, object]:
@@ -129,3 +132,30 @@ def test_var_without_goal_disallowed_addition_is_ignored() -> None:
 
 def test_non_var_event_is_not_goal_disallowed() -> None:
     assert is_goal_disallowed_var(_mbappe_penalty()) is False
+
+
+def test_var_goal_disallowed_lowercase_addition() -> None:
+    """Real Sportmonks shipped ``addition='Goal disallowed'`` (lowercase 'd') for
+    Portugal-Uzbekistan 2026-06-23; detection must be case-insensitive."""
+    assert is_goal_disallowed_var(_soucek_var_disallowed() | {"addition": "Goal disallowed"}) is True
+
+
+def _ganiev_goal(minute: int) -> dict[str, object]:
+    return {
+        "id": 157196900,
+        "type": {"id": 14, "code": "goal", "name": "Goal"},
+        "minute": minute,
+        "player_id": 330702,
+        "participant_id": 18745,
+        "player_name": "Aziz Ganiev",
+    }
+
+
+def test_is_goal_event_true_for_goal() -> None:
+    assert is_goal_event(_ganiev_goal(29)) is True
+
+
+def test_is_goal_event_false_for_var_and_penalty() -> None:
+    # VAR review and (missed) penalties are not a scored goal in the feed-kept set.
+    assert is_goal_event(_soucek_var_disallowed()) is False
+    assert is_goal_event(_mbappe_penalty()) is False

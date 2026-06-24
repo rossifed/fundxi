@@ -57,21 +57,25 @@ class SqlAlchemyMatchEventRepository:
         stmt = stmt.on_conflict_do_update(index_elements=["sportmonks_id"], set_=update_payload)
         await self._session.execute(stmt)
 
-    async def delete_goal(self, fixture_id: int, *, player_id: int, minute: int) -> int:
-        """Remove a player's goal event at a given minute. Used to retract a
-        goal annulled by VAR — Sportmonks drops the goal from its feed, but our
-        upsert-only ingestion would otherwise keep the stale row. Idempotent
-        (0 rows once already gone). Returns the number of events deleted."""
-        result = cast(
-            CursorResult[Any],
-            await self._session.execute(
-                delete(MatchEventORM)
-                .where(MatchEventORM.fixture_id == fixture_id)
-                .where(MatchEventORM.type == MatchEventType.GOAL.value)
-                .where(MatchEventORM.player_id == player_id)
-                .where(MatchEventORM.minute == minute)
-            ),
+    async def delete_goals_except(self, fixture_id: int, *, player_id: int, keep_minutes: set[int]) -> int:
+        """Remove a player's stale GOAL events in a fixture — every one EXCEPT
+        those still present in the live feed (``keep_minutes``). Used to retract a
+        goal annulled by VAR: Sportmonks REMOVES the disallowed goal from its
+        events feed (but the VAR review is stamped a minute LATER than the goal,
+        so matching on the VAR event's own minute misses it). Keying off "which of
+        this player's goals are still in the feed" is minute-offset-proof: an empty
+        ``keep_minutes`` drops all his goals (the only one was disallowed); a kept
+        minute preserves a goal he legitimately scored. Idempotent. Returns the
+        number of events deleted."""
+        stmt = (
+            delete(MatchEventORM)
+            .where(MatchEventORM.fixture_id == fixture_id)
+            .where(MatchEventORM.type == MatchEventType.GOAL.value)
+            .where(MatchEventORM.player_id == player_id)
         )
+        if keep_minutes:
+            stmt = stmt.where(MatchEventORM.minute.notin_(keep_minutes))
+        result = cast(CursorResult[Any], await self._session.execute(stmt))
         return result.rowcount or 0
 
     async def list_by_fixture(self, fixture_id: int) -> list[MatchEvent]:

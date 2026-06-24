@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.db.repositories.match_comment import SqlAlchemyMatchCommentRepository
 from src.infrastructure.db.repositories.match_event import SqlAlchemyMatchEventRepository
-from src.infrastructure.sportmonks.projectors.match_event import is_goal_disallowed_var
+from src.infrastructure.sportmonks.projectors.match_event import is_goal_disallowed_var, is_goal_event
 
 log = structlog.get_logger(__name__)
 
@@ -43,6 +43,21 @@ async def reconcile_var_disallowed_goals(
     fixture's events payload. Returns the count of rows retracted."""
     events_repo = SqlAlchemyMatchEventRepository(session)
     comments_repo = SqlAlchemyMatchCommentRepository(session)
+
+    # Minutes at which each player still has a goal in the CURRENT feed. Sportmonks
+    # REMOVES a disallowed goal from its events feed, so a stored goal of his that
+    # is NOT here is the annulled one. Retracting by feed-absence is immune to the
+    # VAR review's minute offset (stamped a minute after the goal) — the exact bug
+    # an event.minute match got wrong (goal 29', review 30' → 0 rows deleted).
+    kept_goal_minutes: dict[int, set[int]] = {}
+    for ev in events_payload:
+        if not is_goal_event(ev):
+            continue
+        smk_pid = ev.get("player_id")
+        m = ev.get("minute")
+        if isinstance(smk_pid, int) and isinstance(m, int):
+            kept_goal_minutes.setdefault(smk_pid, set()).add(m)
+
     retracted = 0
     for event in events_payload:
         if not is_goal_disallowed_var(event):
@@ -51,11 +66,13 @@ async def reconcile_var_disallowed_goals(
         if not isinstance(minute, int):
             continue
         smk_player_id = event.get("player_id")
-        internal_player_id = (
-            player_id_by_sportmonks.get(smk_player_id) if isinstance(smk_player_id, int) else None
-        )
-        if internal_player_id is not None:
-            retracted += await events_repo.delete_goal(fixture_id, player_id=internal_player_id, minute=minute)
+        internal_player_id = player_id_by_sportmonks.get(smk_player_id) if isinstance(smk_player_id, int) else None
+        if internal_player_id is not None and isinstance(smk_player_id, int):
+            retracted += await events_repo.delete_goals_except(
+                fixture_id,
+                player_id=internal_player_id,
+                keep_minutes=kept_goal_minutes.get(smk_player_id, set()),
+            )
         scorer_name = event.get("player_name")
         if isinstance(scorer_name, str) and scorer_name:
             retracted += await comments_repo.disallow_goal(fixture_id, minute=minute, scorer_name=scorer_name)

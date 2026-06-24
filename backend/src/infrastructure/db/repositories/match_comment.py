@@ -11,6 +11,11 @@ from src.infrastructure.sportmonks.projectors.match_comment import (
     overturned_goal_ids,
 )
 
+# How many minutes a VAR review can trail the goal it annuls. Sportmonks stamps
+# the review at or just after the goal (observed +1); a small window absorbs that
+# offset when retracting the goal comment, without reaching unrelated minutes.
+_VAR_REVIEW_LAG_MINUTES = 3
+
 
 def _to_domain(orm: MatchCommentORM) -> MatchComment:
     return MatchComment(
@@ -73,17 +78,20 @@ class SqlAlchemyMatchCommentRepository:
     async def disallow_goal(self, fixture_id: int, *, minute: int, scorer_name: str) -> int:
         """Clear the goal flag on the commentary line for a VAR-disallowed goal.
 
-        Scoped to the annulled goal's minute; among the goal comments there,
-        flips only those naming ``scorer_name`` (accent-insensitive surname
-        match). Driven by the structured VAR ``Goal Disallowed`` event, whose
-        ``player_name`` is the authoritative scorer. Idempotent. Returns the
-        number of comments flipped."""
+        ``minute`` is the VAR review's minute, which Sportmonks stamps at or just
+        AFTER the goal (observed +1: goal 29', review 30'). So we scan a short
+        window ``[minute - VAR_REVIEW_LAG, minute]`` rather than the exact minute,
+        and among the goal comments there flip only those naming ``scorer_name``
+        (accent- and punctuation-insensitive surname match). Driven by the
+        structured VAR ``Goal Disallowed`` event, whose ``player_name`` is the
+        authoritative scorer. Idempotent. Returns the number of comments flipped."""
         rows = (
             (
                 await self._session.execute(
                     select(MatchCommentORM)
                     .where(MatchCommentORM.fixture_id == fixture_id)
-                    .where(MatchCommentORM.minute == minute)
+                    .where(MatchCommentORM.minute >= minute - _VAR_REVIEW_LAG_MINUTES)
+                    .where(MatchCommentORM.minute <= minute)
                     .where(MatchCommentORM.is_goal.is_(True))
                 )
             )

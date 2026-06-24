@@ -159,3 +159,11 @@ def test_comment_names_scorer_rejects_other_player() -> None:
 def test_comment_names_scorer_rejects_too_short_surname() -> None:
     """A 2-char surname would over-match as a substring, so it is rejected."""
     assert comment_names_scorer("Goal! the goalkeeper is exit-bound.", "Player Xi") is False
+
+
+def test_comment_names_scorer_matches_across_punctuation() -> None:
+    """The feeds disagree on in-word punctuation too: the VAR event names
+    'Aziz Ganiev' while the commentary transliterates it 'Aziz G'aniev'. The
+    surname must still match (Portugal-Uzbekistan 2026-06-23, 29' disallowed)."""
+    comment = "Goal! Uzbekistan scores to make it 2-1 against Portugal. Aziz G'aniev finds the net."
+    assert comment_names_scorer(comment, "Aziz Ganiev") is True

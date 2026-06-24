@@ -40,21 +40,31 @@ def _fold(text: str) -> str:
     return "".join(c for c in decomposed if not unicodedata.combining(c)).lower()
 
 
-def comment_names_scorer(comment_text: str, scorer_name: str) -> bool:
-    """True iff a goal commentary line names ``scorer_name`` (accent- and
-    case-insensitive, surname match).
+def _fold_name(text: str) -> str:
+    """``_fold`` + drop in-word punctuation (apostrophes, hyphens, dots), keeping
+    spaces. The two Sportmonks feeds disagree on punctuation too, not just
+    diacritics: the VAR event carries ``player_name='Aziz Ganiev'`` while the
+    commentary reads ``Aziz G'aniev`` — so a raw surname substring test
+    ('ganiev' in "g'aniev") fails. Folding punctuation away pairs them (also
+    handles O'Brien / Alexander-Arnold style names)."""
+    return "".join(c if (c.isalnum() or c.isspace()) else "" for c in _fold(text))
 
-    Bridges the two Sportmonks feeds that disagree on diacritics: the VAR
-    event carries ``player_name='Tomáš Souček'`` while the commentary reads
-    ``Goal! Tomas Soucek scores ...``. Matching the last name token (folded)
-    is enough to pair the annulment with its goal comment. Surnames shorter
-    than 3 chars are rejected to avoid spurious substring hits.
+
+def comment_names_scorer(comment_text: str, scorer_name: str) -> bool:
+    """True iff a goal commentary line names ``scorer_name`` (accent-, case- and
+    punctuation-insensitive, surname match).
+
+    Bridges the two Sportmonks feeds that disagree on diacritics AND punctuation:
+    the VAR event carries ``player_name='Tomáš Souček'`` while the commentary
+    reads ``Goal! Tomas Soucek scores ...``. Matching the last name token (folded)
+    is enough to pair the annulment with its goal comment. Surnames shorter than
+    3 chars are rejected to avoid spurious substring hits.
     """
     tokens = scorer_name.split()
     if not tokens:
         return False
-    surname = _fold(tokens[-1])
-    return len(surname) >= 3 and surname in _fold(comment_text)
+    surname = _fold_name(tokens[-1])
+    return len(surname) >= 3 and surname in _fold_name(comment_text)
 
 
 def is_goal_comment(comment_text: str) -> bool:
