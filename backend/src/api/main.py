@@ -9,7 +9,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.api.routers import auth, fixtures, leagues, news, players, portfolio, standings, teams, valuations
+from src.api.routers import (
+    announcements,
+    auth,
+    fixtures,
+    leagues,
+    news,
+    players,
+    portfolio,
+    standings,
+    teams,
+    valuations,
+)
 from src.config import get_settings
 
 
@@ -61,6 +72,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(announcements.router)
 app.include_router(teams.router)
 app.include_router(players.router)
 app.include_router(fixtures.router)

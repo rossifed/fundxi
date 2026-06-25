@@ -4,6 +4,7 @@ Importing this module registers all ORM classes on Base.metadata.
 """
 
 from src.infrastructure.db.models.activity_event import ActivityEventORM
+from src.infrastructure.db.models.announcement import AnnouncementAckORM, AnnouncementORM
 from src.infrastructure.db.models.coach import CoachORM
 from src.infrastructure.db.models.fixture import FixtureORM
 from src.infrastructure.db.models.fixture_state_event import FixtureStateEventORM
@@ -28,6 +29,8 @@ from src.infrastructure.db.models.user import UserORM
 
 __all__ = [
     "ActivityEventORM",
+    "AnnouncementAckORM",
+    "AnnouncementORM",
     "CoachORM",
     "FixtureORM",
     "FixtureStateEventORM",
