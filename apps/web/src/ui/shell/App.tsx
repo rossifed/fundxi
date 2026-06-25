@@ -15,6 +15,7 @@ import { LeaguesPage } from "@/ui/pages/leagues/LeaguesPage";
 import { ProfilePage } from "@/ui/pages/profile/ProfilePage";
 import { ResetPasswordPage } from "@/ui/pages/auth/ResetPasswordPage";
 import { AuthDialog } from "@/ui/components/AuthDialog";
+import { AnnouncementBanner } from "@/ui/components/AnnouncementBanner";
 import { HowToPlay } from "@/ui/components/HowToPlay";
 import { MatchView } from "@/ui/pages/match/MatchView";
 import { TeamPage } from "@/ui/pages/team/TeamPage";
@@ -365,6 +366,10 @@ export function App() {
           panel). Mounted once here; auto-opens on first visit, otherwise on
           demand. No data, no coupling — zero impact on the rest of the app. */}
       <HowToPlay />
+
+      {/* Pushed release notes / messages for signed-in users (dismiss = ack,
+          shown once per account). Mounted once; reads only when authenticated. */}
+      <AnnouncementBanner />
     </div>
   );
 }

@@ -12,6 +12,7 @@ import { set_api_base } from '@fundxi/core/infrastructure/api_client';
 import { set_max_gross_leverage, set_shares_per_player } from '@fundxi/core/infrastructure/runtime_config';
 import { set_stream_base } from '@fundxi/core/infrastructure/stream_client';
 
+import { AnnouncementBanner } from '@/components/AnnouncementBanner';
 import { AppBackground } from '@/components/AppBackground';
 import { AuthProvider } from '@/components/AuthContext';
 import { BootstrapGate } from '@/components/BootstrapGate';
@@ -85,6 +86,9 @@ export default function RootLayout() {
                   works" sheet). Mounted once; auto-opens on first launch, then
                   on demand. No data, no coupling — zero impact elsewhere. */}
               <HowToPlay />
+              {/* Pushed release notes / messages for signed-in users (dismiss =
+                  ack, shown once per account). Reads only when authenticated. */}
+              <AnnouncementBanner />
             </AuthProvider>
           </BootstrapGate>
         </ThemeProvider>
