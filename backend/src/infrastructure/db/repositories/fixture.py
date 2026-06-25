@@ -3,13 +3,17 @@
 DDD role: Adapter. Conflict target = `sportmonks_id`.
 """
 
-from sqlalchemy import case, select
+from datetime import datetime
+from typing import Any
+
+from sqlalchemy import case, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from src.domain.match.fixture import Fixture, FixtureStatus
 from src.infrastructure.db.models.fixture import FixtureORM
+from src.infrastructure.db.models.fixture_state_event import FixtureStateEventORM
 from src.infrastructure.db.models.standings import StandingORM
 from src.infrastructure.db.models.venue import VenueORM
 
@@ -54,6 +58,43 @@ class SqlAlchemyFixtureRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    async def record_state_if_changed(
+        self,
+        *,
+        fixture_id: int,
+        state_code: str,
+        state: dict[str, Any],
+        minute: int | None,
+        observed_at: datetime,
+    ) -> bool:
+        """Log a fine-grained Sportmonks state transition and refresh the cache.
+
+        Compares ``state_code`` to the fixture's cached current state; on a CHANGE
+        (or first observation) it appends a ``core.fixture_state_event`` row with
+        the full provider ``state`` object and bumps ``core.fixture.state_code`` /
+        ``state_changed_at`` to this observation. A repeat of the same state is a
+        no-op (no log spam, the anchor time stays put). Returns whether it logged."""
+        current = (
+            await self._session.execute(select(FixtureORM.state_code).where(FixtureORM.id == fixture_id))
+        ).scalar_one_or_none()
+        if current == state_code:
+            return False
+        self._session.add(
+            FixtureStateEventORM(
+                fixture_id=fixture_id,
+                state_code=state_code,
+                state=state,
+                minute=minute,
+                observed_at=observed_at,
+            )
+        )
+        await self._session.execute(
+            update(FixtureORM)
+            .where(FixtureORM.id == fixture_id)
+            .values(state_code=state_code, state_changed_at=observed_at)
+        )
+        return True
+
     async def upsert_by_sportmonks_id(self, fixture: Fixture, *, sportmonks_id: int) -> None:
         stmt = pg_insert(FixtureORM).values(
             sportmonks_id=sportmonks_id,
@@ -88,10 +129,7 @@ class SqlAlchemyFixtureRepository:
         if season_id is not None:
             query = query.where(FixtureORM.season_id == season_id)
         rows = await self._session.execute(query.order_by(FixtureORM.kickoff_at))
-        return [
-            _to_domain(fx, group_override=grp, venue_name=vn, venue_city=vc)
-            for fx, grp, vn, vc in rows.all()
-        ]
+        return [_to_domain(fx, group_override=grp, venue_name=vn, venue_city=vc) for fx, grp, vn, vc in rows.all()]
 
     async def get_by_id(self, fixture_id: int) -> Fixture | None:
         rows = await self._session.execute(self._select_enriched().where(FixtureORM.id == fixture_id))
@@ -106,10 +144,7 @@ class SqlAlchemyFixtureRepository:
         if season_id is not None:
             query = query.where(FixtureORM.season_id == season_id)
         rows = await self._session.execute(query.order_by(FixtureORM.kickoff_at))
-        return [
-            _to_domain(fx, group_override=grp, venue_name=vn, venue_city=vc)
-            for fx, grp, vn, vc in rows.all()
-        ]
+        return [_to_domain(fx, group_override=grp, venue_name=vn, venue_city=vc) for fx, grp, vn, vc in rows.all()]
 
     @staticmethod
     def _select_enriched():

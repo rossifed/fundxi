@@ -50,3 +50,13 @@ class FixtureORM(Base, AuditMixin):
     venue_id: Mapped[int | None] = mapped_column(ForeignKey("core.venue.id", ondelete="SET NULL"))
     stage_name: Mapped[str | None] = mapped_column(String(60))
     round_name: Mapped[str | None] = mapped_column(String(60))
+    # Fine-grained CURRENT Sportmonks state (raw code, e.g. "HT",
+    # "INPLAY_2ND_HALF", "FT") + the wall-clock when we first observed THIS
+    # state. The coarse ``status`` above stays (derived as before); these add the
+    # granularity we pay for and drive the live trading gate (lock during play,
+    # re-open at half-time / full-time after a buffer counted from
+    # ``state_changed_at``). The full state object per transition is logged in
+    # core.fixture_state_event. Nullable: the poller backfills as fixtures are
+    # observed.
+    state_code: Mapped[str | None] = mapped_column(String(32))
+    state_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

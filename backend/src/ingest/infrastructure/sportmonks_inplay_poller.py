@@ -49,7 +49,11 @@ from src.infrastructure.db.repositories.portfolio_snapshot_adapters import SqlAl
 from src.infrastructure.db.repositories.raw_sportmonks_event import SqlAlchemyRawSportmonksEventRepository
 from src.infrastructure.db.repositories.team_match_stat import SqlAlchemyTeamMatchStatRepository
 from src.infrastructure.sportmonks.client import SportmonksClient, SportmonksError
-from src.infrastructure.sportmonks.projectors.fixture import penalty_shootout_winner, project_fixture
+from src.infrastructure.sportmonks.projectors.fixture import (
+    penalty_shootout_winner,
+    project_fixture,
+    project_fixture_state,
+)
 from src.infrastructure.sportmonks.projectors.lineup import project_lineup
 from src.infrastructure.sportmonks.projectors.match_comment import project_match_comment
 from src.infrastructure.sportmonks.projectors.match_event import project_match_event
@@ -282,6 +286,12 @@ class SportmonksInplayPoller:
             notifications.append(self._notif("team_match_stat", {"fixture_id": fix_id, "count": team_stats_count}))
 
         await commit_then_publish(session=session, publisher=self.publisher, notifications=notifications)
+
+        # Capture the fine-grained Sportmonks state transition (HT / 2nd half / FT
+        # / ...) — the granularity the coarse ``status`` discards. Its own session,
+        # after the commit: a secondary projection that must NEVER break the live
+        # tick (mirrors _materialize_value_snapshots). Drives the trading gate.
+        await self._record_state(data=data, minute=fixture.minute if fixture is not None else None)
 
         # Portfolio-value snapshot for every holder of a player whose price moved
         # this poll. The ticked set is recovered from the price-tick notifications
@@ -635,6 +645,40 @@ class SportmonksInplayPoller:
                 )
             )
         return notifications
+
+    async def _record_state(self, *, data: dict[str, Any], minute: int | None) -> None:
+        """Log the current Sportmonks state to core.fixture_state_event when it
+        changes, refreshing the fixture's state cache. Own session, AFTER the main
+        commit; broad except so a capture hiccup never breaks the live tick. A
+        repeat of the same state is a no-op, so re-observing each poll is cheap."""
+        parsed = project_fixture_state(data)
+        if parsed is None:
+            return
+        state_code, state_obj = parsed
+        try:
+            async with self.session_factory() as session:
+                changed = await SqlAlchemyFixtureRepository(session).record_state_if_changed(
+                    fixture_id=self.fixture_internal_id,
+                    state_code=state_code,
+                    state=state_obj,
+                    minute=minute,
+                    observed_at=datetime.now(UTC),
+                )
+                await session.commit()
+            if changed:
+                log.info(
+                    "ingest.inplay.state_changed",
+                    fixture_internal_id=self.fixture_internal_id,
+                    state_code=state_code,
+                    minute=minute,
+                )
+        except Exception as exc:
+            # Broad on purpose: a secondary projection must never break ingest.
+            log.warning(
+                "ingest.inplay.state_record_failed",
+                fixture_internal_id=self.fixture_internal_id,
+                error=str(exc),
+            )
 
     async def _materialize_value_snapshots(self, ticked_player_ids: set[int]) -> None:
         """Bucketed portfolio-value snapshot for holders of the ticked players.

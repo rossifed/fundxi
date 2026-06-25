@@ -54,6 +54,24 @@ def _project_status(state_payload: object) -> FixtureStatus:
     return FixtureStatus.UPCOMING
 
 
+def project_fixture_state(payload: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
+    """``(state_code, full state object)`` from a fixture payload, or ``None`` when
+    the ``state`` include is absent/malformed.
+
+    The coarse ``status`` (``_project_status``) buckets every state into
+    upcoming/live/finished; this preserves the RAW Sportmonks state we pay for
+    (INPLAY_1ST_HALF, HT, INPLAY_2ND_HALF, BREAK, EXTRA_TIME, PEN_LIVE, FT, ...)
+    so the ingest can log each transition and the trading gate can tell half-time
+    from open play. Pure — no I/O."""
+    state = payload.get("state")
+    if not isinstance(state, dict):
+        return None
+    code = cast(dict[str, Any], state).get("state")
+    if not isinstance(code, str) or not code:
+        return None
+    return code, cast(dict[str, Any], state)
+
+
 def _score_for(scores_payload: object, location: str, *, description: str) -> int | None:
     """Pick a score block's goals for the home/away participant. Sportmonks
     emits several blocks per fixture (1ST_HALF, 2ND_HALF, ET, CURRENT,
