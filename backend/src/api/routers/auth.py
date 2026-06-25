@@ -9,11 +9,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_session, resolve_session_user_id
+from src.application.activity_log import LOGIN, OPEN, REGISTER, record_activity
 from src.application.auth_service import (
     AuthenticatedUser,
     EmailAlreadyExistsError,
@@ -98,7 +99,9 @@ def _clear_session_cookie(response: Response) -> None:
 @router.post("/register", response_model=MeResponse)
 async def register(
     body: RegisterBody,
+    request: Request,
     response: Response,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
 ) -> MeResponse:
     try:
@@ -111,13 +114,18 @@ async def register(
     except EmailAlreadyExistsError as exc:
         raise HTTPException(status_code=409, detail="email already registered") from exc
     _set_session_cookie(response, user.id)
+    background_tasks.add_task(
+        record_activity, kind=REGISTER, user_id=user.id, user_agent=request.headers.get("user-agent")
+    )
     return MeResponse.of(user)
 
 
 @router.post("/login", response_model=MeResponse)
 async def login(
     body: LoginBody,
+    request: Request,
     response: Response,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
 ) -> MeResponse:
     try:
@@ -130,6 +138,9 @@ async def login(
     except InvalidCredentialsError as exc:
         raise HTTPException(status_code=401, detail="invalid email or password") from exc
     _set_session_cookie(response, user.id)
+    background_tasks.add_task(
+        record_activity, kind=LOGIN, user_id=user.id, user_agent=request.headers.get("user-agent")
+    )
     return MeResponse.of(user)
 
 
@@ -183,9 +194,15 @@ async def reset_password(
 @router.get("/me", response_model=MeResponse | None)
 async def me(
     request: Request,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
 ) -> MeResponse | None:
     user_id = await resolve_session_user_id(request, session)
+    # /me is hit on every app load (signed-in OR anonymous) — our zero-frontend
+    # "app open / return" signal. user_id None records an anonymous open.
+    background_tasks.add_task(
+        record_activity, kind=OPEN, user_id=user_id, user_agent=request.headers.get("user-agent")
+    )
     if user_id is None:
         return None
     user = await get_user_by_id(session, user_id)
