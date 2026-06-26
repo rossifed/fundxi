@@ -12,9 +12,11 @@ import Slider from "@react-native-community/slider";
 
 import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import { trades_api } from "@fundxi/core/api/trades_api";
+import { trade_lock_caption, trade_lock_label, trading_locked_reason } from "@fundxi/core/api/trading_api";
 import type { TradeMode } from "@fundxi/core/application/trade_service";
 import type { Player } from "@fundxi/core/domain/player/player";
 
+import { useTeamLock } from "@/components/use_trade_lock";
 import { fmt_eur_from_m, fmt_eur_m, fmt_eur_m_signed, fmt_shares } from "@/lib/format";
 import { palette, text } from "@/theme/tokens";
 
@@ -47,6 +49,10 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
   const [done_price, set_done_price] = useState(0);
   const [done_total, set_done_total] = useState(0);
 
+  // Live-trading lock: frozen while the player's match is in play (server
+  // /api/trades guard is authoritative; this disables + explains).
+  const lock = useTeamLock(player.team_id);
+
   // Re-seed when reopened in a given mode.
   const [last_kind, set_last_kind] = useState<Kind>(initial_kind);
   if (visible && phase === "form" && last_kind !== initial_kind) {
@@ -74,7 +80,7 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
   const pct_max = preview.max_percentage;
   const eff_percentage = Math.min(percentage, pct_max);
 
-  const can_confirm = phase === "form" && !preview.insufficient_capital && preview.shares > 0;
+  const can_confirm = phase === "form" && !lock && !preview.insufficient_capital && preview.shares > 0;
 
   // Switching unit carries the value over instead of resetting to 0.
   const switch_mode = (next: TradeMode) => {
@@ -99,7 +105,14 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
       // Surface the server's real reason (e.g. "insufficient buying power…")
       // instead of a generic message — the BFF already puts the detail on the
       // ApiError (see infrastructure/api_client).
-      set_error(err instanceof Error && err.message ? err.message : "Order failed. Please try again.");
+      const reason = trading_locked_reason(err);
+      set_error(
+        reason
+          ? `Trading is paused — match live. ${trade_lock_caption(reason)}.`
+          : err instanceof Error && err.message
+            ? err.message
+            : "Order failed. Please try again.",
+      );
       set_phase("form");
     }
   };
@@ -271,19 +284,31 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
               )}
               {error && <Text style={styles.error}>{error}</Text>}
 
-              <Pressable
-                style={[styles.confirm, { backgroundColor: accent }, !can_confirm && styles.confirm_disabled]}
-                onPress={confirm}
-                disabled={!can_confirm}
-              >
-                {phase === "submitting" ? (
-                  <ActivityIndicator color="#04140a" />
-                ) : (
-                  <Text style={styles.confirm_label}>
-                    {is_buy ? "Buy" : "Sell"} {fmt_shares(preview.display_shares)} shares
-                  </Text>
-                )}
-              </Pressable>
+              {lock ? (
+                <View style={{ alignItems: "center", gap: 6 }}>
+                  <Pressable
+                    disabled
+                    style={[styles.confirm, { alignSelf: "stretch", backgroundColor: "rgba(255,255,255,0.07)" }]}
+                  >
+                    <Text style={styles.lock_label}>{trade_lock_label(lock.reason)}</Text>
+                  </Pressable>
+                  <Text style={styles.lock_caption}>{trade_lock_caption(lock.reason)}</Text>
+                </View>
+              ) : (
+                <Pressable
+                  style={[styles.confirm, { backgroundColor: accent }, !can_confirm && styles.confirm_disabled]}
+                  onPress={confirm}
+                  disabled={!can_confirm}
+                >
+                  {phase === "submitting" ? (
+                    <ActivityIndicator color="#04140a" />
+                  ) : (
+                    <Text style={styles.confirm_label}>
+                      {is_buy ? "Buy" : "Sell"} {fmt_shares(preview.display_shares)} shares
+                    </Text>
+                  )}
+                </Pressable>
+              )}
             </>
           )}
         </Pressable>
@@ -375,6 +400,8 @@ const styles = StyleSheet.create({
   confirm: { borderRadius: 10, paddingVertical: 14, alignItems: "center", marginTop: 2 },
   confirm_disabled: { opacity: 0.4 },
   confirm_label: { color: "#04140a", fontSize: 15, fontWeight: "800" },
+  lock_label: { color: "rgba(255,255,255,0.6)", fontSize: 15, fontWeight: "800" },
+  lock_caption: { color: text.secondary, fontSize: 12 },
   done_title: { fontSize: 24, fontWeight: "900", marginTop: 4 },
   done_sub: { color: text.secondary, fontSize: 14, marginBottom: 8 },
 });

@@ -12,6 +12,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { trades_api } from "@fundxi/core/api/trades_api";
+import { trade_lock_caption, trade_lock_label, trading_locked_reason } from "@fundxi/core/api/trading_api";
 import {
   type BasketOutcome,
   type BasketPreview,
@@ -22,12 +23,15 @@ import type { Position } from "@fundxi/core/domain/player/player";
 import { PlayerAvatar } from "@/ui/components/PlayerAvatar";
 import { Sheet } from "@/ui/components/Sheet";
 import { color, position_color } from "@/ui/design/tokens";
+import { useLockedTeams } from "@/ui/hooks/use_trade_lock";
 import { color_for_sign, fmt_eur_m, fmt_signed_pct } from "@/ui/helpers/format";
 
 const PCT_PRESETS = [10, 25, 50, 100];
 
 export interface BasketCandidate {
   id: number;
+  // The player's team — used to freeze the leg while that team's match is live.
+  team_id: string;
   name: string;
   position: Position;
   jersey_number: number;
@@ -66,6 +70,7 @@ export function BasketDialog({ open, title, accent, players, initial_selected, o
   const [phase, set_phase] = useState<Phase>("form");
   const [error, set_error] = useState<string | null>(null);
   const [outcome, set_outcome] = useState<BasketOutcome | null>(null);
+  const locked_teams_map = useLockedTeams();
 
   // Reset ONLY when the dialog opens (false → true). It must NOT depend on
   // `players`/`initial_selected` identity: those arrays are rebuilt on every
@@ -105,7 +110,19 @@ export function BasketDialog({ open, title, accent, players, initial_selected, o
   const all_selected = players.length > 0 && selected_ids.length === players.length;
   const toggle_all = () => set_selected(all_selected ? new Set() : new Set(players.map(p => p.id)));
 
-  const can_confirm = phase === "form" && buyable > 0 && preview.total_amount > 0;
+  // Freeze the basket while any SELECTED player's match is live (the server
+  // would reject those legs); explain rather than half-fail.
+  const locked_reason = (() => {
+    for (const p of players) {
+      if (!selected.has(p.id)) continue;
+      const lk = locked_teams_map.get(p.team_id);
+      if (lk) return lk.reason;
+    }
+    return null;
+  })();
+  const any_locked = locked_reason !== null;
+
+  const can_confirm = phase === "form" && !any_locked && buyable > 0 && preview.total_amount > 0;
 
   const confirm = () => {
     if (!can_confirm) return;
@@ -121,7 +138,14 @@ export function BasketDialog({ open, title, accent, players, initial_selected, o
         set_phase("done");
       })
       .catch((err: unknown) => {
-        set_error(err instanceof Error && err.message ? err.message : "Order failed. Please try again.");
+        const reason = trading_locked_reason(err);
+        set_error(
+          reason
+            ? `A player is in a live match. ${trade_lock_caption(reason)}.`
+            : err instanceof Error && err.message
+              ? err.message
+              : "Order failed. Please try again.",
+        );
         set_phase("form");
       });
   };
@@ -161,15 +185,29 @@ export function BasketDialog({ open, title, accent, players, initial_selected, o
       on_close={on_close}
       max_width={460}
       footer={
-        <button
-          onClick={confirm}
-          disabled={!can_confirm}
-          style={{ ...confirm_btn_style, background: "var(--color-action-buy)", opacity: can_confirm ? 1 : 0.4, cursor: can_confirm ? "pointer" : "default" }}
-        >
-          {phase === "submitting"
-            ? "Placing…"
-            : `Buy ${buyable} ${buyable === 1 ? "player" : "players"} · ${fmt_eur_m(preview.total_amount)}`}
-        </button>
+        any_locked ? (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+            <button
+              disabled
+              style={{ ...confirm_btn_style, width: "100%", background: "rgba(255,255,255,.07)", color: "rgba(255,255,255,.6)", cursor: "not-allowed" }}
+            >
+              {trade_lock_label(locked_reason ?? undefined)}
+            </button>
+            <span style={{ fontSize: 12, color: "rgba(255,255,255,.5)" }}>
+              A selected player is in a live match · {trade_lock_caption(locked_reason ?? undefined)}
+            </span>
+          </div>
+        ) : (
+          <button
+            onClick={confirm}
+            disabled={!can_confirm}
+            style={{ ...confirm_btn_style, background: "var(--color-action-buy)", opacity: can_confirm ? 1 : 0.4, cursor: can_confirm ? "pointer" : "default" }}
+          >
+            {phase === "submitting"
+              ? "Placing…"
+              : `Buy ${buyable} ${buyable === 1 ? "player" : "players"} · ${fmt_eur_m(preview.total_amount)}`}
+          </button>
+        )
       }
     >
       <div style={{ padding: "8px 20px 16px", display: "flex", flexDirection: "column", gap: 12 }}>

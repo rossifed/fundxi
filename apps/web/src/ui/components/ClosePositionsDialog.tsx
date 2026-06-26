@@ -10,9 +10,11 @@
 
 import { useEffect, useState, type CSSProperties } from "react";
 import { trades_api, type CloseOutcome } from "@fundxi/core/api/trades_api";
+import { trade_lock_caption, trading_locked_reason } from "@fundxi/core/api/trading_api";
 import type { Player } from "@fundxi/core/domain/player/player";
 import type { HoldingMetrics } from "@fundxi/core/domain/portfolio/portfolio_metrics";
 import { Sheet } from "@/ui/components/Sheet";
+import { useLockedTeams } from "@/ui/hooks/use_trade_lock";
 import { color_for_sign, fmt_eur_m, fmt_eur_m_signed } from "@/ui/helpers/format";
 
 /** A position the dialog can close — a holding with its live metrics
@@ -42,6 +44,7 @@ export function ClosePositionsDialog({ open, positions, on_close, on_finish }: C
   const [phase, set_phase] = useState<Phase>("confirm");
   const [result, set_result] = useState<CloseOutcome | null>(null);
   const [error, set_error] = useState<string | null>(null);
+  const locked = useLockedTeams();
 
   // Reset every time the dialog re-opens.
   useEffect(() => {
@@ -53,6 +56,11 @@ export function ClosePositionsDialog({ open, positions, on_close, on_finish }: C
   }, [open]);
 
   if (!open) return null;
+
+  // A position whose team is mid-match can't be closed (server rejects it) —
+  // block the batch and explain, rather than letting it partially fail.
+  const locked_count = positions.filter(p => locked.get(p.player.team_id)).length;
+  const any_locked = locked_count > 0;
 
   const count = positions.length;
   // Sum of market values = net cash delta: a long close pays cash in, a
@@ -72,7 +80,10 @@ export function ClosePositionsDialog({ open, positions, on_close, on_finish }: C
         set_phase("result");
       })
       .catch((err: unknown) => {
-        set_error(err instanceof Error ? err.message : String(err));
+        const reason = trading_locked_reason(err);
+        set_error(
+          reason ? `A player is in a live match. ${trade_lock_caption(reason)}.` : err instanceof Error ? err.message : String(err),
+        );
         set_phase("confirm");
       });
   };
@@ -143,8 +154,12 @@ export function ClosePositionsDialog({ open, positions, on_close, on_finish }: C
           <button onClick={on_close} disabled={submitting} style={cancel_button_style(submitting)}>
             Cancel
           </button>
-          <button onClick={on_confirm} disabled={submitting} style={confirm_button_style(submitting)}>
-            {submitting ? "Closing…" : `Close ${count} position${count > 1 ? "s" : ""}`}
+          <button
+            onClick={on_confirm}
+            disabled={submitting || any_locked}
+            style={confirm_button_style(submitting || any_locked)}
+          >
+            {any_locked ? "Live" : submitting ? "Closing…" : `Close ${count} position${count > 1 ? "s" : ""}`}
           </button>
         </div>
       }
@@ -205,6 +220,23 @@ export function ClosePositionsDialog({ open, positions, on_close, on_finish }: C
           <TotalRow label="Net cash" value={fmt_eur_m_signed(net_cash)} accent={color_for_sign(net_cash)} />
           <TotalRow label="Realised P&L" value={fmt_eur_m_signed(realised)} accent={color_for_sign(realised)} />
         </div>
+
+        {any_locked && (
+          <div
+            style={{
+              background: "rgba(255,255,255,.04)",
+              border: "1px solid rgba(255,255,255,.07)",
+              borderRadius: 8,
+              padding: "10px 14px",
+              fontSize: 12,
+              color: "rgba(255,255,255,.7)",
+              lineHeight: 1.5,
+            }}
+          >
+            {locked_count === count ? "Match live" : `${locked_count} of these are in a live match`} — trading
+            reopens at half-time. You can close after the whistle.
+          </div>
+        )}
 
         {error && (
           <div

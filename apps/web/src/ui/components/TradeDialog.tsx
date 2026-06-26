@@ -15,7 +15,9 @@ import { trades_api } from "@fundxi/core/api/trades_api";
 import { valuations_api } from "@fundxi/core/api/valuations_api";
 import { simulate_trade, type TradeMode } from "@fundxi/core/application/trade_service";
 import type { Player } from "@fundxi/core/domain/player/player";
+import { trade_lock_caption, trade_lock_label, trading_locked_reason } from "@fundxi/core/api/trading_api";
 import { Sheet } from "@/ui/components/Sheet";
+import { useTeamLock } from "@/ui/hooks/use_trade_lock";
 import { fmt_eur_from_m, fmt_eur_m, fmt_eur_m_signed, fmt_shares } from "@/ui/helpers/format";
 
 type Kind = "buy" | "sell";
@@ -78,6 +80,11 @@ export function TradeDialog({
     }
   }, [open, initial_kind]);
 
+  // Live-trading lock: frozen while the player's match is in play (re-opens at
+  // half-time / full-time). The server /api/trades guard is authoritative; this
+  // disables the button and explains why so it never reads as a bug.
+  const lock = useTeamLock(player.team_id);
+
   if (!open) return null;
 
   // Long-only: selling is only meaningful when there's a position to unwind.
@@ -97,7 +104,7 @@ export function TradeDialog({
   const pct_max = preview.max_percentage;
   const eff_percentage = Math.min(percentage, pct_max);
 
-  const can_confirm = phase === "form" && !preview.insufficient_capital && preview.shares > 0;
+  const can_confirm = phase === "form" && !lock && !preview.insufficient_capital && preview.shares > 0;
 
   // Switching unit carries the value over instead of resetting to 0.
   const switch_mode = (next: TradeMode) => {
@@ -120,7 +127,14 @@ export function TradeDialog({
         set_phase("done");
       })
       .catch((err: unknown) => {
-        set_error(err instanceof Error && err.message ? err.message : "Order failed. Please try again.");
+        const reason = trading_locked_reason(err);
+        set_error(
+          reason
+            ? `Trading is paused — match live. ${trade_lock_caption(reason)}.`
+            : err instanceof Error && err.message
+              ? err.message
+              : "Order failed. Please try again.",
+        );
         set_phase("form");
       });
   };
@@ -160,15 +174,33 @@ export function TradeDialog({
       on_close={on_close}
       max_width={460}
       footer={
-        <button
-          onClick={confirm}
-          disabled={!can_confirm}
-          style={{ ...confirm_btn_style, background: accent, opacity: can_confirm ? 1 : 0.4, cursor: can_confirm ? "pointer" : "default" }}
-        >
-          {phase === "submitting"
-            ? "Placing…"
-            : `${is_buy ? "Buy" : "Sell"} ${fmt_shares(preview.display_shares)} shares`}
-        </button>
+        lock ? (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+            <button
+              disabled
+              style={{
+                ...confirm_btn_style,
+                background: "rgba(255,255,255,.07)",
+                color: "rgba(255,255,255,.6)",
+                cursor: "not-allowed",
+                width: "100%",
+              }}
+            >
+              {trade_lock_label(lock.reason)}
+            </button>
+            <span style={{ fontSize: 12, color: "rgba(255,255,255,.5)" }}>{trade_lock_caption(lock.reason)}</span>
+          </div>
+        ) : (
+          <button
+            onClick={confirm}
+            disabled={!can_confirm}
+            style={{ ...confirm_btn_style, background: accent, opacity: can_confirm ? 1 : 0.4, cursor: can_confirm ? "pointer" : "default" }}
+          >
+            {phase === "submitting"
+              ? "Placing…"
+              : `${is_buy ? "Buy" : "Sell"} ${fmt_shares(preview.display_shares)} shares`}
+          </button>
+        )
       }
     >
       <div style={{ padding: "8px 20px 16px", display: "flex", flexDirection: "column", gap: 12 }}>

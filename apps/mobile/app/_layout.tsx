@@ -15,6 +15,7 @@ import { set_stream_base } from '@fundxi/core/infrastructure/stream_client';
 import { AnnouncementBanner } from '@/components/AnnouncementBanner';
 import { AppBackground } from '@/components/AppBackground';
 import { AuthProvider } from '@/components/AuthContext';
+import { useTradeLockRefresh } from '@/components/use_trade_lock';
 import { BootstrapGate } from '@/components/BootstrapGate';
 import { HowToPlay } from '@/components/HowToPlay';
 import { OfflineBanner } from '@/components/OfflineBanner';
@@ -64,6 +65,10 @@ export default function RootLayout() {
   useEffect(() => {
     void SplashScreen.hideAsync();
   }, []);
+
+  // Keep the live-trading locked-teams set fresh app-wide (disabled trade
+  // buttons during matches).
+  useTradeLockRefresh();
 
   // fundxi is dark-only. The ambient backdrop is painted once here, behind a
   // transparent navigator tree, so every screen sits on the same gradient

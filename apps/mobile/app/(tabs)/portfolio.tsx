@@ -14,6 +14,7 @@ import { Alert, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, 
 import { players_api } from "@fundxi/core/api/players_api";
 import { portfolio_api } from "@fundxi/core/api/portfolio_api";
 import { teams_api } from "@fundxi/core/api/teams_api";
+import { trade_lock_caption, trading_locked_reason } from "@fundxi/core/api/trading_api";
 import { trades_api } from "@fundxi/core/api/trades_api";
 import { valuations_api } from "@fundxi/core/api/valuations_api";
 import { POSITION_ABBR, type Player } from "@fundxi/core/domain/player/player";
@@ -30,6 +31,7 @@ import { TickValue } from "@/components/TickValue";
 import { PlayerSheet, type PlayerSheetHandle } from "@/components/PlayerSheet";
 import { useLiveRefetch, usePricesLiveVersion } from "@/components/live";
 import { useRefresh } from "@/components/use_refresh";
+import { useLockedTeams } from "@/components/use_trade_lock";
 import { color_for_sign, fmt_eur_from_m, fmt_eur_m, fmt_eur_m_signed, fmt_shares, fmt_signed_pct } from "@/lib/format";
 import { mono, palette, position_color, text } from "@/theme/tokens";
 
@@ -104,6 +106,9 @@ export default function PortfolioScreen() {
 
   const holdings = useMemo(() => portfolio_api.get_holdings(), [data_version]);
   const trades = useMemo(() => portfolio_api.list_trades(), [data_version]);
+  // Can't close while a held player's match is live (server rejects those legs).
+  const locked_teams_map = useLockedTeams();
+  const any_locked = holdings.some(h => Boolean(locked_teams_map.get(h.player.team_id)));
 
   // Bulk-close: flatten every open position to zero at its current market
   // price. Longs are sold, shorts are bought back to cover — direction is
@@ -111,6 +116,10 @@ export default function PortfolioScreen() {
   // confirm (mobile parity with the web ClosePositionsDialog's confirm step).
   const close_all = () => {
     if (closing || holdings.length === 0) return;
+    if (any_locked) {
+      Alert.alert("Trading paused", "A player is in a live match. Trading reopens at half-time — close after the whistle.");
+      return;
+    }
     const n = holdings.length;
     Alert.alert("Close all positions?", `This flattens ${n} position${n > 1 ? "s" : ""} at market price.`, [
       { text: "Cancel", style: "cancel" },
@@ -130,7 +139,13 @@ export default function PortfolioScreen() {
                   : `Closed ${outcome.closed.length}, ${outcome.failed.length} failed.`,
               );
             })
-            .catch((e: unknown) => Alert.alert("Close failed", e instanceof Error ? e.message : String(e)))
+            .catch((e: unknown) => {
+              const reason = trading_locked_reason(e);
+              Alert.alert(
+                "Close failed",
+                reason ? `A player is in a live match. ${trade_lock_caption(reason)}.` : e instanceof Error ? e.message : String(e),
+              );
+            })
             .finally(() => set_closing(false));
         },
       },
@@ -342,11 +357,17 @@ export default function PortfolioScreen() {
                     <View style={styles.close_all_row}>
                       <Pressable
                         onPress={close_all}
-                        disabled={closing}
-                        style={({ pressed }) => [styles.close_all_btn, pressed && styles.close_all_pressed, closing && styles.close_all_disabled]}
+                        disabled={closing || any_locked}
+                        style={({ pressed }) => [
+                          styles.close_all_btn,
+                          pressed && styles.close_all_pressed,
+                          (closing || any_locked) && styles.close_all_disabled,
+                        ]}
                         accessibilityRole="button"
                       >
-                        <Text style={styles.close_all_text}>{closing ? "Closing…" : "Close all"}</Text>
+                        <Text style={styles.close_all_text}>
+                          {any_locked ? "Live · reopens at half-time" : closing ? "Closing…" : "Close all"}
+                        </Text>
                       </Pressable>
                     </View>
                     {sorted_holdings.map(h => (

@@ -21,6 +21,7 @@ import { MatchView } from "@/ui/pages/match/MatchView";
 import { TeamPage } from "@/ui/pages/team/TeamPage";
 import { PlayerSheet } from "@/ui/pages/player/PlayerSheet";
 import { useViewport } from "@/ui/hooks/use_viewport";
+import { useTradeLockRefresh } from "@/ui/hooks/use_trade_lock";
 import { useAuth } from "@/ui/shell/AuthContext";
 import { Header } from "./Header";
 import { LiveBar } from "./LiveBar";
@@ -88,6 +89,9 @@ function read_reset_token(): string | null {
 export function App() {
   const { is_mobile, rail_ok } = useViewport();
   const { user } = useAuth();
+  // Keep the live-trading locked-teams set fresh app-wide (drives disabled
+  // trade buttons during matches). Mounted once here.
+  useTradeLockRefresh();
   const [initial_join_code] = useState<string | null>(consume_join_code);
   const [reset_token, set_reset_token] = useState<string | null>(read_reset_token);
   const [show_login, set_show_login] = useState(false);

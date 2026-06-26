@@ -93,7 +93,10 @@ export function HowToPlay() {
                 <Pill tone="up" label="Goes up" body="he scores, makes an assist, plays well, or his team wins." />
                 <Pill tone="down" label="Goes down" body="he plays badly, sits on the bench, or his team goes out." />
               </View>
-              <Text style={styles.note}>During a live match, prices move in real time. That is the fun part.</Text>
+              <Text style={styles.note}>
+                During a live match, prices move in real time. That is the fun part. Trading pauses while a match
+                is live, so set your team before kickoff. It reopens at half time and full time.
+              </Text>
             </Step>
 
             <Step n={4} title="The five tabs">

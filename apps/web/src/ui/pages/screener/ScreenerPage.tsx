@@ -209,6 +209,7 @@ export function ScreenerPage({ on_open_player, on_open_team, watchlist, toggle_w
     () =>
       filtered.map(e => ({
         id: e.id,
+        team_id: e.team_id,
         name: e.name,
         position: e.position as Position,
         jersey_number: e.jersey_number,

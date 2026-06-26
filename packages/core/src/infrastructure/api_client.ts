@@ -22,7 +22,15 @@ export function get_api_base(): string {
 }
 
 export class ApiError extends Error {
-  constructor(public readonly status: number, public readonly path: string, message: string) {
+  constructor(
+    public readonly status: number,
+    public readonly path: string,
+    message: string,
+    // The parsed JSON ``detail`` from the error response, when present (e.g. the
+    // structured ``{error, reason, reopens_at}`` a live-trading-locked 409
+    // carries). Lets callers react to a typed error, not just the status text.
+    public readonly body?: unknown,
+  ) {
     super(message);
   }
 }
@@ -65,8 +73,10 @@ export async function api_post<T>(
   });
   if (!r.ok) {
     let detail: string = r.statusText;
+    let parsed: unknown;
     try {
       const data = await r.json();
+      parsed = data?.detail;
       if (typeof data?.detail === "string") {
         detail = data.detail;
       } else if (Array.isArray(data?.detail)) {
@@ -79,7 +89,7 @@ export async function api_post<T>(
     } catch {
       /* body was not JSON — keep statusText */
     }
-    throw new ApiError(r.status, path, detail);
+    throw new ApiError(r.status, path, detail, parsed);
   }
   return (await r.json()) as T;
 }

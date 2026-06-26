@@ -124,7 +124,8 @@ export function HowToPlay() {
             <Pill tone="down" label="Goes down" text="he plays badly, sits on the bench, or his team goes out." />
           </div>
           <div style={{ fontSize: 13, color: "rgba(255,255,255,.6)", marginTop: 10, lineHeight: 1.5 }}>
-            During a live match, prices move in real time. That is the fun part.
+            During a live match, prices move in real time. That is the fun part. Trading pauses while a match is
+            live, so set your team before kickoff. It reopens at half time and full time.
           </div>
         </Step>
 

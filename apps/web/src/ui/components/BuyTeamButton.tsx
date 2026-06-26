@@ -26,9 +26,10 @@ interface BuyTeamButtonProps {
 /** Map a squad to the basket's candidate shape. Values/stats are read live from
  * the valuation cache (snapshot fallback) — the SAME source the basket sizing
  * reads, so rows and legs agree. */
-function to_candidates(squad: SquadPlayer[]): BasketCandidate[] {
+function to_candidates(squad: SquadPlayer[], team_id: string): BasketCandidate[] {
   return squad.map(p => ({
     id: p.id,
+    team_id,
     name: p.name,
     position: p.position as Position,
     jersey_number: p.jersey_number,
@@ -54,7 +55,7 @@ export function BuyTeamButton({ team, on_open_player, squad }: BuyTeamButtonProp
   const squad_data = squad ?? fetched;
   // Stable reference across re-renders (live ticks) — only rebuilt when the
   // squad itself changes, so the open BasketDialog's list doesn't reflow.
-  const candidates = useMemo(() => (squad_data ? to_candidates(squad_data) : []), [squad_data]);
+  const candidates = useMemo(() => (squad_data ? to_candidates(squad_data, team.id) : []), [squad_data, team.id]);
 
   return (
     <BasketButton
