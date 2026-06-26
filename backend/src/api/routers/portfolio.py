@@ -29,6 +29,7 @@ from src.application.place_trade import (
 from src.application.portfolio_history_service import HistoryRange, PortfolioHistoryService
 from src.application.provision_portfolio import get_or_create_portfolio
 from src.application.trade_execution import TradeError
+from src.application.trading_lock import player_lock
 from src.config import get_settings
 from src.domain.portfolio.portfolio import Portfolio
 from src.infrastructure.db.repositories.portfolio import (
@@ -51,9 +52,7 @@ from src.infrastructure.valuation.db_or_synthetic_starting_price_provider import
 router = APIRouter(tags=["app"])
 
 
-async def _resolve_user_and_portfolio(
-    session: AsyncSession, user_id: int
-) -> tuple[int, str, Portfolio]:
+async def _resolve_user_and_portfolio(session: AsyncSession, user_id: int) -> tuple[int, str, Portfolio]:
     user_repo = SqlAlchemyUserRepository(session)
     user = await user_repo.get_by_id(user_id)
     if user is None:
@@ -110,6 +109,20 @@ async def post_trade(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> TradeOutcomeResponse:
     portfolio_repo = SqlAlchemyPortfolioRepository(session)
+    # Authoritative live-trading lock. ALL trades — single, basket leg, close
+    # leg — funnel through this one endpoint, so this single guard covers every
+    # entry point even if a UI button were missed. Frozen while the player's
+    # match is in play; reopens at half-time / full-time after a buffer.
+    lock = await player_lock(session, player_id=body.player_id, now=datetime.now(UTC), settings=get_settings())
+    if lock is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "trading_locked",
+                "reason": lock.reason.value,
+                "reopens_at": lock.reopens_at.isoformat() if lock.reopens_at is not None else None,
+            },
+        )
     try:
         outcome = await place_trade(
             command=PlaceTradeCommand(

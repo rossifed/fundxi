@@ -49,6 +49,16 @@ class Settings(BaseSettings):
     # factor (no margin borrowing on longs). Setting > 1 enlarges short capacity,
     # not long capacity.
     max_gross_leverage: float = Field(default=1.0)
+    # Live-trading lock: trading on a player is frozen while his team's match is
+    # in play, and re-opens after a buffer past the half-time / full-time whistle
+    # (the buffer absorbs the feed lag so a goal scored just before the whistle is
+    # already priced when trading re-opens). Measured 2026-06-25: feed lag <=~90s,
+    # half-time break ~16 min — hence the defaults below. All overridable via env.
+    trading_ht_reopen_buffer_seconds: int = Field(default=120)
+    trading_ft_reopen_buffer_seconds: int = Field(default=300)
+    # Backstop that re-locks the half-time window if the 2nd-half state transition
+    # is somehow missed (it normally re-locks precisely on INPLAY_2ND_HALF).
+    trading_ht_window_max_seconds: int = Field(default=1200)
 
     @property
     def is_dev(self) -> bool:
@@ -62,7 +72,5 @@ def get_settings() -> Settings:
         # Fail-fast: a real deployment signing tokens with the public,
         # source-controlled dev secret lets anyone forge a session for any
         # user. Refuse to boot instead of silently using it.
-        raise RuntimeError(
-            "JWT_SECRET must be set to a non-default value when APP_ENV is not 'dev'"
-        )
+        raise RuntimeError("JWT_SECRET must be set to a non-default value when APP_ENV is not 'dev'")
     return settings

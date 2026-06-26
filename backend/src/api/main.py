@@ -19,6 +19,7 @@ from src.api.routers import (
     portfolio,
     standings,
     teams,
+    trading,
     valuations,
 )
 from src.config import get_settings
@@ -73,6 +74,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(announcements.router)
+app.include_router(trading.router)
 app.include_router(teams.router)
 app.include_router(players.router)
 app.include_router(fixtures.router)
