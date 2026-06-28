@@ -102,6 +102,29 @@ describe("build_bracket — 48-team format (Round of 32)", () => {
   });
 });
 
+describe("build_bracket — deepest round has no downstream yet", () => {
+  const R32 = "Round of 32";
+  // 16 R32 matches played, R16 not yet drawn (prod WC2026 state right after the
+  // group stage). Nothing downstream to anchor to → must fall back to a
+  // sequential fill so the matches still render instead of an empty column.
+  const r32s = Array.from({ length: 16 }, (_, i) =>
+    fx(200 + i, R32, `h${i}`, `a${i}`, `2026-06-${(20 + i).toString().padStart(2, "0")}`),
+  );
+
+  it("lays the 16 R32 matches across both sides (8 + 8) by kickoff order", () => {
+    const b = build_bracket([...r32s].reverse()); // shuffled input
+    expect(b.r32_left.map(id)).toEqual([200, 201, 202, 203, 204, 205, 206, 207]);
+    expect(b.r32_right.map(id)).toEqual([208, 209, 210, 211, 212, 213, 214, 215]);
+  });
+
+  it("falls back for the R16 too when it is the deepest round (no QF yet)", () => {
+    const r16s = Array.from({ length: 8 }, (_, i) => fx(300 + i, "Round of 16", `x${i}`, `y${i}`, `2026-07-0${i}`));
+    const b = build_bracket(r16s);
+    expect(b.r16_left.map(id)).toEqual([300, 301, 302, 303]);
+    expect(b.r16_right.map(id)).toEqual([304, 305, 306, 307]);
+  });
+});
+
 describe("build_bracket — partial / empty inputs", () => {
   it("returns an all-empty SKELETON for no fixtures (fixed-size rounds, padded with nulls)", () => {
     const b = build_bracket([]);

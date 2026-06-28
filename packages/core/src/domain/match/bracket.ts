@@ -41,6 +41,29 @@ function compare_by_kickoff(a: Fixture, b: Fixture): number {
   return a.date.localeCompare(b.date);
 }
 
+/* Drop matches the advancement walk could not anchor — because the round
+ * downstream does not exist yet (e.g. the R32 is played but the R16 has not
+ * been drawn) — into the still-empty slots, in kickoff order, left side
+ * first. Without this a round that is the DEEPEST one yet played renders
+ * empty: its winners appear in no next-round fixture, so nothing nests.
+ * A no-op once every match is anchored (the full-tree case), so it never
+ * disturbs a resolved bracket's topology. */
+function fill_unplaced(
+  left: (Fixture | null)[],
+  right: (Fixture | null)[],
+  all: readonly Fixture[],
+): [(Fixture | null)[], (Fixture | null)[]] {
+  const placed = new Set<Fixture>([...left, ...right].filter((f): f is Fixture => f !== null));
+  const remaining = all.filter(m => !placed.has(m));
+  if (remaining.length === 0) return [left, right];
+  const merged = [...left, ...right];
+  let ri = 0;
+  for (let i = 0; i < merged.length && ri < remaining.length; i++) {
+    if (merged[i] === null) merged[i] = remaining[ri++]!;
+  }
+  return [merged.slice(0, left.length), merged.slice(left.length)];
+}
+
 export function build_bracket(fixtures: readonly Fixture[]): BracketLayout {
   const r32 = fixtures.filter(f => f.stage_name === "Round of 32").slice().sort(compare_by_kickoff);
   const r16 = fixtures.filter(f => f.stage_name === "Round of 16").slice().sort(compare_by_kickoff);
@@ -101,13 +124,22 @@ export function build_bracket(fixtures: readonly Fixture[]): BracketLayout {
     return [pair[0] ?? null, pair[1] ?? null];
   };
 
-  const qf_left = qf_pair_for(sf_left);
-  const qf_right = qf_pair_for(sf_right);
-  const r16_left = [...r16_pair_for(qf_left[0]), ...r16_pair_for(qf_left[1])];
-  const r16_right = [...r16_pair_for(qf_right[0]), ...r16_pair_for(qf_right[1])];
+  // Each round anchors to the one downstream; when that round is missing
+  // (the current round is the deepest played), fill_unplaced lays the
+  // unanchored matches out sequentially so they still show. Feeding the
+  // FILLED arrays downward keeps the chain intact for partially-played trees.
+  const [qf_left, qf_right] = fill_unplaced(qf_pair_for(sf_left), qf_pair_for(sf_right), qf);
+  const [r16_left, r16_right] = fill_unplaced(
+    [...r16_pair_for(qf_left[0]), ...r16_pair_for(qf_left[1])],
+    [...r16_pair_for(qf_right[0]), ...r16_pair_for(qf_right[1])],
+    r16,
+  );
   // Each R16 slot is fed by 2 R32 matches → 4 R16 × 2 = 8 per side.
-  const r32_left = r16_left.flatMap(m => r32_pair_for(m));
-  const r32_right = r16_right.flatMap(m => r32_pair_for(m));
+  const [r32_left, r32_right] = fill_unplaced(
+    r16_left.flatMap(m => r32_pair_for(m)),
+    r16_right.flatMap(m => r32_pair_for(m)),
+    r32,
+  );
 
   return { r32_left, r16_left, qf_left, sf_left, final, sf_right, qf_right, r16_right, r32_right, third_place };
 }
