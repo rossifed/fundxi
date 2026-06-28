@@ -645,9 +645,13 @@ function CompactMatchCell({
         overflow: "hidden",
       }}
     >
+      {/* The bracket columns are narrow (mirrored 8+8 in R32) so the full name
+          is truncated to an ugly ellipsis. Show the team's ISO-3 code instead
+          (core.team.id — a real provider value, what the flag is keyed on);
+          the wider calendar view keeps full names. */}
       <CellTeamRow
         flag={home?.flag}
-        code={home?.name ?? fixture.home_team_id}
+        code={fixture.home_team_id}
         team_id={fixture.home_team_id}
         score={fixture.home_score}
         is_played={is_played}
@@ -655,7 +659,7 @@ function CompactMatchCell({
       />
       <CellTeamRow
         flag={away?.flag}
-        code={away?.name ?? fixture.away_team_id}
+        code={fixture.away_team_id}
         team_id={fixture.away_team_id}
         score={fixture.away_score}
         is_played={is_played}

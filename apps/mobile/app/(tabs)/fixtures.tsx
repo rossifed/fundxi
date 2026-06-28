@@ -384,8 +384,10 @@ function CompactCell({ fixture, on_open }: { fixture: Fixture; on_open: (id: num
   const datetime = [day, time].filter(Boolean).join(" · ") || "TBD";
   return (
     <Pressable style={[styles.cc, is_today && styles.cc_today, is_live && styles.cc_live]} onPress={() => on_open(fixture.id)}>
-      <CellTeamRow flag={home?.flag} code={home?.name ?? fixture.home_team_id} score={fixture.home_score} played={played} />
-      <CellTeamRow flag={away?.flag} code={away?.name ?? fixture.away_team_id} score={fixture.away_score} played={played} />
+      {/* Narrow bracket columns: show the ISO-3 code (core.team.id, a real
+          provider value) instead of the truncated full name — matches web. */}
+      <CellTeamRow flag={home?.flag} code={fixture.home_team_id} score={fixture.home_score} played={played} />
+      <CellTeamRow flag={away?.flag} code={fixture.away_team_id} score={fixture.away_score} played={played} />
       <View style={styles.cc_foot}>
         {is_live ? (
           <>
