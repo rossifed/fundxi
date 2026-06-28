@@ -6,7 +6,7 @@ DDD role: Adapter. Conflict target = `sportmonks_id`.
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import case, select, update
+from sqlalchemy import case, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -108,6 +108,8 @@ class SqlAlchemyFixtureRepository:
             kickoff_at=fixture.kickoff_at,
             minute=fixture.minute,
             note=fixture.note,
+            stage_name=fixture.stage_name,
+            round_name=fixture.round_name,
         )
         update_payload = {
             "home_team_id": stmt.excluded.home_team_id,
@@ -120,6 +122,10 @@ class SqlAlchemyFixtureRepository:
             "kickoff_at": stmt.excluded.kickoff_at,
             "minute": stmt.excluded.minute,
             "note": stmt.excluded.note,
+            # Keep a phase we already know if a later payload lacks the include
+            # (coalesce new-over-old) — never regress a set stage_name to NULL.
+            "stage_name": func.coalesce(stmt.excluded.stage_name, FixtureORM.stage_name),
+            "round_name": func.coalesce(stmt.excluded.round_name, FixtureORM.round_name),
         }
         stmt = stmt.on_conflict_do_update(index_elements=["sportmonks_id"], set_=update_payload)
         await self._session.execute(stmt)

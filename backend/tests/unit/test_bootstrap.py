@@ -378,7 +378,7 @@ async def test_bootstrap_fixtures_passes_includes() -> None:
     assert count == 1
     assert client.calls[0][1] == {
         "filters": "fixtureSeasons:100",
-        "include": "participants;state;scores",
+        "include": "participants;state;scores;stage;round",
         "page": 1,
     }
     fixture, sportmonks_id = fixture_repo.upserts[0]

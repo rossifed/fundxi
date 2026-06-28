@@ -172,7 +172,11 @@ async def bootstrap_fixtures(
     endpoint = "/fixtures"
     base_params = {
         "filters": f"fixtureSeasons:{season_id}",
-        "include": "participants;state;scores",
+        # stage;round so every fixture lands with its tournament phase in one
+        # pass — the bracket view filters on stage_name. Without it, knockout
+        # fixtures arrive with stage_name NULL and the bracket renders empty
+        # until backfill_fixture_phase is run by hand.
+        "include": "participants;state;scores;stage;round",
     }
     # Resolve home/away by Sportmonks team id (stable) rather than short_code.
     team_id_by_sportmonks = {sportmonks_id: internal_id for sportmonks_id, internal_id in teams}

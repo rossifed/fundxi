@@ -185,6 +185,21 @@ def _parse_kickoff(value: object) -> datetime | None:
     return None
 
 
+def _phase_name(payload: object) -> str | None:
+    """Extract ``.name`` from a Sportmonks ``stage`` / ``round`` include object.
+
+    The list bootstrap requests ``include=...;stage;round`` so every fixture
+    carries its tournament phase from the first pass — the bracket view filters
+    on ``stage_name`` ("Round of 32", "Quarter-finals", ...) and renders empty
+    otherwise. Mirrors the surgical ``backfill_fixture_phase`` worker, which
+    stays as a repair tool for fixtures ingested before this include existed.
+    """
+    if isinstance(payload, dict):
+        name = cast(dict[str, Any], payload).get("name")
+        return name if isinstance(name, str) else None
+    return None
+
+
 def project_fixture(
     payload: dict[str, Any], *, group: str, team_id_by_sportmonks: Mapping[int, str]
 ) -> tuple[Fixture, int]:
@@ -222,5 +237,7 @@ def project_fixture(
         kickoff_at=_parse_kickoff(payload.get("starting_at")),
         minute=minute,
         season_id=season_id,
+        stage_name=_phase_name(payload.get("stage")),
+        round_name=_phase_name(payload.get("round")),
     )
     return fixture, sportmonks_id

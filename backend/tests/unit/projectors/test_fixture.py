@@ -90,6 +90,37 @@ def test_project_fixture_reads_native_season_id() -> None:
     assert project_fixture(bad, group="", team_id_by_sportmonks=_TEAM_MAP)[0].season_id is None
 
 
+def test_project_fixture_reads_stage_and_round() -> None:
+    """The list bootstrap includes ``stage;round`` so a fixture carries its
+    tournament phase from the first pass — the bracket view filters on
+    ``stage_name`` and renders empty without it."""
+    payload = {
+        "id": 19609200,
+        "starting_at": "2026-06-29 20:00:00",
+        "state": {"state": "NS"},
+        "participants": _participants(),
+        "stage": {"id": 10, "name": "Round of 32"},
+        "round": {"id": 20, "name": "Round 4"},
+    }
+    fixture, _ = project_fixture(payload, group="", team_id_by_sportmonks=_TEAM_MAP)
+    assert fixture.stage_name == "Round of 32"
+    assert fixture.round_name == "Round 4"
+
+
+def test_project_fixture_phase_absent_is_none() -> None:
+    """Phase includes are optional — a payload without stage/round (e.g. the
+    live inplay poller, which does not request them) yields None, never raises."""
+    payload = {
+        "id": 1,
+        "starting_at": "2026-06-12 20:00:00",
+        "state": {"state": "NS"},
+        "participants": _participants(),
+    }
+    fixture, _ = project_fixture(payload, group="A", team_id_by_sportmonks=_TEAM_MAP)
+    assert fixture.stage_name is None
+    assert fixture.round_name is None
+
+
 def test_project_fixture_live() -> None:
     payload = {
         "id": 1,
