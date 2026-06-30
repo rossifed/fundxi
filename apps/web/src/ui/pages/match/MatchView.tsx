@@ -355,6 +355,13 @@ export function MatchView({ match: initial_match, on_back, on_open_player_profil
             </TeamLink>
           </div>
         </div>
+        {/* Decided on penalties: name the winner + the shootout score (the level
+            regulation score alone can't reveal who went through). */}
+        {match.home_pen_score != null && match.away_pen_score != null && (
+          <div style={{ textAlign: "center", fontSize: 13, fontWeight: 700, color: "var(--color-positive)", marginTop: 10 }}>
+            {`${(match.home_pen_score > match.away_pen_score ? home_team?.name : away_team?.name) ?? ""} won ${Math.max(match.home_pen_score, match.away_pen_score)}-${Math.min(match.home_pen_score, match.away_pen_score)} on penalties`}
+          </div>
+        )}
         {/* Scorers under each team's half, left-anchored — same split as the
             Home live card so it's clear who scored for whom. */}
         {goals.length > 0 && (

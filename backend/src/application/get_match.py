@@ -40,6 +40,8 @@ def _fixture_orm_to_domain(
         group=group_override if group_override is not None else orm.group,
         home_score=orm.home_score,
         away_score=orm.away_score,
+        home_pen_score=orm.home_pen_score,
+        away_pen_score=orm.away_pen_score,
         kickoff_at=orm.kickoff_at,
         minute=orm.minute,
         note=orm.note,

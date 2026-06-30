@@ -63,6 +63,10 @@ export interface Match {
   away_team_id: string;
   home_score: number;
   away_score: number;
+  /** Penalty-shootout score (converted penalties per side). Present only when
+   * the knockout was decided on penalties; the winner is the higher of the two. */
+  home_pen_score?: number;
+  away_pen_score?: number;
   minute: number;
   group: string;
   status: MatchStatus;

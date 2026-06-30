@@ -270,6 +270,12 @@ function MatchBody({
             <Scorers goals={goals.filter(g => g.team_id === match.away_team_id)} align="center" />
           </View>
         </View>
+        {/* Decided on penalties: name the winner + the shootout score. */}
+        {match.home_pen_score != null && match.away_pen_score != null ? (
+          <Text style={styles.score_pens}>
+            {`${(match.home_pen_score > match.away_pen_score ? home?.name : away?.name) ?? ""} won ${Math.max(match.home_pen_score, match.away_pen_score)}-${Math.min(match.home_pen_score, match.away_pen_score)} on penalties`}
+          </Text>
+        ) : null}
       </View>
 
       {/* Tabs — Compos / Stats / Events */}
@@ -685,6 +691,7 @@ const styles = StyleSheet.create({
   score_flag: { fontSize: 44, lineHeight: 50 },
   score_name: { fontSize: 16, fontWeight: "800", color: "#fff", marginTop: 6, textAlign: "center" },
   score: { fontFamily: mono, fontSize: 38, fontWeight: "900", color: "#fff", letterSpacing: -1.5, paddingTop: 6 },
+  score_pens: { textAlign: "center", fontSize: 13, fontWeight: "700", color: palette.positive, paddingBottom: 14, marginTop: -6 },
   // No width constraint → the surname is never clipped by the minute; the row
   // sizes to its content (one line each, both flexShrink:0) and stays centered.
   scorer_row: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },

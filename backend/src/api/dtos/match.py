@@ -58,6 +58,9 @@ class MatchResponse(BaseModel):
     group: str
     home_score: int | None
     away_score: int | None
+    # Penalty-shootout score (both null unless the match was decided on penalties).
+    home_pen_score: int | None
+    away_pen_score: int | None
     minute: int | None
     # Hex (e.g. "#C0D6FE") of the primary kit each team wore *in this match*.
     # Sourced from Sportmonks fixture metadata (type_id 161/162). Null when

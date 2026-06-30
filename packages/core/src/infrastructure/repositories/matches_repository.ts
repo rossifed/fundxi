@@ -40,6 +40,8 @@ interface MatchResponseDTO {
   group: string;
   home_score: number | null;
   away_score: number | null;
+  home_pen_score: number | null;
+  away_pen_score: number | null;
   minute: number | null;
   home_kit_color: string | null;
   away_kit_color: string | null;
@@ -94,6 +96,8 @@ function dto_to_match(dto: MatchResponseDTO): Match {
     away_team_id: dto.away_team_id,
     home_score: dto.home_score ?? 0,
     away_score: dto.away_score ?? 0,
+    home_pen_score: dto.home_pen_score ?? undefined,
+    away_pen_score: dto.away_pen_score ?? undefined,
     minute: dto.minute ?? 0,
     group: dto.group ?? "",
     status: dto.status as MatchStatus,

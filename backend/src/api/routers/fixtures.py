@@ -130,6 +130,8 @@ async def fixtures_match(
         group=view.fixture.group,
         home_score=view.fixture.home_score,
         away_score=view.fixture.away_score,
+        home_pen_score=view.fixture.home_pen_score,
+        away_pen_score=view.fixture.away_pen_score,
         minute=view.fixture.minute,
         home_kit_color=view.fixture.home_kit_color,
         away_kit_color=view.fixture.away_kit_color,
