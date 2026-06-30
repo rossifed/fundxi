@@ -218,6 +218,16 @@ function CalendarView({ days, held_for, on_open }: { days: DayGroup[]; held_for:
   );
 }
 
+/** Penalty-shootout summary, or null when the match wasn't decided on penalties.
+ * ``winner`` is the side with more converted penalties — the only way to tell who
+ * went through when the regulation score is level (e.g. 1-1). Mirrors web. */
+function pen_summary(fixture: Fixture): { home: number; away: number; winner: "home" | "away" } | null {
+  const h = fixture.home_pen_score;
+  const a = fixture.away_pen_score;
+  if (h == null || a == null) return null;
+  return { home: h, away: a, winner: h > a ? "home" : "away" };
+}
+
 function FixtureCard({ fixture, held_players, on_open }: { fixture: Fixture; held_players: string[]; on_open: (id: number) => void }) {
   const home = teams_api.get(fixture.home_team_id);
   const away = teams_api.get(fixture.away_team_id);
@@ -226,6 +236,10 @@ function FixtureCard({ fixture, held_players, on_open }: { fixture: Fixture; hel
   const is_live = fixture.status === "live";
   const is_finished = fixture.status === "finished";
   const time = format_kickoff_time(fixture.date);
+  const pens = pen_summary(fixture);
+  const pen_winner_name = pens ? (pens.winner === "home" ? home.name : away.name) : null;
+  const pen_hi = pens ? Math.max(pens.home, pens.away) : 0;
+  const pen_lo = pens ? Math.min(pens.home, pens.away) : 0;
 
   return (
     <Pressable style={[styles.fx_card, is_live && styles.fx_card_live]} onPress={() => on_open(fixture.id)} accessibilityRole="button">
@@ -261,6 +275,9 @@ function FixtureCard({ fixture, held_players, on_open }: { fixture: Fixture; hel
         </Pressable>
       </View>
 
+      {pen_winner_name ? (
+        <Text style={styles.fx_pens}>{`${pen_winner_name} won ${pen_hi}-${pen_lo} on penalties`}</Text>
+      ) : null}
       {(fixture.venue_name || fixture.note) && (
         <Text style={styles.fx_venue}>
           {fixture.venue_name}
@@ -382,18 +399,21 @@ function CompactCell({ fixture, on_open }: { fixture: Fixture; on_open: (id: num
     ? new Date(fixture.date).toLocaleDateString(undefined, { day: "2-digit", month: "short" }).toUpperCase()
     : "";
   const datetime = [day, time].filter(Boolean).join(" · ") || "TBD";
+  const pens = pen_summary(fixture);
   return (
     <Pressable style={[styles.cc, is_today && styles.cc_today, is_live && styles.cc_live]} onPress={() => on_open(fixture.id)}>
       {/* Narrow bracket columns: show the ISO-3 code (core.team.id, a real
           provider value) instead of the truncated full name — matches web. */}
-      <CellTeamRow flag={home?.flag} code={fixture.home_team_id} score={fixture.home_score} played={played} />
-      <CellTeamRow flag={away?.flag} code={fixture.away_team_id} score={fixture.away_score} played={played} />
+      <CellTeamRow flag={home?.flag} code={fixture.home_team_id} score={fixture.home_score} played={played} lost={pens ? pens.winner !== "home" : false} />
+      <CellTeamRow flag={away?.flag} code={fixture.away_team_id} score={fixture.away_score} played={played} lost={pens ? pens.winner !== "away" : false} />
       <View style={styles.cc_foot}>
         {is_live ? (
           <>
             <View style={styles.cc_live_dot} />
             <Text style={styles.cc_live_txt}>LIVE</Text>
           </>
+        ) : pens ? (
+          <Text style={styles.cc_ft}>{`PENS ${pens.home}-${pens.away}`}</Text>
         ) : finished ? (
           <Text style={styles.cc_ft}>FT</Text>
         ) : (
@@ -404,10 +424,10 @@ function CompactCell({ fixture, on_open }: { fixture: Fixture; on_open: (id: num
   );
 }
 
-function CellTeamRow({ flag, code, score, played }: { flag?: string; code: string; score?: number; played: boolean }) {
+function CellTeamRow({ flag, code, score, played, lost = false }: { flag?: string; code: string; score?: number; played: boolean; lost?: boolean }) {
   const value = played ? (score ?? 0) : "-";
   return (
-    <View style={styles.cc_row}>
+    <View style={[styles.cc_row, lost && styles.cc_row_lost]}>
       <Text style={styles.cc_flag}>{flag ?? ""}</Text>
       <Text style={styles.cc_code} numberOfLines={1}>{code}</Text>
       <View style={styles.cc_score_slot}>
@@ -427,8 +447,9 @@ function FinalCard({ fixture, on_open }: { fixture: Fixture; on_open: (id: numbe
   const is_live = fixture.status === "live";
   const finished = fixture.status === "finished";
   const played = finished || is_live;
-  const home_win = finished && (fixture.home_score ?? 0) > (fixture.away_score ?? 0);
-  const away_win = finished && (fixture.away_score ?? 0) > (fixture.home_score ?? 0);
+  const pens = pen_summary(fixture);
+  const home_win = finished && (pens ? pens.winner === "home" : (fixture.home_score ?? 0) > (fixture.away_score ?? 0));
+  const away_win = finished && (pens ? pens.winner === "away" : (fixture.away_score ?? 0) > (fixture.home_score ?? 0));
   const winner = home_win ? home : away_win ? away : null;
 
   return (
@@ -443,7 +464,10 @@ function FinalCard({ fixture, on_open }: { fixture: Fixture; on_open: (id: numbe
         </View>
         <View style={styles.final_center}>
           {played ? (
-            <Text style={styles.final_score}>{fixture.home_score ?? 0} - {fixture.away_score ?? 0}</Text>
+            <>
+              <Text style={styles.final_score}>{fixture.home_score ?? 0} - {fixture.away_score ?? 0}</Text>
+              {pens ? <Text style={styles.final_pens}>{`PENS ${pens.home}-${pens.away}`}</Text> : null}
+            </>
           ) : (
             <Text style={styles.final_vs}>VS</Text>
           )}
@@ -593,6 +617,7 @@ const styles = StyleSheet.create({
   fx_score: { fontFamily: mono, fontSize: 23, fontWeight: "900", minWidth: 54, textAlign: "center", color: "#fff", letterSpacing: -1 },
   fx_vs: { fontFamily: mono, fontSize: 12, color: text.faint, fontWeight: "700", minWidth: 54, textAlign: "center" },
   fx_venue: { textAlign: "center", fontSize: 10.5, color: text.tertiary, marginTop: 9 },
+  fx_pens: { textAlign: "center", fontSize: 12, fontWeight: "700", color: palette.positive, marginTop: 8 },
 
   divider: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 2 },
   divider_line: { flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.07)" },
@@ -612,6 +637,7 @@ const styles = StyleSheet.create({
   cc_today: { borderColor: with_alpha(palette.positive, 0.40), borderLeftWidth: 3, borderLeftColor: palette.brandGreen },
   cc_live: { backgroundColor: "rgba(255,255,255,0.06)", borderColor: "rgba(255,255,255,0.18)" },
   cc_row: { flexDirection: "row", alignItems: "center", gap: 7 },
+  cc_row_lost: { opacity: 0.5 },
   cc_flag: { fontSize: 16, width: 22, textAlign: "center" },
   cc_code: { flex: 1, fontWeight: "700", fontSize: 11.5, color: "rgba(255,255,255,0.55)" },
   cc_code_win: { color: "#fff", fontWeight: "800" },
@@ -638,6 +664,7 @@ const styles = StyleSheet.create({
   final_flag: { fontSize: 30 },
   final_center: { paddingHorizontal: 4 },
   final_score: { fontFamily: mono, fontSize: 30, fontWeight: "900", color: "#fff", letterSpacing: -1 },
+  final_pens: { fontFamily: mono, fontSize: 11, fontWeight: "800", color: palette.positive, letterSpacing: 0.4, marginTop: 2 },
   final_vs: { fontFamily: mono, fontSize: 16, color: text.faint, fontWeight: "700" },
   final_winner: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingBottom: 14 },
   final_trophy: { fontSize: 15 },

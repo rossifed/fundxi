@@ -599,6 +599,16 @@ function BracketView({
   );
 }
 
+/** Penalty-shootout summary, or null when the match wasn't decided on penalties.
+ * ``winner`` is the side with more converted penalties — the only way to tell who
+ * went through when the regulation score is level (e.g. 1-1). */
+function pen_summary(fixture: Fixture): { home: number; away: number; winner: "home" | "away" } | null {
+  const h = fixture.home_pen_score;
+  const a = fixture.away_pen_score;
+  if (h == null || a == null) return null;
+  return { home: h, away: a, winner: h > a ? "home" : "away" };
+}
+
 /** Compact 2-row cell used in the bracket view (groups + KO).
  * Each team gets its own row (flag + code, score on the right). Today's
  * matches get an accent tint + green left border to pop out. */
@@ -618,6 +628,7 @@ function CompactMatchCell({
   const is_played = is_finished || is_live;
   const is_today = fixture.date ? fixture.date.slice(0, 10) === today_key() : false;
   const time = format_kickoff_time(fixture.date);
+  const pens = pen_summary(fixture);
 
   const accent_bg = is_today ? "color-mix(in srgb, var(--color-positive) 10%, transparent)" : is_live ? "rgba(255,255,255,.07)" : "rgba(255,255,255,.05)";
   const accent_border = is_today ? "color-mix(in srgb, var(--color-positive) 40%, transparent)" : is_live ? "rgba(255,255,255,.16)" : "rgba(255,255,255,.11)";
@@ -655,6 +666,7 @@ function CompactMatchCell({
         team_id={fixture.home_team_id}
         score={fixture.home_score}
         is_played={is_played}
+        lost={pens ? pens.winner !== "home" : false}
         on_open_team={on_open_team}
       />
       <CellTeamRow
@@ -663,8 +675,23 @@ function CompactMatchCell({
         team_id={fixture.away_team_id}
         score={fixture.away_score}
         is_played={is_played}
+        lost={pens ? pens.winner !== "away" : false}
         on_open_team={on_open_team}
       />
+      {pens && (
+        <div
+          className="mono"
+          style={{
+            fontSize: 9,
+            textAlign: "center",
+            color: "rgba(255,255,255,.55)",
+            fontWeight: 700,
+            marginTop: 1,
+          }}
+        >
+          {`PENS ${pens.home}-${pens.away}`}
+        </div>
+      )}
       {!is_played && (
         <div
           className="mono"
@@ -702,6 +729,7 @@ function CellTeamRow({
   team_id,
   score,
   is_played,
+  lost = false,
   on_open_team,
 }: {
   flag: string | undefined;
@@ -709,6 +737,8 @@ function CellTeamRow({
   team_id: string;
   score: number | undefined;
   is_played: boolean;
+  /** Dim this row: the team lost a penalty shootout (the brighter row won). */
+  lost?: boolean;
   on_open_team?: (team_id: string) => void;
 }) {
   return (
@@ -733,8 +763,16 @@ function CellTeamRow({
           minWidth: 0,
         }}
       >
-        <span style={{ fontSize: 16, lineHeight: 1, textAlign: "center" }}>{flag ?? ""}</span>
-        <span style={{ fontWeight: 700, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <span style={{ fontSize: 16, lineHeight: 1, textAlign: "center", opacity: lost ? 0.5 : 1 }}>{flag ?? ""}</span>
+        <span
+          style={{
+            fontWeight: 700,
+            color: lost ? "rgba(255,255,255,.5)" : "#fff",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
           {code}
         </span>
       </TeamLink>
@@ -744,7 +782,7 @@ function CellTeamRow({
           textAlign: "right",
           fontWeight: 800,
           fontSize: 12,
-          color: is_played ? "#fff" : "rgba(255,255,255,.25)",
+          color: is_played ? (lost ? "rgba(255,255,255,.5)" : "#fff") : "rgba(255,255,255,.25)",
         }}
       >
         {is_played ? (score ?? 0) : "-"}
@@ -972,6 +1010,10 @@ function FixtureCard({
   const is_finished = fixture.status === "finished";
   const kickoff_time = format_kickoff_time(fixture.date);
   const chip_label = phase_chip(fixture);
+  const pens = pen_summary(fixture);
+  const pen_winner_name = pens ? (pens.winner === "home" ? home_name : away_name) : null;
+  const pen_hi = pens ? Math.max(pens.home, pens.away) : 0;
+  const pen_lo = pens ? Math.min(pens.home, pens.away) : 0;
 
   return (
     <div
@@ -1077,6 +1119,11 @@ function FixtureCard({
         </div>
       </div>
 
+      {pen_winner_name && (
+        <div style={{ textAlign: "center", fontSize: 12, color: "var(--color-positive)", fontWeight: 700, marginTop: 8 }}>
+          {`${pen_winner_name} won ${pen_hi}-${pen_lo} on penalties`}
+        </div>
+      )}
       {(fixture.venue_name || fixture.note) && (
         <div style={{ textAlign: "center", fontSize: 11, color: "rgba(255,255,255,.35)", marginTop: 10 }}>
           {fixture.venue_name}

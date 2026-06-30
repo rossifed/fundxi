@@ -8,6 +8,10 @@ export interface Fixture {
   group: string;
   home_score?: number;
   away_score?: number;
+  /** Penalty-shootout score (converted penalties per side). Present only when
+   * the knockout was decided on penalties; the winner is the higher of the two. */
+  home_pen_score?: number;
+  away_pen_score?: number;
   date?: string;
   minute?: number;
   note?: string;

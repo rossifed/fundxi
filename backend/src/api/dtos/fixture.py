@@ -15,6 +15,10 @@ class FixtureResponse(BaseModel):
     group: str
     home_score: int | None = None
     away_score: int | None = None
+    # Penalty-shootout score (both null unless the match was decided on penalties).
+    # Presence tells the UI it ended on penalties; the winner is the higher one.
+    home_pen_score: int | None = None
+    away_pen_score: int | None = None
     kickoff_at: datetime | None = None
     minute: int | None = None
     note: str | None = None
@@ -33,6 +37,8 @@ class FixtureResponse(BaseModel):
             group=fixture.group,
             home_score=fixture.home_score,
             away_score=fixture.away_score,
+            home_pen_score=fixture.home_pen_score,
+            away_pen_score=fixture.away_pen_score,
             kickoff_at=fixture.kickoff_at,
             minute=fixture.minute,
             note=fixture.note,

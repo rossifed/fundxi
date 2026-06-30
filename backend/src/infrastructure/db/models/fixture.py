@@ -28,6 +28,10 @@ class FixtureORM(Base, AuditMixin):
     group: Mapped[str] = mapped_column(String(8), index=True)
     home_score: Mapped[int | None]
     away_score: Mapped[int | None]
+    # Penalty-shootout score (converted penalties per side) when the knockout was
+    # decided on penalties; both NULL otherwise. Presence ⇒ "decided on penalties".
+    home_pen_score: Mapped[int | None]
+    away_pen_score: Mapped[int | None]
     kickoff_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     minute: Mapped[int | None]
     note: Mapped[str | None] = mapped_column(Text)

@@ -25,6 +25,11 @@ class Fixture:
     group: str
     home_score: int | None = None
     away_score: int | None = None
+    # Penalty-shootout score (converted penalties per side) when the knockout was
+    # decided on penalties; both None otherwise. Their presence is what tells the
+    # UI the match ended on penalties, and the winner is the higher of the two.
+    home_pen_score: int | None = None
+    away_pen_score: int | None = None
     kickoff_at: datetime | None = None
     minute: int | None = None
     note: str | None = None

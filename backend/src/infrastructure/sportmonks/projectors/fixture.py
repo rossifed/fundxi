@@ -105,6 +105,17 @@ def _final_score(scores_payload: object, location: str) -> int | None:
     return _score_for(scores_payload, location, description="CURRENT")
 
 
+def penalty_shootout_score(scores_payload: object) -> tuple[int | None, int | None]:
+    """``(home, away)`` converted-penalty counts from the ``PENALTY_SHOOTOUT``
+    score block, or ``(None, None)`` when there was no shootout. Persisting this
+    lets the UI show the shootout score (e.g. 4-3) and derive the winner (the
+    higher of the two) for a knockout decided on penalties."""
+    return (
+        _score_for(scores_payload, "home", description="PENALTY_SHOOTOUT"),
+        _score_for(scores_payload, "away", description="PENALTY_SHOOTOUT"),
+    )
+
+
 def penalty_shootout_winner(scores_payload: object) -> str | None:
     """``"home"`` / ``"away"`` for a knockout decided on penalties, or ``None``
     when there was no shootout (or it is undecided). Reads the
@@ -260,6 +271,7 @@ def project_fixture(
     scores_payload = payload.get("scores")
     home_score = _final_score(scores_payload, "home")
     away_score = _final_score(scores_payload, "away")
+    home_pen_score, away_pen_score = penalty_shootout_score(scores_payload)
 
     season_raw = payload.get("season_id")
     season_id = season_raw if isinstance(season_raw, int) else None
@@ -272,6 +284,8 @@ def project_fixture(
         group=group,
         home_score=home_score,
         away_score=away_score,
+        home_pen_score=home_pen_score,
+        away_pen_score=away_pen_score,
         kickoff_at=_parse_kickoff(payload.get("starting_at")),
         minute=minute,
         season_id=season_id,

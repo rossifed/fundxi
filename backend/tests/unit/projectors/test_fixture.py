@@ -5,7 +5,11 @@ from datetime import datetime
 import pytest
 
 from src.domain.match.fixture import FixtureStatus
-from src.infrastructure.sportmonks.projectors.fixture import project_fixture, project_fixture_prediction
+from src.infrastructure.sportmonks.projectors.fixture import (
+    penalty_shootout_score,
+    project_fixture,
+    project_fixture_prediction,
+)
 
 # Sportmonks team id -> internal id. Home/away are resolved through this map by
 # the stable numeric team id, never by the drift-prone short_code.
@@ -243,6 +247,48 @@ def test_project_fixture_unparseable_kickoff_yields_none() -> None:
     }
     fixture, _ = project_fixture(payload, group="A", team_id_by_sportmonks=_TEAM_MAP)
     assert fixture.kickoff_at is None
+
+
+# --- penalty shootout score -----------------------------------------------
+
+
+def _pen_scores(home: int, away: int) -> list[dict[str, object]]:
+    return [
+        {"description": "CURRENT", "score": {"participant": "home", "goals": 1}},
+        {"description": "CURRENT", "score": {"participant": "away", "goals": 1}},
+        {"description": "PENALTY_SHOOTOUT", "score": {"participant": "home", "goals": home}},
+        {"description": "PENALTY_SHOOTOUT", "score": {"participant": "away", "goals": away}},
+    ]
+
+
+def test_penalty_shootout_score_extracted() -> None:
+    assert penalty_shootout_score(_pen_scores(3, 4)) == (3, 4)
+
+
+def test_penalty_shootout_score_absent_is_none_pair() -> None:
+    # A match decided in regulation has no PENALTY_SHOOTOUT block.
+    regulation = [
+        {"description": "CURRENT", "score": {"participant": "home", "goals": 2}},
+        {"description": "CURRENT", "score": {"participant": "away", "goals": 1}},
+    ]
+    assert penalty_shootout_score(regulation) == (None, None)
+    assert penalty_shootout_score(None) == (None, None)
+
+
+def test_project_fixture_sets_penalty_score() -> None:
+    payload = {
+        "id": 19606957,
+        "starting_at": "2026-06-29 20:30:00",
+        "state": {"state": "FT_PEN"},
+        "participants": _participants(),
+        "scores": _pen_scores(3, 4),
+    }
+    fixture, _ = project_fixture(payload, group="", team_id_by_sportmonks=_TEAM_MAP)
+    assert fixture.status is FixtureStatus.FINISHED
+    assert fixture.home_score == 1
+    assert fixture.away_score == 1
+    assert fixture.home_pen_score == 3
+    assert fixture.away_pen_score == 4  # away won the shootout
 
 
 # --- prediction projector (FULLTIME_RESULT_PROBABILITY, type 237) ----------

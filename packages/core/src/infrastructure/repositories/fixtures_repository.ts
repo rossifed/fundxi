@@ -9,6 +9,8 @@ interface FixtureDTO {
   group: string;
   home_score: number | null;
   away_score: number | null;
+  home_pen_score: number | null;
+  away_pen_score: number | null;
   kickoff_at: string | null;
   minute: number | null;
   note: string | null;
@@ -30,6 +32,8 @@ function dto_to_domain(dto: FixtureDTO): Fixture {
     group: dto.group,
     home_score: dto.home_score ?? undefined,
     away_score: dto.away_score ?? undefined,
+    home_pen_score: dto.home_pen_score ?? undefined,
+    away_pen_score: dto.away_pen_score ?? undefined,
     date: dto.kickoff_at ?? undefined,
     minute: dto.minute ?? undefined,
     note: dto.note ?? undefined,
