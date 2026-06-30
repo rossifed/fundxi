@@ -21,7 +21,7 @@ import asyncio
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -422,8 +422,16 @@ class SportmonksInplayPoller:
 
         For a knockout decided on penalties (level CURRENT score), the winner is
         read from the PENALTY_SHOOTOUT block (``scores_payload``) and passed as
-        ``winner_override`` so the eliminated side still takes the -40% drop.
-        Sets ``_settled`` so live pricing stops overwriting these ticks."""
+        ``winner_override`` so the eliminated side still takes its drop.
+        Sets ``_settled`` so live pricing stops overwriting these ticks.
+
+        The three events are STAGGERED by 1ms each. The price-tick PK is
+        ``(player_id, ts)`` with ``on_conflict_do_nothing``, so a suspension /
+        did-not-play tick written at the SAME ts as the player's settlement tick
+        would collide and be silently dropped — a player on a settled team would
+        never get his suspension. Distinct increasing timestamps make each event
+        read the previous tick (last price = MAX ts) and apply MULTIPLICATIVELY
+        on top of it (e.g. a benched winner: +result, then -did_not_play)."""
         pen_winner = penalty_shootout_winner(scores_payload)
         winner_override = Side(pen_winner) if pen_winner is not None else None
         notifications = await settle_fixture(
@@ -434,10 +442,16 @@ class SportmonksInplayPoller:
             coefficients=coefficients,
         )
         notifications += await apply_suspensions(
-            session, fixture_id=self.fixture_internal_id, ts=ts, coefficients=coefficients
+            session,
+            fixture_id=self.fixture_internal_id,
+            ts=ts + timedelta(milliseconds=1),
+            coefficients=coefficients,
         )
         notifications += await apply_did_not_play(
-            session, fixture_id=self.fixture_internal_id, ts=ts, coefficients=coefficients
+            session,
+            fixture_id=self.fixture_internal_id,
+            ts=ts + timedelta(milliseconds=2),
+            coefficients=coefficients,
         )
         # Mark settled even when nothing was produced (knockout winner
         # undetermined, group draw, no cards, everyone featured): a retry next
