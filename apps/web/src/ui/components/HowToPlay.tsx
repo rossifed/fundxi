@@ -127,6 +127,10 @@ export function HowToPlay() {
             During a live match, prices move in real time. That is the fun part. Trading pauses while a match is
             live, so set your team before kickoff. It reopens at half time and full time.
           </div>
+          <div style={{ fontSize: 13, color: "rgba(255,255,255,.6)", marginTop: 10, lineHeight: 1.5 }}>
+            In the knockouts the size of the move follows the odds: back an underdog that wins and you win big; a
+            favourite that crashes out drops hard.
+          </div>
         </Step>
 
         <Step n={4} title="The five tabs">
