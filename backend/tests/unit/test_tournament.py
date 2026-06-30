@@ -1,8 +1,9 @@
 """Unit tests for the pure tournament-settlement domain service.
 
 Correctness of the headline behaviour lives here: an eliminated knockout team's
-players crash by -40% of their CURRENT price, regardless of how high their run
-had taken them. The I/O wrapper (``application.settle_fixture``) only gathers
+players crash by a fraction of their CURRENT price (interim flat -20%; to be
+superseded by odds-based settlement), regardless of how high their run had
+taken them. The I/O wrapper (``application.settle_fixture``) only gathers
 inputs and writes ticks; all the pricing decisions are these pure functions.
 """
 
@@ -95,10 +96,11 @@ def _roster() -> list[tuple[int, str]]:
     return [(1, "FRA"), (2, "FRA"), (10, "ARG"), (11, "ARG")]
 
 
-def test_knockout_elimination_crashes_loser_by_40pct_of_current_price() -> None:
-    # FRA beat ARG in a knockout. ARG players are eliminated: -40% of their
+def test_knockout_elimination_crashes_loser_by_20pct_of_current_price() -> None:
+    # FRA beat ARG in a knockout. ARG players are eliminated: -20% of their
     # CURRENT price (not their base) — a great run makes the fall bigger in
-    # absolute terms, which is the point.
+    # absolute terms, which is the point. (Interim flat calibration: win +20% /
+    # elimination -20%; to be superseded by odds-based settlement.)
     base = {1: 100.0, 2: 100.0, 10: 50.0, 11: 50.0}
     # ARG#10 had a stellar tournament (price 200 on a 50 base); ARG#11 sits flat.
     last = {1: 130.0, 2: 130.0, 10: 200.0, 11: 50.0}
@@ -113,12 +115,12 @@ def test_knockout_elimination_crashes_loser_by_40pct_of_current_price() -> None:
         rating_by_player={},
     )
     by_player = {t.player_id: t for t in ticks}
-    # Winners (FRA) advance: +5% of 130 = 136.50.
-    assert by_player[1].price == 136.50
-    assert by_player[2].price == 136.50
-    # Losers (ARG) eliminated: -40% of current.
-    assert by_player[10].price == 120.00  # 200 * 0.6
-    assert by_player[11].price == 30.00  # 50 * 0.6
+    # Winners (FRA) advance: +20% of 130 = 156.00.
+    assert by_player[1].price == 156.00
+    assert by_player[2].price == 156.00
+    # Losers (ARG) eliminated: -20% of current.
+    assert by_player[10].price == 160.00  # 200 * 0.8
+    assert by_player[11].price == 40.00  # 50 * 0.8
     # Settlement carries the neutral baseline rating fallback when none is supplied.
     assert all(t.rating == C.rating_baseline for t in ticks)
 
@@ -143,7 +145,7 @@ def test_elimination_is_floored_strictly_positive() -> None:
 
 
 def test_no_prior_tick_uses_base_as_current_price() -> None:
-    # An unused sub (no tick) still shares the elimination: -40% of his base.
+    # An unused sub (no tick) still shares the elimination: -20% of his base.
     ticks = plan_settlement(
         home_team_id="FRA",
         away_team_id="ARG",
@@ -154,7 +156,7 @@ def test_no_prior_tick_uses_base_as_current_price() -> None:
         last_price_by_player={},  # never priced
         rating_by_player={},
     )
-    assert ticks[0].price == 30.00  # 50 * 0.6
+    assert ticks[0].price == 40.00  # 50 * 0.8
 
 
 def test_unseeded_player_is_skipped_never_synthesised() -> None:
@@ -212,7 +214,7 @@ def test_settled_rating_is_carried_from_last_tick() -> None:
         last_price_by_player={1: 100.0},
         rating_by_player={1: 7.4},
     )
-    assert ticks == [SettlementTick(player_id=1, price=60.0, rating=7.4)]
+    assert ticks == [SettlementTick(player_id=1, price=80.0, rating=7.4)]  # -20% of 100
 
 
 # --- qualification (Step 2) ----------------------------------------------

@@ -43,10 +43,17 @@ live_abs_cap_frac = 0.30        # hard +/-30% bound on the final live move (post
 # === Tournament events (persistent; multiplicative on current price, NOT vol-scaled) ===
 # A result is a collective fate hitting the whole squad equally.
 w_group_win_frac = 0.02              # group-stage win
-w_knockout_win_frac = 0.05           # knockout win (team advances)
-w_knockout_elimination_frac = -0.40  # knockout loss — the brutal drop
+# INTERIM flat calibration (2026-06-30): symmetric +/-20% so holding through a
+# knockout is EV-neutral on a coin-flip and positive for a skilled pick (kills
+# the "sit-out is mathematically better" tax), with the loss bounded at the
+# agreed -20% (down from the old, too-brutal -40%). TO BE SUPERSEDED by the
+# odds-based settlement — reward scaled by the Sportmonks win probability so
+# backing the underdog pays big and backing the favorite pays little (and drops
+# hard on an upset). See context/FUNDXI-VALUATION-MODEL.md.
+w_knockout_win_frac = 0.20           # knockout win (team advances)
+w_knockout_elimination_frac = -0.20  # knockout loss (capped from -0.40)
 w_qualification_frac = 0.05          # group qualification (standings-driven)
-w_suspension_frac = -0.15            # banned next match (red / 2-yellow accumulation)
+w_suspension_frac = -0.10            # banned next match (red / 2-yellow accumulation)
 w_out_of_xi_frac = -0.02             # dropped from the XI (started last match, benched this one)
 w_did_not_play_frac = -0.01          # per zero-minute match, scaled by tally: -1% x N (benchwarmer rot)
 

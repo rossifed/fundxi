@@ -73,10 +73,14 @@ class PricingCoefficients:
     # performance keeps its volatility scaling; this layer is on top of it.
     # See context/FUNDXI-VALUATION-MODEL.md §3.4 / §4.1.
     w_group_win_frac: float = 0.02  # group-stage win
-    w_knockout_win_frac: float = 0.05  # knockout win (team advances)
-    w_knockout_elimination_frac: float = -0.40  # knockout loss — the brutal drop
+    # INTERIM flat calibration (2026-06-30): symmetric +/-20% (EV-neutral coin-flip,
+    # +EV for a skilled pick, loss bounded at -20%). Kept in sync with
+    # config/pricing.toml. TO BE SUPERSEDED by odds-based settlement (reward scaled
+    # by the Sportmonks win probability).
+    w_knockout_win_frac: float = 0.20  # knockout win (team advances)
+    w_knockout_elimination_frac: float = -0.20  # knockout loss (capped from -0.40)
     w_qualification_frac: float = 0.05  # group qualification (standings-driven, Step 2)
-    w_suspension_frac: float = -0.15  # banned for the next match (red / 2-yellow accumulation)
+    w_suspension_frac: float = -0.10  # banned for the next match (red / 2-yellow accumulation)
     w_out_of_xi_frac: float = -0.02  # dropped from the XI (started last match, benched this one)
     # Did-not-play: applied per match a squad player gets 0 minutes, scaled by his
     # tournament tally of zero-minute matches: -1% x N (a benchwarmer rots faster
