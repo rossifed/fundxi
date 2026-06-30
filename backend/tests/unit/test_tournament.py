@@ -9,6 +9,8 @@ inputs and writes ticks; all the pricing decisions are these pure functions.
 
 import math
 
+import pytest
+
 from src.valuation.coefficients import DEFAULT_COEFFICIENTS as C
 from src.valuation.tournament import (
     SettlementTick,
@@ -16,6 +18,7 @@ from src.valuation.tournament import (
     decisive_winner,
     dropped_starters,
     is_group_stage,
+    knockout_advance_probabilities,
     newly_suspended_players,
     per_side_impacts,
     plan_flat_impact,
@@ -86,6 +89,96 @@ def test_per_side_group_only_winner_paid() -> None:
 
 def test_per_side_undetermined_is_zero_zero() -> None:
     assert per_side_impacts(is_group=False, winner=None) == (0.0, 0.0)
+
+
+# --- odds-based knockout settlement --------------------------------------
+
+
+def test_advance_probabilities_fold_the_draw_5050() -> None:
+    # France-Sweden FULLTIME_RESULT_PROBABILITY: 59.7 / 21 / 19.3 (already summing
+    # to ~100). The draw (extra time / penalties) splits 50/50 onto each side.
+    p_home, p_away = knockout_advance_probabilities(0.597, 0.21, 0.193)
+    assert p_home == pytest.approx(0.702)
+    assert p_away == pytest.approx(0.298)
+    assert p_home + p_away == pytest.approx(1.0)
+
+
+def test_advance_probabilities_normalise_percentages_and_handle_zero() -> None:
+    # Percentages (sum 100) are normalised to fractions.
+    p_home, p_away = knockout_advance_probabilities(60.0, 20.0, 20.0)
+    assert p_home == pytest.approx(0.70)
+    assert p_away == pytest.approx(0.30)
+    # Degenerate all-zero input → neutral 50/50, never a divide-by-zero.
+    assert knockout_advance_probabilities(0.0, 0.0, 0.0) == (0.5, 0.5)
+
+
+def test_odds_based_favorite_wins_small_underdog_wins_big() -> None:
+    swing = C.w_knockout_swing
+    # Favourite (p=0.70) advancing → small reward; underdog (p=0.30) → big reward.
+    assert result_impact_frac(is_group=False, is_winner=True, is_loser=False, win_probability=0.70) == pytest.approx(
+        swing * 0.30
+    )
+    assert result_impact_frac(is_group=False, is_winner=True, is_loser=False, win_probability=0.30) == pytest.approx(
+        swing * 0.70
+    )
+
+
+def test_odds_based_favorite_loss_crashes_underdog_loss_is_soft() -> None:
+    swing = C.w_knockout_swing
+    # Favourite (p=0.70) eliminated → big drop; underdog (p=0.30) → soft drop.
+    assert result_impact_frac(is_group=False, is_winner=False, is_loser=True, win_probability=0.70) == pytest.approx(
+        -swing * 0.70
+    )
+    assert result_impact_frac(is_group=False, is_winner=False, is_loser=True, win_probability=0.30) == pytest.approx(
+        -swing * 0.30
+    )
+
+
+def test_odds_based_is_ev_neutral_per_side() -> None:
+    # EV of holding a side through the tie, at its own (true=implied) prob p:
+    #   p * reward + (1-p) * penalty = p*swing*(1-p) - (1-p)*swing*p = 0.
+    for p in (0.1, 0.3, 0.5, 0.7, 0.9):
+        reward = result_impact_frac(is_group=False, is_winner=True, is_loser=False, win_probability=p)
+        penalty = result_impact_frac(is_group=False, is_winner=False, is_loser=True, win_probability=p)
+        assert p * reward + (1 - p) * penalty == pytest.approx(0.0, abs=1e-12)
+
+
+def test_per_side_odds_based_france_sweden() -> None:
+    # France (home) beats Sweden (away). p_home_adv=0.70, p_away_adv=0.30.
+    home, away = per_side_impacts(
+        is_group=False, winner=Side.HOME, p_home_advance=0.70, p_away_advance=0.30
+    )
+    assert home == pytest.approx(C.w_knockout_swing * 0.30)  # favourite win: +6%
+    assert away == pytest.approx(-C.w_knockout_swing * 0.30)  # underdog elim: -6%
+
+
+def test_missing_probability_falls_back_to_flat() -> None:
+    # No win_probability → the flat coefficients (the fallback when no prediction
+    # was captured).
+    assert result_impact_frac(is_group=False, is_winner=True, is_loser=False) == C.w_knockout_win_frac
+    assert result_impact_frac(is_group=False, is_winner=False, is_loser=True) == C.w_knockout_elimination_frac
+    home, away = per_side_impacts(is_group=False, winner=Side.HOME)
+    assert (home, away) == (C.w_knockout_win_frac, C.w_knockout_elimination_frac)
+
+
+def test_plan_settlement_odds_based_underdog_winner_gets_big_reward() -> None:
+    # ARG (away) are heavy underdogs (p_away_adv=0.20) and WIN: +swing*0.80 = +16%.
+    # FRA (home) favourites (p=0.80) eliminated: -swing*0.80 = -16%.
+    ticks = plan_settlement(
+        home_team_id="FRA",
+        away_team_id="ARG",
+        is_group=False,
+        winner=Side.AWAY,
+        roster=[(1, "FRA"), (10, "ARG")],
+        base_by_player={1: 100.0, 10: 100.0},
+        last_price_by_player={1: 100.0, 10: 100.0},
+        rating_by_player={},
+        p_home_advance=0.80,
+        p_away_advance=0.20,
+    )
+    by_player = {t.player_id: t for t in ticks}
+    assert by_player[10].price == pytest.approx(116.0)  # underdog winner +16%
+    assert by_player[1].price == pytest.approx(84.0)  # favourite eliminated -16%
 
 
 # --- settlement planning (the crash) -------------------------------------

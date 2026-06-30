@@ -77,8 +77,13 @@ class PricingCoefficients:
     # +EV for a skilled pick, loss bounded at -20%). Kept in sync with
     # config/pricing.toml. TO BE SUPERSEDED by odds-based settlement (reward scaled
     # by the Sportmonks win probability).
-    w_knockout_win_frac: float = 0.20  # knockout win (team advances)
-    w_knockout_elimination_frac: float = -0.20  # knockout loss (capped from -0.40)
+    # Odds-based knockout settlement: winner +swing*(1-p), loser -swing*p, where p
+    # is the side's stored advance probability. Backing the underdog pays big, the
+    # favourite little (and drops hard on an upset); EV-neutral per side. The
+    # win/elim fracs are the FLAT fallback used when no probability is stored.
+    w_knockout_swing: float = 0.20  # max odds-based knockout move (reached at the extremes)
+    w_knockout_win_frac: float = 0.20  # flat fallback: knockout win when no probability is stored
+    w_knockout_elimination_frac: float = -0.20  # flat fallback: knockout loss when no probability is stored
     w_qualification_frac: float = 0.05  # group qualification (standings-driven, Step 2)
     w_suspension_frac: float = -0.10  # banned for the next match (red / 2-yellow accumulation)
     w_out_of_xi_frac: float = -0.02  # dropped from the XI (started last match, benched this one)

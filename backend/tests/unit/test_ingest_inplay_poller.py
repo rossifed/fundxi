@@ -222,7 +222,8 @@ async def test_poll_uses_correct_endpoint_and_include() -> None:
     assert client.captured_endpoint == "/fixtures/1000"
     assert client.captured_params == {
         "include": (
-            "state;participants;scores;periods;events.type;comments;lineups.position;lineups.details;statistics.type"
+            "state;participants;scores;periods;events.type;comments;lineups.position;lineups.details;"
+            "statistics.type;predictions"
         )
     }
 

@@ -26,10 +26,17 @@ from src.domain.valuation.player_valuation import ValuationSource
 from src.infrastructure.db.models.player import PlayerORM
 from src.infrastructure.db.price_tick_writer import upsert_price_tick
 from src.infrastructure.db.repositories.fixture import SqlAlchemyFixtureRepository
+from src.infrastructure.db.repositories.fixture_prediction import SqlAlchemyFixturePredictionRepository
 from src.infrastructure.valuation.db_starting_price_provider import DbStartingPriceProvider
 from src.infrastructure.valuation.last_tick_provider import last_price_and_rating
 from src.valuation.coefficients import DEFAULT_COEFFICIENTS, PricingCoefficients
-from src.valuation.tournament import Side, decisive_winner, is_group_stage, plan_settlement
+from src.valuation.tournament import (
+    Side,
+    decisive_winner,
+    is_group_stage,
+    knockout_advance_probabilities,
+    plan_settlement,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -96,6 +103,18 @@ async def settle_fixture(
     base_by_player = await DbStartingPriceProvider(session).get_many(player_ids)
     last_price_by_player, rating_by_player = await last_price_and_rating(session, player_ids)
 
+    # Odds-based knockout settlement: scale each side's reward/penalty by its own
+    # advance probability (from the frozen pre-match prediction). Falls back to
+    # the flat coefficients when no prediction is stored (None → plan_settlement
+    # uses w_knockout_win_frac / w_knockout_elimination_frac).
+    p_home_advance = p_away_advance = None
+    if not is_group:
+        prediction = await SqlAlchemyFixturePredictionRepository(session).get_by_fixture_id(fixture_id)
+        if prediction is not None:
+            p_home_advance, p_away_advance = knockout_advance_probabilities(
+                prediction.p_home, prediction.p_draw, prediction.p_away
+            )
+
     ticks = plan_settlement(
         home_team_id=fixture.home_team_id,
         away_team_id=fixture.away_team_id,
@@ -105,6 +124,8 @@ async def settle_fixture(
         base_by_player=base_by_player,
         last_price_by_player=last_price_by_player,
         rating_by_player=rating_by_player,
+        p_home_advance=p_home_advance,
+        p_away_advance=p_away_advance,
         coefficients=coefficients,
     )
 
@@ -138,6 +159,8 @@ async def settle_fixture(
         fixture_id=fixture_id,
         is_group=is_group,
         winner=(winner.value if winner is not None else None),
+        odds_based=p_home_advance is not None,
+        p_home_advance=round(p_home_advance, 3) if p_home_advance is not None else None,
         settled_players=len(ticks),
     )
     return notifications

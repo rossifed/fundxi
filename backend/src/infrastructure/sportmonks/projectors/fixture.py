@@ -190,6 +190,39 @@ def _parse_kickoff(value: object) -> datetime | None:
     return None
 
 
+_FULLTIME_RESULT_PROBABILITY_TYPE_ID = 237
+
+
+def project_fixture_prediction(payload: dict[str, Any]) -> tuple[float, float, float] | None:
+    """``(p_home, p_draw, p_away)`` as fractions summing to 1 from the Sportmonks
+    ``FULLTIME_RESULT_PROBABILITY`` prediction (type 237), or ``None`` when the
+    ``predictions`` include is absent / malformed / lacks that type.
+
+    Sportmonks ships the probabilities as PERCENTAGES (``{"home": 59.7, "draw":
+    21, "away": 19.3}``); we normalise by their sum so the result is a clean
+    probability distribution regardless of rounding. Pure — no I/O. This is the
+    odds-based settlement's input: it scales each side's reward/penalty by how
+    (un)likely its result was."""
+    predictions = payload.get("predictions")
+    items = predictions.get("data") if isinstance(predictions, dict) else predictions
+    if not isinstance(items, list):
+        return None
+    for item in items:
+        if not isinstance(item, dict) or item.get("type_id") != _FULLTIME_RESULT_PROBABILITY_TYPE_ID:
+            continue
+        pred = item.get("predictions")
+        if not isinstance(pred, dict):
+            return None
+        home, draw, away = pred.get("home"), pred.get("draw"), pred.get("away")
+        if not (isinstance(home, int | float) and isinstance(draw, int | float) and isinstance(away, int | float)):
+            return None
+        total = float(home) + float(draw) + float(away)
+        if total <= 0:
+            return None
+        return float(home) / total, float(draw) / total, float(away) / total
+    return None
+
+
 def _phase_name(payload: object) -> str | None:
     """Extract ``.name`` from a Sportmonks ``stage`` / ``round`` include object.
 

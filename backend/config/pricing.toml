@@ -50,8 +50,15 @@ w_group_win_frac = 0.02              # group-stage win
 # odds-based settlement — reward scaled by the Sportmonks win probability so
 # backing the underdog pays big and backing the favorite pays little (and drops
 # hard on an upset). See context/FUNDXI-VALUATION-MODEL.md.
-w_knockout_win_frac = 0.20           # knockout win (team advances)
-w_knockout_elimination_frac = -0.20  # knockout loss (capped from -0.40)
+# Odds-based knockout settlement: when a fixture has a stored win probability p
+# (Sportmonks FULLTIME_RESULT_PROBABILITY, folded to an "advance" prob), the
+# winner gets +swing*(1-p) and the loser -swing*p. So backing the underdog pays
+# big, backing the favourite pays little (and the favourite drops hard on an
+# upset). EV-neutral per side by construction; max swing = w_knockout_swing.
+# When NO probability is stored, settlement falls back to the flat win/elim below.
+w_knockout_swing = 0.20              # max odds-based knockout move (reached at the extremes)
+w_knockout_win_frac = 0.20           # FLAT fallback: knockout win when no probability is stored
+w_knockout_elimination_frac = -0.20  # FLAT fallback: knockout loss when no probability is stored
 w_qualification_frac = 0.05          # group qualification (standings-driven)
 w_suspension_frac = -0.10            # banned next match (red / 2-yellow accumulation)
 w_out_of_xi_frac = -0.02             # dropped from the XI (started last match, benched this one)

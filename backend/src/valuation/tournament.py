@@ -62,24 +62,51 @@ def decisive_winner(home_score: int | None, away_score: int | None) -> Side | No
     return None
 
 
+def knockout_advance_probabilities(p_home: float, p_draw: float, p_away: float) -> tuple[float, float]:
+    """Fold the draw probability onto each side to get the probability each team
+    ADVANCES from a knockout tie: a draw after 90' goes to extra time / penalties,
+    modelled as a 50/50 coin flip. ``p_home_adv = p_home + p_draw/2`` and
+    symmetrically for away. Inputs are normalised defensively (so percentages or
+    a slightly-off sum still yield a clean distribution); the two results sum to 1."""
+    total = p_home + p_draw + p_away
+    if total <= 0:
+        return 0.5, 0.5
+    h, d, a = p_home / total, p_draw / total, p_away / total
+    return h + d / 2.0, a + d / 2.0
+
+
 def result_impact_frac(
     *,
     is_group: bool,
     is_winner: bool,
     is_loser: bool,
+    win_probability: float | None = None,
     coefficients: PricingCoefficients = DEFAULT_COEFFICIENTS,
 ) -> float:
     """The persistent fraction one team's players carry out of a finished match.
 
     Group stage: a win pays ``w_group_win_frac``; draw/loss = 0 (qualification
-    is handled separately). Knockout: a win pays ``w_knockout_win_frac``; a loss
-    is ELIMINATION (``w_knockout_elimination_frac``)."""
+    is handled separately).
+
+    Knockout, ODDS-BASED (``win_probability`` = this side's own advance prob p):
+    a win pays ``+swing*(1-p)`` (the less likely the win, the bigger the reward)
+    and a loss pays ``-swing*p`` (the more expected the win was, the harder the
+    drop). EV-neutral per side by construction. When ``win_probability is None``
+    (no stored prediction) it falls back to the FLAT ``w_knockout_win_frac`` /
+    ``w_knockout_elimination_frac``."""
     if is_group:
         return coefficients.w_group_win_frac if is_winner else 0.0
+    if win_probability is None:
+        if is_winner:
+            return coefficients.w_knockout_win_frac
+        if is_loser:
+            return coefficients.w_knockout_elimination_frac
+        return 0.0
+    p = min(1.0, max(0.0, win_probability))
     if is_winner:
-        return coefficients.w_knockout_win_frac
+        return coefficients.w_knockout_swing * (1.0 - p)
     if is_loser:
-        return coefficients.w_knockout_elimination_frac
+        return -coefficients.w_knockout_swing * p
     return 0.0
 
 
@@ -87,12 +114,18 @@ def per_side_impacts(
     *,
     is_group: bool,
     winner: Side | None,
+    p_home_advance: float | None = None,
+    p_away_advance: float | None = None,
     coefficients: PricingCoefficients = DEFAULT_COEFFICIENTS,
 ) -> tuple[float, float]:
     """``(home_impact, away_impact)`` for a finished fixture. ``winner=None``
     means a draw (group) or an undetermined knockout — both yield ``(0, 0)``;
     for knockouts the caller is expected to skip on ``None`` rather than settle
-    a no-op."""
+    a no-op.
+
+    ``p_*_advance`` are each side's own probability of advancing (from the stored
+    prediction). When supplied, the knockout impact is odds-based; when ``None``
+    it falls back to the flat coefficients."""
     home_winner = winner is Side.HOME
     away_winner = winner is Side.AWAY
     # In a knockout the non-winning side is eliminated; in a group nobody is a
@@ -100,10 +133,18 @@ def per_side_impacts(
     home_loser = (not is_group) and away_winner
     away_loser = (not is_group) and home_winner
     home = result_impact_frac(
-        is_group=is_group, is_winner=home_winner, is_loser=home_loser, coefficients=coefficients
+        is_group=is_group,
+        is_winner=home_winner,
+        is_loser=home_loser,
+        win_probability=p_home_advance,
+        coefficients=coefficients,
     )
     away = result_impact_frac(
-        is_group=is_group, is_winner=away_winner, is_loser=away_loser, coefficients=coefficients
+        is_group=is_group,
+        is_winner=away_winner,
+        is_loser=away_loser,
+        win_probability=p_away_advance,
+        coefficients=coefficients,
     )
     return home, away
 
@@ -280,6 +321,8 @@ def plan_settlement(
     base_by_player: Mapping[int, float | None],
     last_price_by_player: Mapping[int, float],
     rating_by_player: Mapping[int, float],
+    p_home_advance: float | None = None,
+    p_away_advance: float | None = None,
     coefficients: PricingCoefficients = DEFAULT_COEFFICIENTS,
 ) -> list[SettlementTick]:
     """Pure settlement plan for BOTH teams' rosters (starters + bench: the whole
@@ -287,10 +330,20 @@ def plan_settlement(
     non-zero result impact, who has a real base value (un-seeded → skipped,
     never synthesised), and whose price actually moves.
 
+    ``p_*_advance`` are each side's own advance probability; when supplied the
+    knockout impact is odds-based (winner ``+swing*(1-p)``, loser ``-swing*p``),
+    otherwise it falls back to the flat coefficients.
+
     ``last_price_by_player`` falls back to the base value when a player has no
     prior tick (his current worth IS his base); ``rating_by_player`` falls back
     to the neutral baseline rating."""
-    home_impact, away_impact = per_side_impacts(is_group=is_group, winner=winner, coefficients=coefficients)
+    home_impact, away_impact = per_side_impacts(
+        is_group=is_group,
+        winner=winner,
+        p_home_advance=p_home_advance,
+        p_away_advance=p_away_advance,
+        coefficients=coefficients,
+    )
     impact_by_team = {home_team_id: home_impact, away_team_id: away_impact}
 
     ticks: list[SettlementTick] = []

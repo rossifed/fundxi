@@ -7,6 +7,7 @@ from src.infrastructure.db.models.activity_event import ActivityEventORM
 from src.infrastructure.db.models.announcement import AnnouncementAckORM, AnnouncementORM
 from src.infrastructure.db.models.coach import CoachORM
 from src.infrastructure.db.models.fixture import FixtureORM
+from src.infrastructure.db.models.fixture_prediction import FixturePredictionORM
 from src.infrastructure.db.models.fixture_state_event import FixtureStateEventORM
 from src.infrastructure.db.models.league import LeagueMemberORM, LeagueORM
 from src.infrastructure.db.models.lineup import LineupORM
@@ -33,6 +34,7 @@ __all__ = [
     "AnnouncementORM",
     "CoachORM",
     "FixtureORM",
+    "FixturePredictionORM",
     "FixtureStateEventORM",
     "HoldingORM",
     "LeagueMemberORM",

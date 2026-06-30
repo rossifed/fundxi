@@ -5,7 +5,7 @@ from datetime import datetime
 import pytest
 
 from src.domain.match.fixture import FixtureStatus
-from src.infrastructure.sportmonks.projectors.fixture import project_fixture
+from src.infrastructure.sportmonks.projectors.fixture import project_fixture, project_fixture_prediction
 
 # Sportmonks team id -> internal id. Home/away are resolved through this map by
 # the stable numeric team id, never by the drift-prone short_code.
@@ -243,3 +243,37 @@ def test_project_fixture_unparseable_kickoff_yields_none() -> None:
     }
     fixture, _ = project_fixture(payload, group="A", team_id_by_sportmonks=_TEAM_MAP)
     assert fixture.kickoff_at is None
+
+
+# --- prediction projector (FULLTIME_RESULT_PROBABILITY, type 237) ----------
+
+
+def test_project_fixture_prediction_normalises_percentages() -> None:
+    # Sportmonks ships percentages; we normalise to fractions summing to 1.
+    payload = {
+        "predictions": [
+            {"type_id": 100, "predictions": {"yes": 30.0, "no": 70.0}},  # other type, ignored
+            {"type_id": 237, "predictions": {"home": 59.7, "draw": 21.0, "away": 19.3}},
+        ]
+    }
+    result = project_fixture_prediction(payload)
+    assert result is not None
+    p_home, p_draw, p_away = result
+    assert p_home + p_draw + p_away == pytest.approx(1.0)
+    assert p_home == pytest.approx(0.597)
+    assert p_away == pytest.approx(0.193)
+
+
+def test_project_fixture_prediction_accepts_wrapped_data_list() -> None:
+    # The include can arrive as {"data": [...]} depending on the call shape.
+    payload = {"predictions": {"data": [{"type_id": 237, "predictions": {"home": 50, "draw": 0, "away": 50}}]}}
+    result = project_fixture_prediction(payload)
+    assert result == pytest.approx((0.5, 0.0, 0.5))
+
+
+def test_project_fixture_prediction_absent_or_malformed_is_none() -> None:
+    assert project_fixture_prediction({}) is None  # no predictions include
+    assert project_fixture_prediction({"predictions": []}) is None  # empty
+    assert project_fixture_prediction({"predictions": [{"type_id": 999}]}) is None  # wrong type
+    # type 237 present but values missing → None, never raises.
+    assert project_fixture_prediction({"predictions": [{"type_id": 237, "predictions": {"home": 50}}]}) is None

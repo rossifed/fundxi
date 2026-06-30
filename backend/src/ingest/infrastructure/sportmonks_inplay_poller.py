@@ -36,9 +36,11 @@ from src.application.bootstrap import bootstrap_player_stats
 from src.application.reconcile_var_disallowed_goals import reconcile_var_disallowed_goals
 from src.application.settle_fixture import settle_fixture
 from src.domain.match.fixture import Fixture, FixtureStatus
+from src.domain.match.fixture_prediction import FixturePrediction
 from src.domain.match.player_match_stat import PlayerMatchStat
 from src.infrastructure.db.price_tick_writer import upsert_price_tick
 from src.infrastructure.db.repositories.fixture import SqlAlchemyFixtureRepository
+from src.infrastructure.db.repositories.fixture_prediction import SqlAlchemyFixturePredictionRepository
 from src.infrastructure.db.repositories.lineup import SqlAlchemyLineupRepository
 from src.infrastructure.db.repositories.match_comment import SqlAlchemyMatchCommentRepository
 from src.infrastructure.db.repositories.match_event import SqlAlchemyMatchEventRepository
@@ -52,6 +54,7 @@ from src.infrastructure.sportmonks.client import SportmonksClient, SportmonksErr
 from src.infrastructure.sportmonks.projectors.fixture import (
     penalty_shootout_winner,
     project_fixture,
+    project_fixture_prediction,
     project_fixture_state,
 )
 from src.infrastructure.sportmonks.projectors.lineup import project_lineup
@@ -76,7 +79,7 @@ log = structlog.get_logger(__name__)
 # in v3, but listing them explicitly makes the contract self-documenting
 # and lets us add fields without ambiguity later.
 _INPLAY_INCLUDE = (
-    "state;participants;scores;periods;events.type;comments;lineups.position;lineups.details;statistics.type"
+    "state;participants;scores;periods;events.type;comments;lineups.position;lineups.details;statistics.type;predictions"
 )
 
 # Subject prefix every per-player price tick is published under (live, settlement,
@@ -211,6 +214,10 @@ class SportmonksInplayPoller:
         lineups_payload = _array(data.get("lineups"))
         fixture = await self._project_fixture(session=session, fixture_payload=data)
         fixture_updated = fixture is not None
+        # Freeze the pre-match win probability while the fixture is still upcoming
+        # (last write before kick-off = the "market price" the odds-based knockout
+        # settlement reads). Stops overwriting once the match is live/finished.
+        await self._capture_prediction_if_upcoming(session=session, fixture=fixture, payload=data)
         events_count = await self._project_events(
             session=session,
             events_payload=_array(data.get("events")),
@@ -350,6 +357,29 @@ class SportmonksInplayPoller:
             return None
         await SqlAlchemyFixtureRepository(session).upsert_by_sportmonks_id(fixture, sportmonks_id=smk_id)
         return fixture
+
+    async def _capture_prediction_if_upcoming(
+        self, *, session: AsyncSession, fixture: Fixture | None, payload: dict[str, Any]
+    ) -> None:
+        """Upsert the fixture's frozen pre-match result probability, but ONLY while
+        it is still upcoming — the last pre-kickoff write is the value the
+        odds-based settlement uses. A no-op once the match is live/finished (so a
+        live swing never rewrites the price the bet was struck at) and when the
+        ``predictions`` include is absent."""
+        if fixture is None or fixture.status is not FixtureStatus.UPCOMING:
+            return
+        probs = project_fixture_prediction(payload)
+        if probs is None:
+            return
+        await SqlAlchemyFixturePredictionRepository(session).upsert(
+            FixturePrediction(
+                fixture_id=self.fixture_internal_id,
+                p_home=probs[0],
+                p_draw=probs[1],
+                p_away=probs[2],
+            ),
+            source="sportmonks:237",
+        )
 
     async def _settle_if_finished(
         self,
