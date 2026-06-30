@@ -210,8 +210,9 @@ async def test_fixture_leaving_window_cancels_its_poller() -> None:
     await _settle()
     assert factory.created[1].started.is_set()
 
-    # Advance far past the post-FT window: poller should be cancelled.
-    clock.advance(minutes=200)
+    # Advance far past the post-FT window (kickoff + 210 max-duration + 15
+    # post-ft = 225'): poller should be cancelled.
+    clock.advance(minutes=240)
     await sup.tick()
     await _settle(times=3)
 

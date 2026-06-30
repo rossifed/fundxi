@@ -26,32 +26,37 @@ from typing import Any, cast
 
 from src.domain.match.fixture import Fixture, FixtureStatus
 
-_LIVE_STATES = {
-    "INPLAY_1ST_HALF",
-    "INPLAY_2ND_HALF",
-    "HT",
-    "BREAK",
-    "EXTRA_TIME",
-    "PEN_LIVE",
-    "INPLAY_ET",
-}
-_FINISHED_STATES = {"FT", "AET", "FT_PEN", "POSTPONED", "CANCELLED", "ABANDONED", "AWARDED"}
+# The coarse status is derived from the TWO CLOSED sets — not-started and
+# terminal — and EVERYTHING ELSE is treated as live. The live phase is
+# open-ended (Sportmonks ships many in-play sub-states: HT, BREAK, INPLAY_ET,
+# EXTRA_TIME_BREAK, PEN_BREAK, penalties, SUSPENDED, ...), so enumerating it is
+# fragile: any sub-state we forgot would silently fall through to "upcoming" and
+# REGRESS a started fixture to "not played". That is the Germany-Paraguay bug —
+# the match reached EXTRA_TIME_BREAK (a live sub-state we hadn't listed) and the
+# fixture flipped back to upcoming mid-extra-time. Not-started (NS/TBA/DELAYED)
+# and terminal (FT/AET/FT_PEN/...) ARE closed, well-known sets, so we match
+# those explicitly and let any other present state mean "in progress".
+_FINISHED_STATES = {"FT", "AET", "FT_PEN", "POSTPONED", "CANCELLED", "ABANDONED", "AWARDED", "WALKOVER"}
 _UPCOMING_STATES = {"NS", "TBA", "DELAYED"}
 
 
 def _project_status(state_payload: object) -> FixtureStatus:
+    # A missing / malformed state block is genuine absence of phase info → the
+    # conservative "not started" default (never fabricate a live/finished match).
     if not isinstance(state_payload, dict):
         return FixtureStatus.UPCOMING
     code = cast(dict[str, Any], state_payload).get("state")
     if not isinstance(code, str):
         return FixtureStatus.UPCOMING
-    if code in _LIVE_STATES:
-        return FixtureStatus.LIVE
-    if code in _FINISHED_STATES:
-        return FixtureStatus.FINISHED
     if code in _UPCOMING_STATES:
         return FixtureStatus.UPCOMING
-    return FixtureStatus.UPCOMING
+    if code in _FINISHED_STATES:
+        return FixtureStatus.FINISHED
+    # A PRESENT but unrecognised code = the match has a phase that is neither
+    # explicitly not-started nor explicitly terminal → it is in progress. This
+    # keeps a started fixture LIVE through any unmapped in-play sub-state instead
+    # of regressing it to "upcoming".
+    return FixtureStatus.LIVE
 
 
 def project_fixture_state(payload: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:

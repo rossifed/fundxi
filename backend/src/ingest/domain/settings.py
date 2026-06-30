@@ -33,8 +33,15 @@ class IngestionSettings(BaseSettings):
     inplay_post_ft_window_min: int = 15
     # Hard upper bound on the in-game duration we'll poll a fixture for,
     # in case the FT status is never observed (network glitch, etc.).
-    # 130 min covers 90 + extra time + penalties.
-    inplay_max_match_duration_min: int = 130
+    # MUST cover the worst case: a knockout decided on penalties, measured from
+    # kickoff to FT_PEN — 90' + stoppage + 15' HT + 30' extra time + the breaks
+    # before/between ET halves and before the shootout + the shootout itself
+    # ≈ 185-195 min (observed live on WC2026 R32: Germany-Paraguay reached
+    # EXTRA_TIME_BREAK at kickoff+143', Netherlands-Morocco INPLAY_ET 108' at
+    # kickoff+142'). The previous 130' closed the window (kickoff+145' with
+    # post_ft) DURING extra time, so the poller was reaped before FT and those
+    # matches never settled. 210' gives ~15' headroom past the worst case.
+    inplay_max_match_duration_min: int = 210
 
     # ----- Side pollers ---------------------------------------------------
     standings_poll_seconds: float = 300.0  # 5 min

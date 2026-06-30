@@ -12,8 +12,11 @@ def is_in_inplay_window(
     now: datetime,
     kickoff_at: datetime,
     pre_kickoff_min: int,
+    # Default must cover a knockout decided on penalties (kickoff → FT_PEN
+    # ≈ 185-195'); see IngestionSettings.inplay_max_match_duration_min. Callers
+    # (the supervisor) always pass the configured value explicitly.
     post_ft_min: int,
-    max_match_duration_min: int = 130,
+    max_match_duration_min: int = 210,
 ) -> bool:
     """Return ``True`` iff ``now`` falls within the polling envelope.
 

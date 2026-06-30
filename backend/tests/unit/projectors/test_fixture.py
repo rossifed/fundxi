@@ -176,15 +176,37 @@ def test_project_fixture_finished() -> None:
     assert fixture.status is FixtureStatus.FINISHED
 
 
-def test_project_fixture_unknown_state_falls_back_to_upcoming() -> None:
+@pytest.mark.parametrize("state_code", ["AET", "FT_PEN"])
+def test_project_fixture_extra_time_and_penalty_finish_are_finished(state_code: str) -> None:
+    """A knockout decided after extra time (AET) or on penalties (FT_PEN) is
+    FINISHED — these are the real Sportmonks terminal codes for knockouts and
+    must settle exactly like a regulation FT."""
     payload = {
         "id": 3,
-        "starting_at": "2026-06-12 20:00:00",
-        "state": {"state": "NEW_FANCY_STATE"},
+        "starting_at": "2026-06-29 20:30:00",
+        "state": {"state": state_code},
         "participants": _participants(),
     }
-    fixture, _ = project_fixture(payload, group="A", team_id_by_sportmonks=_TEAM_MAP)
-    assert fixture.status is FixtureStatus.UPCOMING
+    fixture, _ = project_fixture(payload, group="", team_id_by_sportmonks=_TEAM_MAP)
+    assert fixture.status is FixtureStatus.FINISHED
+
+
+@pytest.mark.parametrize("state_code", ["EXTRA_TIME_BREAK", "PEN_BREAK", "NEW_FANCY_STATE"])
+def test_project_fixture_unmapped_inplay_state_stays_live(state_code: str) -> None:
+    """Regression (WC2026 R32 Germany-Paraguay): a PRESENT but unenumerated
+    in-play sub-state must keep a started fixture LIVE, never regress it to
+    UPCOMING. The live phase is open-ended — only not-started and terminal codes
+    are closed sets — so anything else means the match is in progress.
+    ``EXTRA_TIME_BREAK`` (break between extra-time halves) was the exact state
+    that flipped the fixture back to 'upcoming' mid-match."""
+    payload = {
+        "id": 3,
+        "starting_at": "2026-06-29 20:30:00",
+        "state": {"state": state_code},
+        "participants": _participants(),
+    }
+    fixture, _ = project_fixture(payload, group="", team_id_by_sportmonks=_TEAM_MAP)
+    assert fixture.status is FixtureStatus.LIVE
 
 
 def test_project_fixture_missing_state_falls_back_to_upcoming() -> None:

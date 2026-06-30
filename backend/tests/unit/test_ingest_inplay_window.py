@@ -33,7 +33,7 @@ def test_during_match_returns_true() -> None:
 
 
 def test_within_post_ft_window_returns_true() -> None:
-    # 90 minutes match + 40 minutes extra time/penalties (max_duration_min=130) + 15 minutes post = 145 max
+    # kickoff + max_match_duration_min (helper default 130) + post (15) = 145 max
     assert _check(offset_min=130) is True
     assert _check(offset_min=145) is True
 
@@ -41,6 +41,19 @@ def test_within_post_ft_window_returns_true() -> None:
 def test_strictly_after_post_ft_window_returns_false() -> None:
     assert _check(offset_min=146) is False
     assert _check(offset_min=200) is False
+
+
+def test_default_window_covers_penalty_shootout_knockout() -> None:
+    """Regression: a knockout decided on penalties runs ~185-195' from kickoff.
+    The default window (max_match_duration_min=210 + post_ft) must still be open
+    then, so the poller observes FT_PEN and settles — the previous 130' default
+    closed the window mid-extra-time and the match never settled."""
+    assert is_in_inplay_window(
+        now=_KICKOFF + timedelta(minutes=195),
+        kickoff_at=_KICKOFF,
+        pre_kickoff_min=60,
+        post_ft_min=15,
+    ) is True
 
 
 def test_window_respects_custom_pre_post_settings() -> None:
