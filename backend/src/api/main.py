@@ -1,10 +1,11 @@
 import logging
 import os
 from pathlib import Path
+from typing import Any
 
 import sentry_sdk
 import structlog
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -109,15 +110,29 @@ _web_dist_env = os.environ.get("WEB_DIST_DIR")
 if _web_dist_env and Path(_web_dist_env).is_dir():
     _web_dist = Path(_web_dist_env).resolve()
     _assets = _web_dist / "assets"
+
+    class _ImmutableStaticFiles(StaticFiles):
+        """Vite content-hashes every /assets filename, so a given URL can
+        never change content — cache it forever. A new deploy ships new
+        URLs via a fresh index.html."""
+
+        async def get_response(self, path: str, scope: Any) -> Response:
+            response = await super().get_response(path, scope)
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            return response
+
     if _assets.is_dir():
-        app.mount("/assets", StaticFiles(directory=str(_assets)), name="assets")
+        app.mount("/assets", _ImmutableStaticFiles(directory=str(_assets)), name="assets")
 
     @app.get("/{full_path:path}")
     async def spa_fallback(full_path: str) -> FileResponse:
         # Serve the real file when it exists (favicon, images, …); otherwise
         # return index.html so the SPA router handles the route. Guard against
         # path traversal by ensuring the resolved path stays inside the dist.
+        # index.html (and any un-hashed file) must REVALIDATE on every load:
+        # without Cache-Control browsers cache it heuristically and phones
+        # keep serving a stale app long after a deploy.
         candidate = (_web_dist / full_path).resolve()
         if full_path and candidate.is_file() and candidate.is_relative_to(_web_dist):
-            return FileResponse(candidate)
-        return FileResponse(_web_dist / "index.html")
+            return FileResponse(candidate, headers={"Cache-Control": "no-cache"})
+        return FileResponse(_web_dist / "index.html", headers={"Cache-Control": "no-cache"})
