@@ -38,7 +38,9 @@ _TYPE_LABEL: dict[MatchEventType, str] = {
     MatchEventType.OWN_GOAL: "⚽",
     MatchEventType.YELLOW_CARD: "🟨",
     MatchEventType.RED_CARD: "🟥",
-    MatchEventType.YELLOW_RED_CARD: "🟥",
+    # Second yellow → sending-off: combined icon so counting the timeline
+    # matches the discipline counters (2 yellows + 1 red convention).
+    MatchEventType.YELLOW_RED_CARD: "🟨🟥",
     MatchEventType.SUBSTITUTION: "🔄",
     MatchEventType.VAR: "📺",
     MatchEventType.INJURY: "🏥",

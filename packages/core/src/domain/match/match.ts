@@ -25,7 +25,7 @@ export interface MatchPlayer {
 export interface MatchEvent {
   minute: number;
   extra_minute?: number;
-  type: string; // emoji discriminator: ⚽ 🟨 🔄 🧤 📊
+  type: string; // emoji discriminator: ⚽ 🟨 🟥 🟨🟥 (2nd yellow) 🔄 🧤 📊
   player_id: number;
   player_name?: string;
   // The "other" player in a substitution (player going OFF) or the

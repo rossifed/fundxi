@@ -82,6 +82,12 @@ function count_events(events: MatchEvent[]): Map<number, EventCounts> {
     else if (GOAL_GLYPHS.has(e.type)) bump(e.player_id, "goals");
     else if (e.type === "🟨") bump(e.player_id, "yellow");
     else if (e.type === "🟥") bump(e.player_id, "red");
+    else if (e.type === "🟨🟥") {
+      // Second yellow → sending-off: both a yellow and a red (Google
+      // convention, same rule as the backend discipline views).
+      bump(e.player_id, "yellow");
+      bump(e.player_id, "red");
+    }
   }
   return map;
 }

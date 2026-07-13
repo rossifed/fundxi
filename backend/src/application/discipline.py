@@ -2,8 +2,11 @@
 
 DDD role: Read-model query service. The single Python gateway to the
 ``core.player_fixture_discipline`` / ``core.player_season_discipline`` views
-(created in Alembic 0044), which own the ONE definition of card semantics:
-yellow = ``yellow_card`` events; red = ``red_card`` + ``yellow_red_card``.
+(Alembic 0044, convention fixed in 0045), which own the ONE definition of
+card semantics — the Google convention: a second yellow is BOTH cards.
+yellow = ``yellow_card`` + ``yellow_red_card`` events;
+red    = ``red_card``    + ``yellow_red_card`` events.
+A sent-off-for-two-yellows player therefore shows 2 yellows + 1 red.
 
 Why event-derived: ``core.match_event`` is reconciled live against the
 provider feed on every poll, so counts read here move DURING a match and are

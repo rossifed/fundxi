@@ -8,9 +8,13 @@
  *
  * Event ``type`` arrives from the BFF as an emoji glyph (see
  * fixtures router _TYPE_LABEL): "⚽" / "🎯" for goals & penalties
- * (own goals also map to "⚽"), "🟨" yellow, "🟥" red (incl. yellow-
- * then-red). We deliberately reuse the provider's own glyph mapping
- * end-to-end — no parallel taxonomy.
+ * (own goals also map to "⚽"), "🟨" yellow, "🟥" straight red,
+ * "🟨🟥" second yellow → sending-off. We deliberately reuse the
+ * provider's own glyph mapping end-to-end — no parallel taxonomy.
+ *
+ * Card counting follows the Google convention: a second yellow counts
+ * as BOTH a yellow (the player really got two) and a red (sent off) —
+ * same rule as the backend discipline views (migration 0045).
  */
 
 import type { CSSProperties } from "react";
@@ -36,6 +40,11 @@ export function count_match_events(events: MatchEvent[]): Map<number, MatchEvent
     else if (ev.type === "⚽" || ev.type === "🎯") c.goals += 1;
     else if (ev.type === "🟨") c.yellow += 1;
     else if (ev.type === "🟥") c.red += 1;
+    else if (ev.type === "🟨🟥") {
+      // Second yellow → sending-off: both a yellow and a red.
+      c.yellow += 1;
+      c.red += 1;
+    }
     m.set(ev.player_id, c);
   }
   return m;
