@@ -1,6 +1,6 @@
 """/api/players router."""
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select, text
@@ -21,6 +21,7 @@ from src.api.dtos.player_match import PlayerMatchEntryResponse
 from src.api.dtos.player_screener import PlayerScreenerEntryResponse
 from src.api.dtos.player_stat import PlayerTournamentStatResponse
 from src.api.dtos.price_history import PriceHistoryResponse, PricePoint
+from src.application.discipline import DISCIPLINE_ZERO, season_discipline
 from src.application.queries import (
     get_player,
     list_players,
@@ -124,14 +125,18 @@ async def players_search(
                 PlayerTournamentStatORM.season_id == season_id,
             )
         )
+        # Cards are event-derived (live, timeline-coherent) — never the
+        # Sportmonks aggregate columns. See src/application/discipline.py.
+        cards = await season_discipline(session, player_ids=player_ids, season_id=season_id)
         for orm in stat_rows.scalars():
+            disc = cards.get(orm.player_id, DISCIPLINE_ZERO)
             stats_by_player[orm.player_id] = PlayerStatsBrief(
                 appearances=orm.appearances,
                 minutes_played=orm.minutes_played,
                 goals=orm.goals,
                 assists=orm.assists,
-                yellow_cards=orm.yellow_cards,
-                red_cards=orm.red_cards,
+                yellow_cards=disc.yellow_cards,
+                red_cards=disc.red_cards,
                 passes_accuracy=float(orm.passes_accuracy) if orm.passes_accuracy is not None else None,
                 rating_avg=float(orm.rating_avg) if orm.rating_avg is not None else None,
             )
@@ -201,6 +206,11 @@ async def players_tournament_stats(
     stat = await repo.get_for_player_season(player_id=player_id, season_id=target_season)
     if stat is None:
         return None
+    # Cards are event-derived (live, timeline-coherent) — never the Sportmonks
+    # aggregate columns. See src/application/discipline.py.
+    cards = await season_discipline(session, player_ids=[player_id], season_id=target_season)
+    disc = cards.get(player_id, DISCIPLINE_ZERO)
+    stat = replace(stat, yellow_cards=disc.yellow_cards, red_cards=disc.red_cards)
     return PlayerTournamentStatResponse.from_domain(stat)
 
 
@@ -250,12 +260,10 @@ async def players_matches(
               COUNT(*) FILTER (
                 WHERE e.related_player_id = :pid AND e.type IN ('goal', 'penalty')
               ) AS assists,
-              COUNT(*) FILTER (
-                WHERE e.player_id = :pid AND e.type = 'yellow_card'
-              ) AS yellow_cards,
-              COUNT(*) FILTER (
-                WHERE e.player_id = :pid AND e.type IN ('red_card', 'yellow_red_card')
-              ) AS red_cards,
+              -- Cards come from the single event-derived definition
+              -- (core.player_fixture_discipline) — never recount inline.
+              COALESCE(pfd.yellow_cards, 0) AS yellow_cards,
+              COALESCE(pfd.red_cards, 0) AS red_cards,
               -- pre-match price = latest tick BEFORE the fixture's first tick
               -- (so the first event's price impact is captured by in_match_pct)
               (
@@ -281,6 +289,8 @@ async def players_matches(
             FROM core.fixture f
             LEFT JOIN core.lineup l ON l.fixture_id = f.id AND l.player_id = :pid
             LEFT JOIN core.match_event e ON e.fixture_id = f.id
+            LEFT JOIN core.player_fixture_discipline pfd
+              ON pfd.fixture_id = f.id AND pfd.player_id = :pid
             WHERE
               l.id IS NOT NULL
               OR (
@@ -292,7 +302,8 @@ async def players_matches(
               )
             GROUP BY
               f.id, f.kickoff_at, f.home_team_id, f.away_team_id,
-              f.home_score, f.away_score, f.status, l.team_id, l.role
+              f.home_score, f.away_score, f.status, l.team_id, l.role,
+              pfd.yellow_cards, pfd.red_cards
             ORDER BY f.kickoff_at DESC NULLS LAST
             """
         ),

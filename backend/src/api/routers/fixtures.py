@@ -1,5 +1,7 @@
 """/api/fixtures router."""
 
+from dataclasses import replace
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +17,7 @@ from src.api.dtos.match import MatchEventDTO, MatchPlayerResponse, MatchResponse
 from src.api.dtos.match_comment import MatchCommentResponse
 from src.api.dtos.match_player_stat import FixturePlayerStatResponse
 from src.api.dtos.news import NewsResponse
+from src.application.discipline import DISCIPLINE_ZERO, fixture_discipline
 from src.application.get_match import MatchPlayerView, get_match_view
 from src.application.queries import get_fixture, get_live_fixture, list_fixtures
 from src.config import get_settings
@@ -191,9 +194,21 @@ async def fixtures_player_stats(
     """Per-player live match stats (rating, xG, shots, key passes, pass%, …)
     from ``core.player_match_stat`` — the Sportmonks ``lineups.details``
     projection written by the live ingest. Empty list until stats have been
-    ingested for this fixture (pre-kickoff, or a fixture never polled live)."""
+    ingested for this fixture (pre-kickoff, or a fixture never polled live).
+
+    Cards are OVERRIDDEN with the event-derived counts (live, equal to the
+    displayed timeline by construction) — see src/application/discipline.py."""
     repo = SqlAlchemyPlayerMatchStatRepository(session)
     stats = await repo.list_by_fixture(fixture_id)
+    cards = await fixture_discipline(session, fixture_id=fixture_id)
+    stats = [
+        replace(
+            s,
+            yellow_cards=cards.get(s.player_id, DISCIPLINE_ZERO).yellow_cards,
+            red_cards=cards.get(s.player_id, DISCIPLINE_ZERO).red_cards,
+        )
+        for s in stats
+    ]
     return [FixturePlayerStatResponse.from_domain(s) for s in stats]
 
 

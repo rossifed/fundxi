@@ -29,13 +29,21 @@ _SCREENER_SQL = text(
       p.id, p.name, p.full_name, p.jersey_number, p.team_id, p.position,
       p.detailed_position, p.age, p.foot, p.height, p.weight, p.club, p.image_path,
       ts.appearances, ts.minutes_played, ts.goals, ts.assists,
-      ts.yellow_cards, ts.red_cards, ts.shots_total, ts.shots_on_target,
+      -- Cards are event-derived (core.player_season_discipline, live and
+      -- timeline-coherent), never the Sportmonks aggregate columns. A player
+      -- with a stat row but no card row genuinely has 0 cards; without a stat
+      -- row the whole stat slice stays NULL (never featured).
+      CASE WHEN ts.player_id IS NOT NULL THEN COALESCE(sd.yellow_cards, 0) END AS yellow_cards,
+      CASE WHEN ts.player_id IS NOT NULL THEN COALESCE(sd.red_cards, 0) END AS red_cards,
+      ts.shots_total, ts.shots_on_target,
       ts.key_passes, ts.passes_total, ts.passes_accuracy, ts.rating_avg,
       COALESCE(h.shares, 0) AS held_shares,
       h.average_buy_price
     FROM core.player p
     LEFT JOIN core.player_tournament_stat ts
       ON ts.player_id = p.id AND ts.season_id = :season_id
+    LEFT JOIN core.player_season_discipline sd
+      ON sd.player_id = p.id AND sd.season_id = :season_id
     LEFT JOIN app.holding h
       ON h.player_id = p.id AND h.portfolio_id = :portfolio_id
     ORDER BY p.id
