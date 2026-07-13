@@ -97,22 +97,27 @@ export const PlayerSheet = forwardRef<PlayerSheetHandle, object>(function Player
   );
 
   // Sticky trade bar pinned to the bottom of the sheet — Buy/Sell stay visible
-  // without scrolling, whatever the content length.
+  // without scrolling, whatever the content length. HIDDEN while the trade
+  // sheet is stacked on top: dimmed behind the backdrop the pair still read as
+  // two dead action buttons competing with the trade confirm (UX feedback
+  // 2026-07-13, mirrors the web PlayerSheet).
   const render_footer = (props: BottomSheetFooterProps) => (
     <BottomSheetFooter {...props} bottomInset={0}>
-      <View style={styles.footer}>
-        <Pressable style={[styles.trade_btn, { backgroundColor: palette.actionBuy }]} onPress={() => gate_trade("buy")}>
-          <Text style={styles.trade_label}>Buy</Text>
-        </Pressable>
-        {/* Long-only: Sell stays visible but disabled until you hold the player. */}
-        <Pressable
-          disabled={!has_position}
-          style={[styles.trade_btn, { backgroundColor: palette.actionSell }, !has_position && { opacity: 0.35 }]}
-          onPress={() => gate_trade("sell")}
-        >
-          <Text style={styles.trade_label}>Sell</Text>
-        </Pressable>
-      </View>
+      {trade_kind === null ? (
+        <View style={styles.footer}>
+          <Pressable style={[styles.trade_btn, { backgroundColor: palette.actionBuy }]} onPress={() => gate_trade("buy")}>
+            <Text style={styles.trade_label}>Buy</Text>
+          </Pressable>
+          {/* Long-only: Sell stays visible but disabled until you hold the player. */}
+          <Pressable
+            disabled={!has_position}
+            style={[styles.trade_btn, { backgroundColor: palette.actionSell }, !has_position && { opacity: 0.35 }]}
+            onPress={() => gate_trade("sell")}
+          >
+            <Text style={styles.trade_label}>Sell</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </BottomSheetFooter>
   );
 

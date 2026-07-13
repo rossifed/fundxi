@@ -265,9 +265,14 @@ export function PlayerSheet({
   // Fixtures/Statistics tab and the match log are all visible — the desktop
   // two-pane layout hid the whole left column on a narrow screen. Buy/Sell
   // live in a sticky footer (mirrors the native PlayerSheet). ──
+  // While an overlay (trade / close-position / auth) is stacked on top, the
+  // sticky Buy/Sell footer is HIDDEN: dimmed behind the backdrop it still
+  // peeked just above the trade sheet and read as two dead action buttons
+  // competing with the real confirm (UX feedback 2026-07-13).
+  const overlay_open = trade_dialog_kind !== null || close_open || auth_prompt_open;
   if (is_mobile) {
     return (
-      <Sheet open={true} on_close={on_close} max_width={1080} footer={buy_sell}>
+      <Sheet open={true} on_close={on_close} max_width={1080} footer={overlay_open ? undefined : buy_sell}>
         <div style={{ display: "flex", flexDirection: "column" }}>
           {header}
           <div style={{ padding: "16px 16px 8px", display: "flex", flexDirection: "column", gap: 16 }}>
