@@ -1,13 +1,19 @@
 // TradeDialog — buy/sell order entry (form -> submitting -> done).
 //
 // DDD role: UI presentation. A faithful web counterpart of the native
-// TradeSheet (apps/mobile/components/TradeSheet.tsx): title + value line,
-// Buy/Sell toggle, Percent/Shares mode, one slider (+ percent presets), a flat
+// TradeSheet (apps/mobile/components/TradeSheet.tsx): side-coloured title +
+// value line, Percent/Shares mode, one slider (+ percent presets), a flat
 // preview list, and a single confirm button; an inline "Bought/Sold -> Done"
 // success state. Numbers come from the shared ``simulate_trade`` (core) and the
 // order is placed via ``trades_api.execute`` — the same surface mobile uses, so
 // the two cannot diverge. Presented through the shared Sheet (centred modal on
 // desktop, bottom-sheet on phone).
+//
+// The side (buy vs sell) is decided by the OPENER — the Buy / Sell buttons on
+// the player sheet / card / team page — and is fixed for the dialog's life.
+// There is deliberately NO in-dialog side toggle: a segmented Buy|Sell row
+// above the real confirm button read as competing action buttons (UX feedback
+// 2026-07-13) — one dialog, one button.
 
 import { useEffect, useState } from "react";
 import { portfolio_api } from "@fundxi/core/api/portfolio_api";
@@ -58,7 +64,6 @@ export function TradeDialog({
   const valuation = valuations_api.get_for_player(player.id);
   const current_price = current_price_override ?? valuation?.current_price ?? 0;
 
-  const [kind_state, set_kind] = useState<Kind>(initial_kind);
   const [mode, set_mode] = useState<TradeMode>("percentage");
   const [percentage, set_percentage] = useState(10);
   const [shares, set_shares] = useState(0);
@@ -71,7 +76,6 @@ export function TradeDialog({
   // Reset every time the dialog re-opens (or the requested side changes).
   useEffect(() => {
     if (open) {
-      set_kind(initial_kind);
       set_mode("percentage");
       set_percentage(10);
       set_shares(0);
@@ -88,9 +92,10 @@ export function TradeDialog({
   if (!open) return null;
 
   // Long-only: selling is only meaningful when there's a position to unwind.
-  // With no holding, Sell can do nothing, so we disable it and force Buy.
+  // With no holding a requested Sell can do nothing, so it degrades to Buy
+  // (openers only offer Sell on held players, this is a belt-and-braces guard).
   const has_position = portfolio_api.holds(player.id);
-  const kind: Kind = has_position ? kind_state : "buy";
+  const kind: Kind = has_position ? initial_kind : "buy";
   const is_buy = kind === "buy";
   const accent = is_buy ? "var(--color-action-buy)" : "var(--color-action-sell)";
 
@@ -204,44 +209,15 @@ export function TradeDialog({
       }
     >
       <div style={{ padding: "8px 20px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
+        {/* The side lives in the TITLE (accent-coloured verb) — the only
+            action button in this dialog is the confirm in the footer. */}
         <div>
-          <div style={{ fontSize: 20, fontWeight: 800 }}>{player.full_name ?? player.name}</div>
+          <div style={{ fontSize: 20, fontWeight: 800 }}>
+            <span style={{ color: accent }}>{is_buy ? "Buy" : "Sell"}</span> {player.full_name ?? player.name}
+          </div>
           <div style={{ fontSize: 13, color: "rgba(255,255,255,.55)", marginTop: 2 }}>
             Value {fmt_eur_m(current_price)} · {fmt_eur_from_m(preview.price_per_share)}/share
           </div>
-        </div>
-
-        {/* Buy / Sell — long-only: Sell stays visible but is disabled until you
-            hold the player, so the view never shifts. */}
-        <div style={{ display: "flex", gap: 8 }}>
-          {(["buy", "sell"] as Kind[]).map(k => {
-            const on = kind === k;
-            const disabled = k === "sell" && !has_position;
-            const c = k === "buy" ? "var(--color-action-buy)" : "var(--color-action-sell)";
-            return (
-              <button
-                key={k}
-                onClick={() => !disabled && set_kind(k)}
-                disabled={disabled}
-                title={disabled ? "You don't hold this player yet" : undefined}
-                style={{
-                  flex: 1,
-                  padding: "11px 0",
-                  borderRadius: 10,
-                  border: "1px solid " + (on ? c : "rgba(255,255,255,.12)"),
-                  background: on ? c : "rgba(255,255,255,.04)",
-                  color: on ? "var(--color-bg)" : "#fff",
-                  fontSize: 14,
-                  fontWeight: 800,
-                  cursor: disabled ? "not-allowed" : "pointer",
-                  opacity: disabled ? 0.35 : 1,
-                  fontFamily: "inherit",
-                }}
-              >
-                {k === "buy" ? "Buy" : "Sell"}
-              </button>
-            );
-          })}
         </div>
 
         {/* Mode: percent of portfolio vs exact shares */}

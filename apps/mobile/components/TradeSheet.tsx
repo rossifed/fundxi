@@ -5,6 +5,11 @@
 // (pure `simulate_trade` in core) and the order is placed via
 // `trades_api.execute` — the exact surface the web uses. execute() already
 // refreshes the local caches, so the portfolio bar / tab update on their own.
+//
+// The side (buy vs sell) is decided by the OPENER (the Buy / Sell buttons on
+// the player sheet) and is fixed for the sheet's life — deliberately NO
+// in-sheet side toggle: a segmented Buy|Sell row above the real confirm button
+// read as competing action buttons (UX feedback 2026-07-13). Mirrors web.
 
 import { useMemo, useState } from "react";
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from "react-native";
@@ -39,7 +44,6 @@ interface TradeSheetProps {
 }
 
 export function TradeSheet({ visible, player, current_price, initial_kind, on_close, on_done, on_finish }: TradeSheetProps) {
-  const [kind_state, set_kind] = useState<Kind>(initial_kind);
   const [mode, set_mode] = useState<TradeMode>("percentage");
   const [percentage, set_percentage] = useState(10);
   const [shares, set_shares] = useState(0);
@@ -53,17 +57,11 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
   // /api/trades guard is authoritative; this disables + explains).
   const lock = useTeamLock(player.team_id);
 
-  // Re-seed when reopened in a given mode.
-  const [last_kind, set_last_kind] = useState<Kind>(initial_kind);
-  if (visible && phase === "form" && last_kind !== initial_kind) {
-    set_last_kind(initial_kind);
-    set_kind(initial_kind);
-  }
-
   // Long-only: Sell is only meaningful with a position to unwind. No holding →
-  // disable Sell and force Buy. Mirrors the web TradeDialog.
+  // a requested Sell degrades to Buy (openers only offer Sell on held players,
+  // this is a belt-and-braces guard). Mirrors the web TradeDialog.
   const has_position = portfolio_api.holds(player.id);
-  const kind: Kind = has_position ? kind_state : "buy";
+  const kind: Kind = has_position ? initial_kind : "buy";
   const is_buy = kind === "buy";
   const accent = is_buy ? palette.actionBuy : palette.actionSell;
 
@@ -153,32 +151,14 @@ export function TradeSheet({ visible, player, current_price, initial_kind, on_cl
             </View>
           ) : (
             <>
-              <Text style={styles.title}>{player.full_name ?? player.name}</Text>
+              {/* The side lives in the TITLE (accent-coloured verb) — the only
+                  action button in this sheet is the confirm at the bottom. */}
+              <Text style={styles.title}>
+                <Text style={{ color: accent }}>{is_buy ? "Buy" : "Sell"}</Text> {player.full_name ?? player.name}
+              </Text>
               <Text style={styles.price}>
                 Value {fmt_eur_m(current_price)} · {fmt_eur_from_m(preview.price_per_share)}/share
               </Text>
-
-              {/* Buy / Sell — long-only: Sell stays visible but disabled until
-                  you hold the player, so the view never shifts. */}
-              <View style={styles.toggle_row}>
-                {(["buy", "sell"] as Kind[]).map(k => {
-                  const on = kind === k;
-                  const disabled = k === "sell" && !has_position;
-                  const c = k === "buy" ? palette.actionBuy : palette.actionSell;
-                  return (
-                    <Pressable
-                      key={k}
-                      disabled={disabled}
-                      style={[styles.toggle, on && { backgroundColor: c, borderColor: c }, disabled && { opacity: 0.35 }]}
-                      onPress={() => set_kind(k)}
-                    >
-                      <Text style={[styles.toggle_label, on && { color: "#04140a" }]}>
-                        {k === "buy" ? "Buy" : "Sell"}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
 
               {/* Mode: percent of portfolio vs exact shares */}
               <View style={styles.mode_row}>
@@ -338,17 +318,6 @@ const styles = StyleSheet.create({
   },
   title: { color: "#fff", fontSize: 20, fontWeight: "800" },
   price: { color: text.secondary, fontSize: 13, marginTop: -6 },
-  toggle_row: { flexDirection: "row", gap: 8 },
-  toggle: {
-    flex: 1,
-    paddingVertical: 11,
-    alignItems: "center",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(255,255,255,0.04)",
-  },
-  toggle_label: { color: "#fff", fontSize: 14, fontWeight: "800" },
   pct_row: { flexDirection: "row", gap: 8 },
   pct: {
     flex: 1,
