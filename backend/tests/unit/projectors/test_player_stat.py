@@ -136,3 +136,33 @@ def test_missing_passes_stats_default_to_none() -> None:
 def test_rejects_block_without_season_id() -> None:
     with pytest.raises(ValueError, match="season_id"):
         project_player_stat({"id": 1, "details": []}, internal_player_id=10)
+
+
+def test_second_yellow_sending_off_counts_as_red() -> None:
+    """Regression (Embolo vs Argentina, WC2026): Sportmonks encodes a
+    second-yellow sending-off as type 85 (yellowred), NOT type 83 — mapping
+    only 83 showed 1 yellow / 0 red for a sent-off player."""
+    stat, _smk, _raw = project_player_stat(
+        _block(
+            [
+                {"type_id": 84, "value": {"total": 1}},  # yellow cards
+                {"type_id": 85, "value": {"total": 1}},  # yellow-red (2nd yellow)
+            ]
+        ),
+        internal_player_id=918,
+    )
+    assert stat.yellow_cards == 1
+    assert stat.red_cards == 1
+
+
+def test_straight_red_and_yellow_red_sum_into_red_cards() -> None:
+    stat, _smk, _raw = project_player_stat(
+        _block(
+            [
+                {"type_id": 83, "value": {"total": 1}},  # straight red
+                {"type_id": 85, "value": {"total": 1}},  # yellow-red
+            ]
+        ),
+        internal_player_id=918,
+    )
+    assert stat.red_cards == 2

@@ -16,8 +16,9 @@ against the provider catalog (fixtures/{id}?include=lineups.details.type):
 - 78   TACKLES
 - 79   ASSISTS
 - 80   PASSES_TOTAL
-- 83   REDCARDS
-- 84   YELLOWCARDS
+- 83   REDCARDS      (straight reds only)
+- 84   YELLOWCARDS   (first yellows only — a second yellow is NOT counted here)
+- 85   YELLOWRED_CARDS (second yellow → sending-off; counts as a red for us)
 - 86   SHOTS_ON_TARGET
 - 88   GOALS_CONCEDED (goalkeeping)
 - 94   DISPOSSESSED
@@ -58,6 +59,7 @@ _STAT_GOALS = 52
 _STAT_ASSISTS = 79
 _STAT_RED_CARDS = 83
 _STAT_YELLOW_CARDS = 84
+_STAT_YELLOW_RED_CARDS = 85
 _STAT_SHOTS_TOTAL = 42
 _STAT_SHOTS_ON_TARGET = 86
 _STAT_KEY_PASSES = 117
@@ -177,7 +179,8 @@ def project_player_stat(
         goals=_total(by_type.get(_STAT_GOALS)),
         assists=_total(by_type.get(_STAT_ASSISTS)),
         yellow_cards=_total(by_type.get(_STAT_YELLOW_CARDS)) or 0,
-        red_cards=_total(by_type.get(_STAT_RED_CARDS)) or 0,
+        # A second-yellow sending-off lives under type 85, not 83 — it is a red.
+        red_cards=(_total(by_type.get(_STAT_RED_CARDS)) or 0) + (_total(by_type.get(_STAT_YELLOW_RED_CARDS)) or 0),
         shots_total=_total(by_type.get(_STAT_SHOTS_TOTAL)),
         shots_on_target=_total(by_type.get(_STAT_SHOTS_ON_TARGET)),
         key_passes=_total(by_type.get(_STAT_KEY_PASSES)),

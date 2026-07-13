@@ -24,7 +24,8 @@ _CODE_SHOTS_ON_TARGET = 86
 _CODE_GOALS = 52
 _CODE_ASSISTS = 79
 _CODE_YELLOW_CARDS = 84
-_CODE_RED_CARDS = 83
+_CODE_RED_CARDS = 83  # straight reds only
+_CODE_YELLOW_RED_CARDS = 85  # second yellow → sending-off; counts as a red for us
 _CODE_KEY_PASSES = 117
 _CODE_PASSES_TOTAL = 80
 _CODE_PASSES_ACCURACY_PCT = 1584  # "Accurate Passes Percentage"
@@ -46,6 +47,13 @@ def _as_int(value: object) -> int | None:
     if isinstance(value, float):
         return int(value)
     return None
+
+
+def _sum_present(*values: int | None) -> int | None:
+    """Sum the non-None values; None when every input is absent (keeps the
+    'stat not reported' semantics of a missing detail)."""
+    present = [v for v in values if v is not None]
+    return sum(present) if present else None
 
 
 def _as_float(value: object) -> float | None:
@@ -96,7 +104,10 @@ def project_player_match_stat(
         goals=_as_int(by_code.get(_CODE_GOALS)),
         assists=_as_int(by_code.get(_CODE_ASSISTS)),
         yellow_cards=_as_int(by_code.get(_CODE_YELLOW_CARDS)),
-        red_cards=_as_int(by_code.get(_CODE_RED_CARDS)),
+        red_cards=_sum_present(
+            _as_int(by_code.get(_CODE_RED_CARDS)),
+            _as_int(by_code.get(_CODE_YELLOW_RED_CARDS)),
+        ),
         key_passes=_as_int(by_code.get(_CODE_KEY_PASSES)),
         passes_total=_as_int(by_code.get(_CODE_PASSES_TOTAL)),
         passes_accuracy=_as_float(by_code.get(_CODE_PASSES_ACCURACY_PCT)),

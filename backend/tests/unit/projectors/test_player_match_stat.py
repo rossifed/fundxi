@@ -76,3 +76,29 @@ def test_int_codes_truncate_floats_and_reject_bools() -> None:
     stat, _ = result
     assert stat.passes_total == 44
     assert stat.goals is None
+
+
+def test_second_yellow_sending_off_counts_as_red() -> None:
+    """Regression (Embolo vs Argentina, WC2026): a second-yellow sending-off
+    arrives as type 85 (yellowred), NOT type 83 — mapping only 83 left
+    red_cards NULL for a sent-off player."""
+    lineup = _lineup(
+        96611,
+        [
+            {"type_id": 84, "data": {"value": 1}},  # yellow cards
+            {"type_id": 85, "data": {"value": 1}},  # yellow-red (2nd yellow)
+        ],
+    )
+    result = project_player_match_stat(lineup, fixture_id=65, player_id_by_sportmonks=_MAPS)
+    assert result is not None
+    stat, _ = result
+    assert stat.yellow_cards == 1
+    assert stat.red_cards == 1
+
+
+def test_red_cards_stay_none_when_neither_code_reported() -> None:
+    lineup = _lineup(96611, [{"type_id": 84, "data": {"value": 1}}])
+    result = project_player_match_stat(lineup, fixture_id=65, player_id_by_sportmonks=_MAPS)
+    assert result is not None
+    stat, _ = result
+    assert stat.red_cards is None
