@@ -35,6 +35,7 @@ from src.application.apply_suspensions import apply_suspensions
 from src.application.bootstrap import bootstrap_player_stats
 from src.application.reconcile_var_disallowed_goals import reconcile_var_disallowed_goals
 from src.application.settle_fixture import settle_fixture
+from src.application.sync_fixture_events import sync_fixture_events
 from src.domain.match.fixture import Fixture, FixtureStatus
 from src.domain.match.fixture_prediction import FixturePrediction
 from src.domain.match.player_match_stat import PlayerMatchStat
@@ -59,7 +60,6 @@ from src.infrastructure.sportmonks.projectors.fixture import (
 )
 from src.infrastructure.sportmonks.projectors.lineup import project_lineup
 from src.infrastructure.sportmonks.projectors.match_comment import project_match_comment
-from src.infrastructure.sportmonks.projectors.match_event import project_match_event
 from src.infrastructure.sportmonks.projectors.player_match_stat import project_player_match_stat
 from src.infrastructure.sportmonks.projectors.team_match_stat import project_team_match_stats
 from src.infrastructure.valuation.db_or_synthetic_starting_price_provider import (
@@ -226,15 +226,14 @@ class SportmonksInplayPoller:
             session=session,
             comments_payload=_array(data.get("comments")),
         )
-        # Retract any goal annulled by VAR: a ``VAR / Goal Disallowed`` event
-        # is authoritative, but Sportmonks drops the goal from its feed while we
-        # only upsert — so the stale goal (event + commentary line) would persist
-        # as a phantom scorer. Reconcile against the VAR events each poll.
+        # Retract the COMMENTARY twin of any goal annulled by VAR. The stale
+        # goal EVENT is already pruned by the full-set sync above (feed absence
+        # is authoritative), but the commentary line keeps its ``is_goal`` flag
+        # in the comments feed — only the VAR event tells us to clear it.
         await reconcile_var_disallowed_goals(
             session,
             fixture_id=self.fixture_internal_id,
             events_payload=_array(data.get("events")),
-            player_id_by_sportmonks=self.id_maps.player_id_by_sportmonks,
         )
         lineups_count = await self._project_lineups(session=session, lineups_payload=lineups_payload)
         player_stats_count, curr_stats, prev_by_player = await self._project_player_match_stats(
@@ -527,22 +526,17 @@ class SportmonksInplayPoller:
         return notifications
 
     async def _project_events(self, *, session: AsyncSession, events_payload: list[dict[str, Any]]) -> int:
-        repo = SqlAlchemyMatchEventRepository(session)
-        upserted = 0
-        for payload in events_payload:
-            try:
-                event, smk_id = project_match_event(
-                    payload,
-                    fixture_id=self.fixture_internal_id,
-                    player_id_by_sportmonks=self.id_maps.player_id_by_sportmonks,
-                    team_id_by_sportmonks=self.id_maps.team_id_by_sportmonks,
-                )
-            except (ValueError, TypeError) as exc:
-                log.debug("ingest.inplay.event_skip", reason=str(exc))
-                continue
-            await repo.upsert_by_sportmonks_id(event, sportmonks_id=smk_id)
-            upserted += 1
-        return upserted
+        """Full-set sync: the feed is the complete event set, so besides
+        upserting we prune stored events Sportmonks no longer carries
+        (replaced provisional events, VAR-rescinded ones)."""
+        report = await sync_fixture_events(
+            event_repo=SqlAlchemyMatchEventRepository(session),
+            fixture_id=self.fixture_internal_id,
+            events_payload=events_payload,
+            player_id_by_sportmonks=self.id_maps.player_id_by_sportmonks,
+            team_id_by_sportmonks=self.id_maps.team_id_by_sportmonks,
+        )
+        return report.upserted + report.deleted
 
     async def _project_comments(self, *, session: AsyncSession, comments_payload: list[dict[str, Any]]) -> int:
         repo = SqlAlchemyMatchCommentRepository(session)

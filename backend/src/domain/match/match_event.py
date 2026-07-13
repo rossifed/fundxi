@@ -42,6 +42,13 @@ class MatchEvent:
 class MatchEventRepository(Protocol):
     async def upsert_by_sportmonks_id(self, event: MatchEvent, *, sportmonks_id: int) -> None: ...
 
+    async def delete_absent_from_feed(self, fixture_id: int, *, present_sportmonks_ids: set[int]) -> int:
+        """Delete this fixture's stored events whose ``sportmonks_id`` is NOT in
+        the current provider feed. Sportmonks replaces provisional live events
+        under new ids and removes VAR-rescinded ones — feed absence is the
+        authoritative deletion signal. Returns the number of rows deleted."""
+        ...
+
     async def list_by_fixture(self, fixture_id: int) -> list[MatchEvent]: ...
 
     async def list_chronological_by_season(self, season_id: int) -> list[MatchEvent]: ...

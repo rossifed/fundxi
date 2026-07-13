@@ -18,6 +18,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.sync_fixture_events import sync_fixture_events
 from src.domain.match.fixture_repository import FixtureRepository
 from src.domain.match.lineup import Lineup, LineupRepository
 from src.domain.match.match_event import MatchEvent, MatchEventRepository
@@ -29,7 +30,6 @@ from src.infrastructure.sportmonks.client import SportmonksClient
 from src.infrastructure.sportmonks.projectors.fixture_formation import project_fixture_formations
 from src.infrastructure.sportmonks.projectors.fixture_kit import project_fixture_kit_colors
 from src.infrastructure.sportmonks.projectors.lineup import project_lineup
-from src.infrastructure.sportmonks.projectors.match_event import project_match_event
 from src.infrastructure.sportmonks.projectors.team_match_stat import project_team_match_stats
 from src.infrastructure.sportmonks.projectors.venue import project_venue
 
@@ -162,21 +162,16 @@ async def bootstrap_fixture_details(
             await lineup_repo.upsert_by_sportmonks_id(lineup, sportmonks_id=smk)
             lineups_count += 1
 
-        # Events
-        for event_payload in _items(envelope, "events"):
-            try:
-                event, smk = project_match_event(
-                    event_payload,
-                    fixture_id=internal_fixture_id,
-                    player_id_by_sportmonks=player_id_by_smk,
-                    team_id_by_sportmonks=team_id_by_smk,
-                )
-            except (ValueError, TypeError) as exc:
-                log.debug("bootstrap_fixture_details.event_skip", reason=str(exc))
-                skipped += 1
-                continue
-            await event_repo.upsert_by_sportmonks_id(event, sportmonks_id=smk)
-            events_count += 1
+        # Events — full-set sync so a re-bootstrap also prunes stale
+        # duplicates/phantoms the live capture may have accumulated.
+        event_report = await sync_fixture_events(
+            event_repo=event_repo,
+            fixture_id=internal_fixture_id,
+            events_payload=list(_items(envelope, "events")),
+            player_id_by_sportmonks=player_id_by_smk,
+            team_id_by_sportmonks=team_id_by_smk,
+        )
+        events_count += event_report.upserted
 
     log.info(
         "bootstrap_fixture_details.done",

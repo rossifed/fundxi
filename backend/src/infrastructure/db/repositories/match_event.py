@@ -57,24 +57,16 @@ class SqlAlchemyMatchEventRepository:
         stmt = stmt.on_conflict_do_update(index_elements=["sportmonks_id"], set_=update_payload)
         await self._session.execute(stmt)
 
-    async def delete_goals_except(self, fixture_id: int, *, player_id: int, keep_minutes: set[int]) -> int:
-        """Remove a player's stale GOAL events in a fixture — every one EXCEPT
-        those still present in the live feed (``keep_minutes``). Used to retract a
-        goal annulled by VAR: Sportmonks REMOVES the disallowed goal from its
-        events feed (but the VAR review is stamped a minute LATER than the goal,
-        so matching on the VAR event's own minute misses it). Keying off "which of
-        this player's goals are still in the feed" is minute-offset-proof: an empty
-        ``keep_minutes`` drops all his goals (the only one was disallowed); a kept
-        minute preserves a goal he legitimately scored. Idempotent. Returns the
-        number of events deleted."""
-        stmt = (
-            delete(MatchEventORM)
-            .where(MatchEventORM.fixture_id == fixture_id)
-            .where(MatchEventORM.type == MatchEventType.GOAL.value)
-            .where(MatchEventORM.player_id == player_id)
-        )
-        if keep_minutes:
-            stmt = stmt.where(MatchEventORM.minute.notin_(keep_minutes))
+    async def delete_absent_from_feed(self, fixture_id: int, *, present_sportmonks_ids: set[int]) -> int:
+        """Delete this fixture's stored events whose ``sportmonks_id`` is NOT in
+        the current provider feed. Sportmonks replaces provisional live events
+        (often unattributed) under NEW ids and removes VAR-rescinded ones from
+        the feed — so feed absence is the authoritative deletion signal, and an
+        upsert-only ingestion accumulates duplicates and phantoms. Idempotent.
+        Returns the number of rows deleted."""
+        stmt = delete(MatchEventORM).where(MatchEventORM.fixture_id == fixture_id)
+        if present_sportmonks_ids:
+            stmt = stmt.where(MatchEventORM.sportmonks_id.notin_(present_sportmonks_ids))
         result = cast(CursorResult[Any], await self._session.execute(stmt))
         return result.rowcount or 0
 

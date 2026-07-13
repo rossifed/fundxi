@@ -68,6 +68,10 @@ class _FakeEventRepo:
         _ = (last_id, limit)
         return []
 
+    async def delete_absent_from_feed(self, fixture_id: int, *, present_sportmonks_ids: set[int]) -> int:
+        _ = (fixture_id, present_sportmonks_ids)
+        return 0
+
 
 def _comment_event(payload: dict[str, Any]) -> ReplayEvent:
     return ReplayEvent(
