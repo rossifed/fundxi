@@ -71,10 +71,16 @@ A. Fix projector mapping: red = 83 + 85 (both projectors). Raw must project true
 B. Full-set event reconciliation per fixture (poller + final whistle pass):
    provider payload replaces our event set — upsert present, delete absent.
    Kills duplicates, phantoms, fills gaps. Foundation for everything else.
-C. Single-source discipline counts from reconciled events (yellow = yellow_card,
-   red = red_card + yellow_red_card — convention already used by
-   /players/{id}/matches) for: tournament stats strip, per-match stats panel,
-   screener. Live during matches, always equal to the displayed timeline.
-   Non-event stats (passes, duels, minutes, rating) stay on Sportmonks stats.
+C. Single-source discipline counts from reconciled events for: tournament stats
+   strip, per-match stats panel, screener. Live during matches, always equal to
+   the displayed timeline. Non-event stats (passes, duels, minutes, rating) stay
+   on Sportmonks stats.
+   CONVENTION (revised 2026-07-13, user decision — match Google): a second
+   yellow counts as BOTH cards. yellow = yellow_card + yellow_red_card;
+   red = red_card + yellow_red_card ⇒ a 2nd-yellow sending-off displays
+   2 yellows + 1 red (migration 0045; timeline glyph 🟨🟥). For reference,
+   ESPN/Opta's per-match player line for the same match shows the final
+   sanction only (Embolo Y=0 R=1) — conventions genuinely differ across
+   platforms; Google is the product reference.
 D. Sanitization pass on prod: re-sync events for finished fixtures from
    provider, re-project player_match_stat from stored raw_details.
