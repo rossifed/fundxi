@@ -19,6 +19,7 @@ from src.api.routers import (
     players,
     portfolio,
     standings,
+    surveys,
     teams,
     trading,
     valuations,
@@ -75,6 +76,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(announcements.router)
+app.include_router(surveys.router)
 app.include_router(trading.router)
 app.include_router(teams.router)
 app.include_router(players.router)

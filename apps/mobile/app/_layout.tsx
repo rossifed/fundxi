@@ -13,6 +13,7 @@ import { set_max_gross_leverage, set_shares_per_player } from '@fundxi/core/infr
 import { set_stream_base } from '@fundxi/core/infrastructure/stream_client';
 
 import { AnnouncementBanner } from '@/components/AnnouncementBanner';
+import { SurveyPrompt } from '@/components/SurveyPrompt';
 import { AppBackground } from '@/components/AppBackground';
 import { AuthProvider } from '@/components/AuthContext';
 import { useTradeLockRefresh } from '@/components/use_trade_lock';
@@ -94,6 +95,9 @@ export default function RootLayout() {
               {/* Pushed release notes / messages for signed-in users (dismiss =
                   ack, shown once per account). Reads only when authenticated. */}
               <AnnouncementBanner />
+              {/* Product-research questions for signed-in users (answer or skip,
+                  asked once per account). Reads only when authenticated. */}
+              <SurveyPrompt />
             </AuthProvider>
           </BootstrapGate>
         </ThemeProvider>

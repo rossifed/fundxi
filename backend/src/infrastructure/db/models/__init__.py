@@ -24,6 +24,7 @@ from src.infrastructure.db.models.portfolio_value_snapshot import PortfolioValue
 from src.infrastructure.db.models.pricing_progress import PricingProgressORM
 from src.infrastructure.db.models.raw_sportmonks_event import RawSportmonksEventORM
 from src.infrastructure.db.models.standings import StandingORM
+from src.infrastructure.db.models.survey import SurveyAnswerORM, SurveyQuestionORM
 from src.infrastructure.db.models.team import TeamORM
 from src.infrastructure.db.models.transfermarkt_market_value import TransfermarktMarketValueORM
 from src.infrastructure.db.models.user import UserORM
@@ -53,6 +54,8 @@ __all__ = [
     "PricingProgressORM",
     "RawSportmonksEventORM",
     "StandingORM",
+    "SurveyAnswerORM",
+    "SurveyQuestionORM",
     "TeamORM",
     "TradeORM",
     "TransfermarktMarketValueORM",

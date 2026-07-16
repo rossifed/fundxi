@@ -16,6 +16,7 @@ import { ProfilePage } from "@/ui/pages/profile/ProfilePage";
 import { ResetPasswordPage } from "@/ui/pages/auth/ResetPasswordPage";
 import { AuthDialog } from "@/ui/components/AuthDialog";
 import { AnnouncementBanner } from "@/ui/components/AnnouncementBanner";
+import { SurveyPrompt } from "@/ui/components/SurveyPrompt";
 import { HowToPlay } from "@/ui/components/HowToPlay";
 import { MatchView } from "@/ui/pages/match/MatchView";
 import { TeamPage } from "@/ui/pages/team/TeamPage";
@@ -374,6 +375,10 @@ export function App() {
       {/* Pushed release notes / messages for signed-in users (dismiss = ack,
           shown once per account). Mounted once; reads only when authenticated. */}
       <AnnouncementBanner />
+
+      {/* Product-research questions for signed-in users (answer or skip, asked
+          once per account). Mounted once; reads only when authenticated. */}
+      <SurveyPrompt />
     </div>
   );
 }
